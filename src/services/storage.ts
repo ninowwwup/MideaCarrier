@@ -7,7 +7,7 @@ const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Dados iniciais fornecidos pelo usuário no prompt
-const INITIAL_SEED: TransferItem[] = [
+export const INITIAL_SEED: TransferItem[] = [
   {
     id: 'seed-1',
     solicitationCode: 'SOL-2401',
@@ -173,7 +173,7 @@ export function mapRowToTransferItem(d: any, index = 0): TransferItem {
 
 /**
  * Auto-limpeza mensal: Mantém o banco leve preservando apenas o histórico dos últimos 30 dias.
- * Solicitações pendentes ou em análise são sempre preservadas para evitar perda operacional.
+ * Solicitações pendentes ou em análise são sempre preservadas para evitar qualquer perda operacional.
  */
 export function purgeOldMonthlyRecords(items: TransferItem[]): {
   active: TransferItem[];
@@ -209,14 +209,17 @@ export function purgeOldMonthlyRecords(items: TransferItem[]): {
   return { active, purgedCount: toArchive.length };
 }
 
+/**
+ * Consulta de itens com fallback inteligente (Supabase -> Backend Vercel /api/transfers -> Cache Local)
+ */
 export async function fetchTransferItems(): Promise<{
   items: TransferItem[];
-  source: 'supabase' | 'local';
+  source: 'supabase' | 'backend' | 'local';
   purgedCount?: number;
   isConnected: boolean;
 }> {
+  // 1. Supabase (Se configurado diretamente)
   const supabase = getSupabase();
-
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -228,25 +231,47 @@ export async function fetchTransferItems(): Promise<{
         const mapped: TransferItem[] = data.map((d: any, index: number) => mapRowToTransferItem(d, index));
         const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
         
-        // Mantém cache local sincronizado
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(active));
         }
 
         return { items: active, source: 'supabase', purgedCount, isConnected: true };
       } else if (!error && data && data.length === 0) {
-        // Tabela existe mas está vazia - inicializa com os dados iniciais
         await saveTransferItems(INITIAL_SEED);
         return { items: INITIAL_SEED, source: 'supabase', isConnected: true };
-      } else if (error) {
-        console.warn('Erro ao consultar Supabase, utilizando armazenamento local com fallback:', error);
       }
     } catch (err) {
-      console.warn('Exceção ao conectar no Supabase:', err);
+      console.warn('Tentando rota backend após exceção no Supabase:', err);
     }
   }
 
-  // Fallback LocalStorage
+  // 2. Rota Backend Serverless Vercel (/api/transfers)
+  if (typeof window !== 'undefined') {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch('/api/transfers', {
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.items) && json.items.length > 0) {
+          const mapped: TransferItem[] = json.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
+          const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(active));
+          return { items: active, source: 'backend', purgedCount, isConnected: true };
+        }
+      }
+    } catch (backendErr) {
+      // Backend offline ou rodando em ambiente local sem rota
+    }
+  }
+
+  // 3. Fallback LocalStorage (garante que o app nunca quebre nem trave em tela branca)
   if (typeof window !== 'undefined') {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -275,11 +300,18 @@ export async function fetchTransferItems(): Promise<{
   return { items: INITIAL_SEED, source: 'local', isConnected: false };
 }
 
+/**
+ * Salvar e propagar alterações para Supabase, Backend Vercel e Cache Local
+ */
 export async function saveTransferItems(items: TransferItem[]): Promise<boolean> {
+  // Salva no cache local de imediato
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }
 
+  let savedSuccessfully = false;
+
+  // 1. Gravar no Supabase (se configurado)
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -302,50 +334,69 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
       }));
 
       const { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
-      if (error) {
-        console.error('Erro ao gravar no Supabase:', error);
-        return false;
+      if (!error) {
+        savedSuccessfully = true;
       }
-      return true;
     } catch (err) {
       console.warn('Falha na requisição para o Supabase:', err);
-      return false;
     }
   }
 
-  return false;
+  // 2. Gravar no Backend Vercel /api/transfers
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, clientId: CURRENT_CLIENT_ID }),
+      });
+      if (res.ok) {
+        savedSuccessfully = true;
+      }
+    } catch (e) {
+      // Backend não disponível ou erro de rede
+    }
+  }
+
+  return savedSuccessfully;
 }
 
 /**
- * Assina atualizações em Tempo Real (WebSockets + Polling Infallible)
- * Assim que o Time Buiatte grava no Computador A, o Computador B recebe o evento instantaneamente!
+ * Assina atualizações em Tempo Real (WebSockets + Polling Infallible estilo AppSheet)
+ * Garante que assim que o Time Buiatte grava no Computador A,
+ * o Computador B recebe o evento instantaneamente com som e toast Outlook!
  */
 export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
 ): () => void {
   const supabase = getSupabase();
   let knownIds = new Set<string>();
+  let isFirstLoad = true;
 
-  // Helper para atualizar lista e detectar novos itens
   const refreshLatest = async (isRealtimeEvent = false) => {
     const res = await fetchTransferItems();
     const currentList = res.items;
 
     // Detectar novos itens pendentes criados por outro dispositivo
     const newPending: TransferItem[] = [];
-    if (knownIds.size > 0) {
+    if (!isFirstLoad && knownIds.size > 0) {
       for (const item of currentList) {
         if (!knownIds.has(item.id) && item.status === 'pendente') {
-          newPending.push(item);
+          // Apenas alerta se criado nos últimos 15 minutos para evitar falso-positivo em seeds
+          const ageMs = Date.now() - new Date(item.criadoEm).getTime();
+          if (ageMs < 15 * 60 * 1000) {
+            newPending.push(item);
+          }
         }
       }
     }
 
+    isFirstLoad = false;
     knownIds = new Set(currentList.map((i) => i.id));
     onDataChange(currentList, isRealtimeEvent ? 'realtime' : 'polling', newPending.length > 0 ? newPending : undefined);
   };
 
-  // Inicializa knownIds na primeira execução
+  // Primeira execução
   refreshLatest();
 
   let channel: any = null;
@@ -366,10 +417,12 @@ export function subscribeToRealtimeTransfers(
     }
   }
 
-  // Polling de segurança a cada 4 segundos (garante sincronização mesmo se WebSocket estiver bloqueado)
+  // Polling de sincronização em tempo real (In-time) a cada 2.5 segundos
+  // Isso garante que mesmo entre computadores com redes restritas, proxy corporativo ou sem websockets,
+  // os dados e pop-ups aparecem pontualmente como no AppSheet!
   const pollTimer = setInterval(() => {
     refreshLatest(false);
-  }, 4000);
+  }, 2500);
 
   return () => {
     clearInterval(pollTimer);

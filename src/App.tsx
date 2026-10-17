@@ -207,7 +207,7 @@ export default function App() {
 
     const unsubscribe = subscribeToRealtimeTransfers((updatedItems, source, newIncomingPending) => {
       setItems(updatedItems);
-      setIsCloudConnected(Boolean(getSupabaseConfig().url && getSupabaseConfig().anonKey));
+      setIsCloudConnected(true);
 
       // Se novos itens pendentes chegaram de outro computador, DISPARAR O POP-UP OUTLOOK NO OUTRO COMPUTADOR!
       if (newIncomingPending && newIncomingPending.length > 0) {

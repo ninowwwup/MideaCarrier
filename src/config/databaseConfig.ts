@@ -1,20 +1,24 @@
 /**
- * CONFIGURAÇÃO DEFINITIVA DO BANCO DE DADOS SUPABASE
+ * CONFIGURAÇÃO DEFINITIVA DO BANCO DE DADOS & BACKEND
  * 
- * Este arquivo faz parte do repositório no seu GitHub.
- * Desta forma, quando a Vercel compilar e publicar o app,
- * QUALQUER computador ou celular que abrir o link:
- *   https://midea-carrier.vercel.app/
- * já estará 100% conectado e sincronizado em tempo real (estilo AppSheet)
- * SEM PRECISAR DE NENHUMA TELA DE LOGIN OU INPUT DE CHAVES POR PARTE DOS OPERADORES!
+ * Este arquivo faz parte do repositório no GitHub para deploy na Vercel:
+ * https://midea-carrier.vercel.app/
+ * 
+ * O sistema opera de forma autônoma e em tempo real (In-time):
+ * 1. Se VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estiverem preenchidas
+ *    (seja nas Environment Variables da Vercel ou fixadas nas constantes abaixo),
+ *    o app conecta diretamente ao Supabase com WebSockets Realtime.
+ * 2. Caso contrário, o app utiliza automaticamente o backend na Vercel (/api/transfers),
+ *    sincronizando todos os computadores instantaneamente, sem exibir NENHUMA tela de
+ *    input de chaves ou senha para os operadores dos times Buiatte ou Midea.
  */
 
-// Se configurado nas Environment Variables da Vercel (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY):
+// 1. Variáveis de ambiente fornecidas pela Vercel / Vite
 const ENV_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const ENV_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
 
-// Fallback direto no código (opcional caso não queira usar a tela de variáveis da Vercel):
-// Cole aqui sua URL e Anon Key do Supabase se desejar que fiquem fixos diretamente no build do GitHub.
+// 2. Chaves diretas no repositório (opcional caso prefira embutir direto no código do GitHub):
+// Cole aqui sua URL e Anon Key do seu projeto Supabase se não quiser cadastrar na tela da Vercel.
 export const CONFIGURED_SUPABASE_URL = ENV_URL || '';
 export const CONFIGURED_SUPABASE_ANON_KEY = ENV_KEY || '';
 
@@ -24,12 +28,12 @@ export function getEffectiveSupabaseCredentials(): { url: string; anonKey: strin
     return { url: ENV_URL.trim(), anonKey: ENV_KEY.trim() };
   }
 
-  // 2. Chaves diretas do arquivo de configuração do repositório
+  // 2. Chaves diretas do arquivo de configuração
   if (CONFIGURED_SUPABASE_URL && CONFIGURED_SUPABASE_ANON_KEY) {
     return { url: CONFIGURED_SUPABASE_URL.trim(), anonKey: CONFIGURED_SUPABASE_ANON_KEY.trim() };
   }
 
-  // 3. Fallback de cache local persistente (sem exibir nada para o usuário)
+  // 3. Fallback de cache local persistente
   if (typeof window !== 'undefined') {
     const cachedUrl = localStorage.getItem('midea_transfer_supabase_url') || '';
     const cachedKey = localStorage.getItem('midea_transfer_supabase_anon_key') || '';
@@ -39,4 +43,9 @@ export function getEffectiveSupabaseCredentials(): { url: string; anonKey: strin
   }
 
   return { url: '', anonKey: '' };
+}
+
+export function isSupabaseDirectConfigured(): boolean {
+  const { url, anonKey } = getEffectiveSupabaseCredentials();
+  return Boolean(url && anonKey);
 }
