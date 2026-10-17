@@ -361,10 +361,46 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
   return savedSuccessfully;
 }
 
+// Rastreamento local dos IDs criados/solicitados por ESTE computador/navegador
+// O pop-up não deve aparecer na tela de quem solicita, apenas na de quem recebe
+const locallyRequestedIds = new Set<string>();
+
+if (typeof window !== 'undefined') {
+  try {
+    const raw = sessionStorage.getItem('midea_locally_requested_ids');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        arr.forEach((id) => locallyRequestedIds.add(id));
+      }
+    }
+  } catch (e) {
+    // sessionStorage indisponível
+  }
+}
+
+export function registerLocallyRequestedItems(items: TransferItem[]) {
+  items.forEach((item) => locallyRequestedIds.add(item.id));
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(
+        'midea_locally_requested_ids',
+        JSON.stringify(Array.from(locallyRequestedIds).slice(-1000))
+      );
+    } catch (e) {
+      // sessionStorage indisponível
+    }
+  }
+}
+
+export function isItemRequestedByMe(itemId: string): boolean {
+  return locallyRequestedIds.has(itemId);
+}
+
 /**
  * Assina atualizações em Tempo Real (WebSockets + Polling Infallible estilo AppSheet)
  * Garante que assim que o Time Buiatte grava no Computador A,
- * o Computador B recebe o evento instantaneamente com som e toast Outlook!
+ * o Computador B recebe o evento instantaneamente com som de gota d'água e toast Outlook!
  */
 export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
@@ -378,10 +414,16 @@ export function subscribeToRealtimeTransfers(
     const currentList = res.items;
 
     // Detectar novos itens pendentes criados por outro dispositivo
+    // O pop-up e som NÃO tocam na máquina de quem solicita, apenas na de quem recebe
     const newPending: TransferItem[] = [];
     if (!isFirstLoad && knownIds.size > 0) {
       for (const item of currentList) {
         if (!knownIds.has(item.id) && item.status === 'pendente') {
+          // Se o item foi solicitado por esta mesma máquina, IGNORAR (não disparar alerta para o próprio solicitante)
+          if (locallyRequestedIds.has(item.id)) {
+            continue;
+          }
+
           // Apenas alerta se criado nos últimos 15 minutos para evitar falso-positivo em seeds
           const ageMs = Date.now() - new Date(item.criadoEm).getTime();
           if (ageMs < 15 * 60 * 1000) {
@@ -441,7 +483,7 @@ export function createRequestsFromMultiSerial(
   const solicitationCode = `SOL-${1000 + currentCount + 1}`;
   const seriais = input.seriais.length > 0 ? input.seriais : ['S/N'];
 
-  return seriais.map((serial, idx) => ({
+  const created: TransferItem[] = seriais.map((serial, idx) => ({
     id: `req-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
     solicitationCode,
     material: input.material.trim().toUpperCase(),
@@ -458,6 +500,11 @@ export function createRequestsFromMultiSerial(
     batchId: batchCode,
     observacoes: input.observacoes?.trim() || undefined,
   }));
+
+  // Registra que foram criados por este computador para não disparar pop-up na tela do solicitante
+  registerLocallyRequestedItems(created);
+
+  return created;
 }
 
 export function computeKPIs(items: TransferItem[]): KPIStats {

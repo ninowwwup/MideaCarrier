@@ -24,6 +24,7 @@ import {
   OutlookToastAlert,
   AlertNotification 
 } from './components/OutlookToastAlert';
+import { Check, X, Bell } from 'lucide-react';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -36,7 +37,8 @@ import {
   saveTransferItems, 
   createRequestsFromMultiSerial, 
   computeKPIs, 
-  subscribeToRealtimeTransfers 
+  subscribeToRealtimeTransfers,
+  registerLocallyRequestedItems
 } from './services/storage';
 import { 
   exportToCSV, 
@@ -85,9 +87,32 @@ export default function App() {
 
   const [autoPurgedCount, setAutoPurgedCount] = useState<number>(0);
 
-  // Pedir permissão para notificações do sistema (para segundo plano no Windows/Mac)
+  // Feedback visual de envio para o solicitante (sem disparar alerta ou som na própria tela)
+  const [successNotice, setSuccessNotice] = useState<{ title: string; message: string } | null>(null);
+
+  const showSuccessNotice = (title: string, message: string) => {
+    setSuccessNotice({ title, message });
+    setTimeout(() => {
+      setSuccessNotice((curr) => (curr?.title === title ? null : curr));
+    }, 4500);
+  };
+
+  // Status de permissão de notificação nativa para alertas em segundo plano
+  const [desktopNotifPermission, setDesktopNotifPermission] = useState<string>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+
+  const handleRequestDesktopPermission = async () => {
+    const res = await requestNotificationPermission();
+    if (res) {
+      setDesktopNotifPermission(res);
+    }
+  };
+
   useEffect(() => {
-    requestNotificationPermission();
+    requestNotificationPermission().then((perm) => {
+      if (perm) setDesktopNotifPermission(perm);
+    });
   }, []);
 
   // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
@@ -258,35 +283,28 @@ export default function App() {
   // Criar nova solicitação com múltiplos seriais
   const handleCreateRequest = async (input: NewTransferInput) => {
     const created = createRequestsFromMultiSerial(input, items.length);
+    registerLocallyRequestedItems(created);
     const nextList = [...created, ...items];
     await handleUpdateItems(nextList);
 
-    // Dispara pop-up local também
-    triggerMideaAlert(
-      created,
-      input.solicitante || 'Time Buiatte (Sênior WMS)',
-      input.material,
-      input.centro,
-      input.depositoOrigem,
-      input.depositoDestino
+    // O pop-up e som NÃO aparecem na tela de quem solicita, apenas na de quem recebe!
+    showSuccessNotice(
+      'Solicitação enviada com sucesso!',
+      `${created.length} serial(is) de ${input.material} sincronizado(s) em tempo real com o Time SAP.`
     );
   };
 
   // Importar em lote (Colar Tabela)
   const handleImportBatch = async (batchItems: TransferItem[]) => {
+    registerLocallyRequestedItems(batchItems);
     const nextList = [...batchItems, ...items];
     await handleUpdateItems(nextList);
 
+    // O pop-up e som NÃO aparecem na tela de quem solicita, apenas na de quem recebe!
     if (batchItems.length > 0) {
-      const first = batchItems[0];
-      const materiaisUnicos = Array.from(new Set(batchItems.map((b) => b.material))).join(', ');
-      triggerMideaAlert(
-        batchItems,
-        first.criadoPor || 'Time Buiatte (Sênior WMS)',
-        materiaisUnicos,
-        first.centro,
-        first.depositoOrigem,
-        first.depositoDestino
+      showSuccessNotice(
+        'Lote importado com sucesso!',
+        `${batchItems.length} seriais sincronizados em tempo real com o Time SAP.`
       );
     }
   };

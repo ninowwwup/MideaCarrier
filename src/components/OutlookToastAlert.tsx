@@ -40,13 +40,13 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [progress, setProgress] = useState(100);
 
-  // Auto-dispensar após 18 segundos se o usuário não passar o mouse por cima
+  // Auto-dispensar após 5 segundos se o usuário não passar o mouse por cima (requisito do usuário)
   useEffect(() => {
     if (!alert) return;
     setProgress(100);
 
-    const duration = 18000;
-    const interval = 100;
+    const duration = 5000; // 5 segundos
+    const interval = 50;
     const step = (interval / duration) * 100;
 
     const timer = setInterval(() => {
@@ -102,7 +102,7 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
           <span className="text-[11px] font-bold text-[#002664] tracking-tight">
             Midea Transfer Hub
           </span>
-          <span className="text-[10px] text-slate-400">• agora</span>
+          <span className="text-[10px] text-slate-500 font-medium">• fecha em 5s</span>
         </div>
 
         <button
