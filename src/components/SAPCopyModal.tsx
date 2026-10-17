@@ -40,14 +40,14 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-[#0083CA] text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-white/10 text-white">
-              <Terminal className="w-5 h-5 text-cyan-300" />
+            <span className="p-2 rounded-xl bg-white/10 text-[#C2DEEB]">
+              <Terminal className="w-5 h-5 text-[#C2DEEB]" />
             </span>
             <div>
               <h3 className="text-base font-bold">Assistente de Colagem no SAP (MIGO 311)</h3>
-              <p className="text-xs text-blue-100">
+              <p className="text-xs text-[#C2DEEB]">
                 Formatos otimizados para colar diretamente nas transações MIGO, MB1B ou LT01 do SAP GUI
               </p>
             </div>

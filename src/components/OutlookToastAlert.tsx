@@ -6,8 +6,7 @@ import {
   ArrowRight, 
   Boxes, 
   Check, 
-  BellRing,
-  ExternalLink
+  BellRing
 } from 'lucide-react';
 import { TransferItem } from '../types/transfer';
 import { formatForSAPTable } from '../utils/sapFormatter';
@@ -86,21 +85,21 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="fixed bottom-5 left-5 z-50 w-96 max-w-[calc(100vw-2.5rem)] bg-white rounded-xl shadow-2xl border border-slate-200/90 overflow-hidden transform transition-all duration-300 ease-out animate-in slide-in-from-bottom-8 fade-in ring-1 ring-slate-900/10"
+      className="fixed bottom-5 left-5 z-50 w-96 max-w-[calc(100vw-2.5rem)] bg-white rounded-xl shadow-2xl border border-[#C2DEEB] overflow-hidden transform transition-all duration-300 ease-out animate-in slide-in-from-bottom-8 fade-in ring-2 ring-[#002664]/10"
       style={{
-        boxShadow: '0 20px 25px -5px rgba(0, 96, 156, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        boxShadow: '0 20px 25px -5px rgba(0, 38, 100, 0.2), 0 8px 10px -6px rgba(0, 35, 99, 0.1)',
       }}
     >
-      {/* Top Outlook Brand Stripe (Azul Midea Carrier) */}
-      <div className="h-1 bg-gradient-to-r from-[#00609C] via-[#0083CA] to-blue-400 w-full" />
+      {/* Top Outlook Brand Stripe (Paleta: Imperial Blue ➔ Blue Bell) */}
+      <div className="h-1.5 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] w-full" />
 
       {/* Header Estilo Toast do Outlook / Windows */}
-      <div className="px-3.5 pt-3 pb-2 flex items-center justify-between border-b border-slate-100 bg-slate-50/70">
+      <div className="px-3.5 pt-3 pb-2 flex items-center justify-between border-b border-slate-100 bg-[#C2DEEB]/20">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-[#0083CA] flex items-center justify-center text-white shadow-2xs">
-            <Boxes className="w-3.5 h-3.5" />
+          <div className="w-5 h-5 rounded-md bg-[#002664] flex items-center justify-center text-white shadow-2xs">
+            <Boxes className="w-3.5 h-3.5 text-[#C2DEEB]" />
           </div>
-          <span className="text-[11px] font-bold text-slate-700 tracking-tight">
+          <span className="text-[11px] font-bold text-[#002664] tracking-tight">
             Midea Transfer Hub
           </span>
           <span className="text-[10px] text-slate-400">• agora</span>
@@ -116,18 +115,18 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
         </button>
       </div>
 
-      {/* Corpo da Notificação (Estilo Mensagem de Correio / Solicitação do Outlook) */}
+      {/* Corpo da Notificação */}
       <div className="p-3.5 space-y-2.5 cursor-pointer" onClick={handleGoToMidea}>
         {/* Solicitante & Título */}
         <div>
-          <div className="text-xs font-bold text-slate-900 flex items-center justify-between">
+          <div className="text-xs font-bold text-[#002363] flex items-center justify-between">
             <span className="truncate">{alert.solicitante}</span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-[#00609C] border border-blue-200 shrink-0">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#C2DEEB]/50 text-[#002664] border border-[#249ED5]/40 shrink-0">
               Centro {alert.centro}
             </span>
           </div>
           <div className="text-xs text-slate-600 font-medium mt-0.5 flex items-center gap-1.5">
-            <BellRing className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+            <BellRing className="w-3.5 h-3.5 text-[#249ED5] shrink-0 animate-pulse" />
             <span className="truncate">Nova movimentação para processar no SAP</span>
           </div>
         </div>
@@ -135,8 +134,8 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
         {/* Detalhes do Material e Rota */}
         <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-xs space-y-1.5">
           <div className="flex items-center justify-between font-mono">
-            <span className="font-bold text-slate-900 text-[13px]">{alert.resumoMaterial}</span>
-            <span className="text-[11px] font-sans font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+            <span className="font-extrabold text-[#002664] text-[13px]">{alert.resumoMaterial}</span>
+            <span className="text-[11px] font-sans font-bold text-[#002664] bg-white px-2 py-0.5 rounded border border-[#C2DEEB] shadow-2xs">
               {alert.totalSeriais} {alert.totalSeriais === 1 ? 'serial' : 'seriais'}
             </span>
           </div>
@@ -172,7 +171,7 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
             </>
           ) : (
             <>
-              <Terminal className="w-3.5 h-3.5 text-slate-500" />
+              <Terminal className="w-3.5 h-3.5 text-[#249ED5]" />
               <span>Copiar (TAB)</span>
             </>
           )}
@@ -181,17 +180,17 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
         <button
           type="button"
           onClick={handleGoToMidea}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#0083CA] hover:bg-[#0070b0] rounded-lg transition-colors shadow-xs"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] rounded-lg transition-colors shadow-xs"
         >
-          <Sparkles className="w-3.5 h-3.5 text-blue-200" />
+          <Sparkles className="w-3.5 h-3.5 text-[#C2DEEB]" />
           <span>Tratar no SAP</span>
         </button>
       </div>
 
-      {/* Barra de Progresso Auto-Dismiss (Estilo Toast Outlook) */}
-      <div className="w-full bg-slate-100 h-0.5">
+      {/* Barra de Progresso Auto-Dismiss (Cor Blue Bell) */}
+      <div className="w-full bg-[#C2DEEB]/40 h-1">
         <div
-          className="h-full bg-[#0083CA] transition-all duration-100 ease-linear"
+          className="h-full bg-[#249ED5] transition-all duration-100 ease-linear"
           style={{ width: `${progress}%` }}
         />
       </div>

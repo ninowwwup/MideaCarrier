@@ -25,6 +25,9 @@ import {
   AlertNotification 
 } from './components/OutlookToastAlert';
 import { 
+  CloudSyncModal 
+} from './components/CloudSyncModal';
+import { 
   TransferItem, 
   TransferStatus, 
   TeamRole, 
@@ -35,7 +38,8 @@ import {
   fetchTransferItems, 
   saveTransferItems, 
   createRequestsFromMultiSerial, 
-  computeKPIs 
+  computeKPIs, 
+  subscribeToRealtimeTransfers 
 } from './services/storage';
 import { 
   exportToCSV, 
@@ -46,6 +50,7 @@ import {
   requestNotificationPermission, 
   sendDesktopNotification 
 } from './utils/audioAlert';
+import { getSupabaseConfig } from './services/supabaseClient';
 
 const BASE_PAGE_TITLE = 'Midea Transfer Hub - Gestão SAP & WMS';
 
@@ -53,6 +58,7 @@ export default function App() {
   const [items, setItems] = useState<TransferItem[]>([]);
   const [currentRole, setCurrentRole] = useState<TeamRole>('ambos');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
 
   // Sistema de Alerta estilo Outlook (Canto Inferior Esquerdo)
   const [activeAlert, setActiveAlert] = useState<AlertNotification | null>(null);
@@ -63,6 +69,7 @@ export default function App() {
   // Modais Operacionais
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
+  const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
   const [sapModalItems, setSapModalItems] = useState<TransferItem[] | null>(null);
   const [resolutionData, setResolutionData] = useState<{
     items: TransferItem[];
@@ -82,7 +89,7 @@ export default function App() {
 
   const [autoPurgedCount, setAutoPurgedCount] = useState<number>(0);
 
-  // Pedir permissão para notificações do sistema (para segundo plano)
+  // Pedir permissão para notificações do sistema (para segundo plano no Windows/Mac)
   useEffect(() => {
     requestNotificationPermission();
   }, []);
@@ -90,7 +97,6 @@ export default function App() {
   // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Se estiver digitando em campos de texto, não dispara atalhos de navegação
       const target = e.target as HTMLElement;
       const isInput =
         target.tagName === 'INPUT' ||
@@ -101,6 +107,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setIsNewModalOpen(false);
         setIsBatchPasteOpen(false);
+        setIsCloudSyncOpen(false);
         setSapModalItems(null);
         setResolutionData(null);
         setActiveAlert(null);
@@ -153,20 +160,79 @@ export default function App() {
     };
   }, [activeAlert]);
 
-  // Carregar dados iniciais e aplicar auto-limpeza mensal
+  // Função central para disparar o Alerta estilo Outlook
+  const triggerMideaAlert = useCallback((
+    newItems: TransferItem[],
+    solicitante: string,
+    resumoMaterial: string,
+    centro: string,
+    depOrigem: string,
+    depDestino: string
+  ) => {
+    const alertData: AlertNotification = {
+      id: `alert-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      items: newItems,
+      solicitante,
+      resumoMaterial,
+      centro,
+      depOrigem,
+      depDestino,
+      totalSeriais: newItems.length,
+    };
+
+    if (isSoundEnabled) {
+      playAlertChime();
+    }
+
+    sendDesktopNotification(
+      `Midea Transfer Hub: Nova Solicitação SAP (${centro})`,
+      `${solicitante} solicitou transferência de ${resumoMaterial} (${depOrigem} ➔ ${depDestino}) com ${newItems.length} seriais`
+    );
+
+    setActiveAlert(alertData);
+    setAlertHistory((prev) => [alertData, ...prev]);
+  }, [isSoundEnabled]);
+
+  // Carregar dados e Iniciar Sincronização em Tempo Real (In-time entre computadores)
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    const { items: loadedItems, purgedCount } = await fetchTransferItems();
+    const { items: loadedItems, purgedCount, isConnected } = await fetchTransferItems();
     setItems(loadedItems);
+    setIsCloudConnected(isConnected);
     if (purgedCount && purgedCount > 0) {
       setAutoPurgedCount(purgedCount);
     }
     setIsLoading(false);
   }, []);
 
+  // Assinatura em Tempo Real (Supabase Realtime WebSockets + Polling Infallible)
   useEffect(() => {
     loadData();
-  }, [loadData]);
+
+    const unsubscribe = subscribeToRealtimeTransfers((updatedItems, source, newIncomingPending) => {
+      setItems(updatedItems);
+      setIsCloudConnected(Boolean(getSupabaseConfig().url && getSupabaseConfig().anonKey));
+
+      // Se novos itens pendentes chegaram de outro computador, DISPARAR O POP-UP OUTLOOK NO OUTRO COMPUTADOR!
+      if (newIncomingPending && newIncomingPending.length > 0) {
+        const first = newIncomingPending[0];
+        const materiaisUnicos = Array.from(new Set(newIncomingPending.map((i) => i.material))).join(', ');
+        triggerMideaAlert(
+          newIncomingPending,
+          first.criadoPor || 'Time Buiatte (Sênior WMS)',
+          materiaisUnicos,
+          first.centro,
+          first.depositoOrigem,
+          first.depositoDestino
+        );
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [loadData, triggerMideaAlert]);
 
   // Recalcular SLA a cada 60 segundos
   useEffect(() => {
@@ -188,47 +254,14 @@ export default function App() {
   // KPIs
   const kpis = useMemo(() => computeKPIs(items), [items]);
 
-  // Salvar alterações
+  // Salvar alterações e sincronizar com Supabase na nuvem
   const handleUpdateItems = async (newItems: TransferItem[]) => {
     setItems(newItems);
-    await saveTransferItems(newItems);
-  };
-
-  // Disparar Alerta estilo Outlook (Canto Inferior Esquerdo + Som + Segundo Plano)
-  const triggerMideaAlert = (
-    newItems: TransferItem[],
-    solicitante: string,
-    resumoMaterial: string,
-    centro: string,
-    depOrigem: string,
-    depDestino: string
-  ) => {
-    const alertData: AlertNotification = {
-      id: `alert-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      items: newItems,
-      solicitante,
-      resumoMaterial,
-      centro,
-      depOrigem,
-      depDestino,
-      totalSeriais: newItems.length,
-    };
-
-    // 1. Tocar som estilo Outlook suave e cristalino
-    if (isSoundEnabled) {
-      playAlertChime();
+    const success = await saveTransferItems(newItems);
+    if (!success) {
+      // Se falhar a gravação na nuvem, alerta o usuário para verificar a conexão
+      console.warn('Aviso: Os dados foram salvos no cache local deste computador.');
     }
-
-    // 2. Disparar notificação nativa do sistema operacional caso esteja em segundo plano
-    sendDesktopNotification(
-      `Midea Transfer Hub: Nova Solicitação SAP (${centro})`,
-      `${solicitante} solicitou transferência do material ${resumoMaterial} de ${depOrigem} ➔ ${depDestino} (${newItems.length} seriais)`
-    );
-
-    // 3. Exibir o Toast no canto inferior esquerdo
-    setActiveAlert(alertData);
-    setAlertHistory((prev) => [alertData, ...prev]);
   };
 
   // Criar nova solicitação com múltiplos seriais
@@ -237,7 +270,7 @@ export default function App() {
     const nextList = [...created, ...items];
     await handleUpdateItems(nextList);
 
-    // Dispara pop-up Outlook no canto inferior esquerdo para o Time Midea!
+    // Dispara pop-up local também
     triggerMideaAlert(
       created,
       input.solicitante || 'Time Buiatte (Sênior WMS)',
@@ -353,7 +386,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
-      {/* Header com Navegação, Controle de Alertas e Ações Rápidas */}
+      {/* Header com Paleta Exata Midea: Imperial Blue, Blue Bell e Pale Sky */}
       <Header
         currentRole={currentRole}
         onSelectRole={setCurrentRole}
@@ -367,6 +400,8 @@ export default function App() {
         isSoundEnabled={isSoundEnabled}
         onToggleSound={() => setIsSoundEnabled((prev) => !prev)}
         autoPurgedCount={autoPurgedCount}
+        isCloudConnected={isCloudConnected}
+        onOpenCloudSync={() => setIsCloudSyncOpen(true)}
       />
 
       {/* Conteúdo Principal */}
@@ -392,16 +427,16 @@ export default function App() {
         />
       </main>
 
-      {/* Rodapé Corporativo */}
-      <footer className="bg-white border-t border-slate-200 py-4 text-xs text-slate-500">
+      {/* Rodapé Corporativo com Imperial Blue & Imperial Blue 2 */}
+      <footer className="bg-[#002363] text-white border-t border-[#002664] py-4 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[#00609C]">Midea Carrier</span>
+            <span className="font-extrabold text-[#C2DEEB]">Midea Carrier</span>
             <span>•</span>
-            <span>Operação Logística & Integração Sênior WMS ⟷ SAP</span>
+            <span className="text-white/80">Operação Logística & Sincronização Sênior WMS ⟷ SAP</span>
           </div>
-          <div>
-            Fluxo protegido por FIFO e controle de SLA de transferências de depósitos.
+          <div className="text-[#C2DEEB]/80 text-[11px]">
+            Sincronização em tempo real (In-time) protegida por FIFO e SLA.
           </div>
         </div>
       </footer>
@@ -412,6 +447,14 @@ export default function App() {
         onClose={() => setActiveAlert(null)}
         onOpenSAPModal={(selected) => setSapModalItems(selected)}
         onFocusMideaView={handleFocusMideaView}
+      />
+
+      {/* Modal de Conexão Nuvem e Link Compartilhável Multi-PC */}
+      <CloudSyncModal
+        isOpen={isCloudSyncOpen}
+        onClose={() => setIsCloudSyncOpen(false)}
+        onConnected={loadData}
+        isConnected={isCloudConnected}
       />
 
       {/* Modal de Nova Solicitação (com Múltiplos Seriais) */}

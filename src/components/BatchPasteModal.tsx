@@ -78,14 +78,14 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-[#00609C] text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-white/10 text-white">
+            <span className="p-2 rounded-xl bg-white/10 text-[#C2DEEB]">
               <FileSpreadsheet className="w-5 h-5" />
             </span>
             <div>
               <h3 className="text-base font-bold">Importação Rápida por Colagem (Excel / Tabela)</h3>
-              <p className="text-xs text-blue-100">
+              <p className="text-xs text-[#C2DEEB]">
                 Cole a planilha que o Time Buiatte enviou diretamente aqui para criar as movimentações
               </p>
             </div>
@@ -199,9 +199,9 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
               type="button"
               disabled={parsedRows.length === 0}
               onClick={handleImport}
-              className="px-5 py-2 text-xs font-bold text-white bg-[#0083CA] hover:bg-[#0070b0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
+              className="px-5 py-2 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg transition-colors shadow-xs flex items-center gap-1.5 active:scale-95"
             >
-              <ClipboardPaste className="w-4 h-4" />
+              <ClipboardPaste className="w-4 h-4 text-[#C2DEEB]" />
               <span>Importar {parsedRows.length} Movimentações</span>
             </button>
           </div>

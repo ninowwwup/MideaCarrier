@@ -1,8 +1,10 @@
 import { TransferItem, NewTransferInput, KPIStats } from '../types/transfer';
-import { getSupabase } from './supabaseClient';
+import { getSupabase, CURRENT_CLIENT_ID } from './supabaseClient';
 import { calculateSLA } from '../utils/sapFormatter';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
+const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Dados iniciais fornecidos pelo usuário no prompt
 const INITIAL_SEED: TransferItem[] = [
@@ -15,7 +17,7 @@ const INITIAL_SEED: TransferItem[] = [
     depositoOrigem: 'B148',
     depositoDestino: 'B110',
     status: 'pendente',
-    criadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 min atrás
+    criadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
     criadoPor: 'Time Buiatte (Sênior WMS)',
     atualizadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
     prioridadeFifo: 1,
@@ -48,7 +50,7 @@ const INITIAL_SEED: TransferItem[] = [
     depositoOrigem: 'B148',
     depositoDestino: 'B111',
     status: 'em_analise',
-    criadoEm: new Date(Date.now() - 85 * 60 * 1000).toISOString(), // 85 min atrás
+    criadoEm: new Date(Date.now() - 85 * 60 * 1000).toISOString(),
     criadoPor: 'Time Buiatte (Sênior WMS)',
     atualizadoEm: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     atualizadoPor: 'Carlos (Time Midea SAP)',
@@ -66,7 +68,7 @@ const INITIAL_SEED: TransferItem[] = [
     depositoOrigem: 'B110',
     depositoDestino: 'B111',
     status: 'concluido',
-    criadoEm: new Date(Date.now() - 150 * 60 * 1000).toISOString(), // 2.5h atrás
+    criadoEm: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
     criadoPor: 'Time Buiatte (Sênior WMS)',
     atualizadoEm: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     atualizadoPor: 'Ana Paula (Time Midea SAP)',
@@ -85,7 +87,7 @@ const INITIAL_SEED: TransferItem[] = [
     depositoOrigem: 'B110',
     depositoDestino: 'B111',
     status: 'divergencia',
-    criadoEm: new Date(Date.now() - 210 * 60 * 1000).toISOString(), // 3.5h atrás
+    criadoEm: new Date(Date.now() - 210 * 60 * 1000).toISOString(),
     criadoPor: 'Time Buiatte (Sênior WMS)',
     atualizadoEm: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
     atualizadoPor: 'Carlos (Time Midea SAP)',
@@ -144,8 +146,30 @@ const INITIAL_SEED: TransferItem[] = [
   },
 ];
 
-const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+export function mapRowToTransferItem(d: any, index = 0): TransferItem {
+  const criadoEm = d.criado_em || d.criadoEm || new Date().toISOString();
+  const sla = calculateSLA(criadoEm, d.status);
+
+  return {
+    id: String(d.id),
+    solicitationCode: d.solicitation_code || d.solicitationCode || `SOL-${index + 1}`,
+    material: d.material,
+    serial: d.serial,
+    centro: d.centro,
+    depositoOrigem: d.deposito_origem || d.depositoOrigem,
+    depositoDestino: d.deposito_destino || d.depositoDestino,
+    status: d.status,
+    criadoEm: criadoEm,
+    criadoPor: d.criado_por || d.criadoPor || 'Time Buiatte (Sênior WMS)',
+    atualizadoEm: d.atualizado_em || d.atualizadoEm || criadoEm,
+    atualizadoPor: d.atualizado_por || d.atualizadoPor,
+    sapDocNumber: d.sap_doc_number || d.sapDocNumber,
+    observacoes: d.observacoes,
+    prioridadeFifo: index + 1,
+    slaStatus: sla.slaStatus,
+    batchId: d.batch_id || d.batchId,
+  };
+}
 
 /**
  * Auto-limpeza mensal: Mantém o banco leve preservando apenas o histórico dos últimos 30 dias.
@@ -171,7 +195,6 @@ export function purgeOldMonthlyRecords(items: TransferItem[]): {
     }
   }
 
-  // Se houver itens para arquivar, salva no arquivo histórico local silencioso
   if (toArchive.length > 0 && typeof window !== 'undefined') {
     try {
       const existingArchiveRaw = localStorage.getItem(ARCHIVE_KEY);
@@ -186,7 +209,12 @@ export function purgeOldMonthlyRecords(items: TransferItem[]): {
   return { active, purgedCount: toArchive.length };
 }
 
-export async function fetchTransferItems(): Promise<{ items: TransferItem[]; source: 'supabase' | 'local'; purgedCount?: number }> {
+export async function fetchTransferItems(): Promise<{
+  items: TransferItem[];
+  source: 'supabase' | 'local';
+  purgedCount?: number;
+  isConnected: boolean;
+}> {
   const supabase = getSupabase();
 
   if (supabase) {
@@ -197,35 +225,24 @@ export async function fetchTransferItems(): Promise<{ items: TransferItem[]; sou
         .order('criado_em', { ascending: false });
 
       if (!error && data && data.length > 0) {
-        const mapped: TransferItem[] = data.map((d: any, index: number) => {
-          const sla = calculateSLA(d.criado_em || d.criadoEm, d.status);
-          return {
-            id: String(d.id),
-            solicitationCode: d.solicitation_code || d.solicitationCode || `SOL-${index + 1}`,
-            material: d.material,
-            serial: d.serial,
-            centro: d.centro,
-            depositoOrigem: d.deposito_origem || d.depositoOrigem,
-            depositoDestino: d.deposito_destino || d.depositoDestino,
-            status: d.status,
-            criadoEm: d.criado_em || d.criadoEm,
-            criadoPor: d.criado_por || d.criadoPor || 'Time Buiatte',
-            atualizadoEm: d.atualizado_em || d.atualizadoEm || d.criado_em,
-            atualizadoPor: d.atualizado_por || d.atualizadoPor,
-            sapDocNumber: d.sap_doc_number || d.sapDocNumber,
-            observacoes: d.observacoes,
-            prioridadeFifo: index + 1,
-            slaStatus: sla.slaStatus,
-            batchId: d.batch_id || d.batchId,
-          };
-        });
-
-        // Aplica auto-limpeza mensal
+        const mapped: TransferItem[] = data.map((d: any, index: number) => mapRowToTransferItem(d, index));
         const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
-        return { items: active, source: 'supabase', purgedCount };
+        
+        // Mantém cache local sincronizado
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(active));
+        }
+
+        return { items: active, source: 'supabase', purgedCount, isConnected: true };
+      } else if (!error && data && data.length === 0) {
+        // Tabela existe mas está vazia - inicializa com os dados iniciais
+        await saveTransferItems(INITIAL_SEED);
+        return { items: INITIAL_SEED, source: 'supabase', isConnected: true };
+      } else if (error) {
+        console.warn('Erro ao consultar Supabase, utilizando armazenamento local com fallback:', error);
       }
     } catch (err) {
-      console.warn('Erro ao consultar Supabase, usando armazenamento local:', err);
+      console.warn('Exceção ao conectar no Supabase:', err);
     }
   }
 
@@ -235,10 +252,8 @@ export async function fetchTransferItems(): Promise<{ items: TransferItem[]; sou
     if (raw) {
       try {
         const parsed: TransferItem[] = JSON.parse(raw);
-        // Aplica auto-limpeza mensal para manter apenas histórico dos últimos 30 dias
         const { active, purgedCount } = purgeOldMonthlyRecords(parsed);
 
-        // Recalcular SLA e ordenação FIFO
         const updated = active.map((item, idx) => ({
           ...item,
           prioridadeFifo: idx + 1,
@@ -249,19 +264,18 @@ export async function fetchTransferItems(): Promise<{ items: TransferItem[]; sou
           localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         }
 
-        return { items: updated, source: 'local', purgedCount };
+        return { items: updated, source: 'local', purgedCount, isConnected: false };
       } catch (e) {
         console.error('Falha ao ler dados do localStorage:', e);
       }
     }
-    // Salvar initial seed
     localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SEED));
   }
 
-  return { items: INITIAL_SEED, source: 'local' };
+  return { items: INITIAL_SEED, source: 'local', isConnected: false };
 }
 
-export async function saveTransferItems(items: TransferItem[]): Promise<void> {
+export async function saveTransferItems(items: TransferItem[]): Promise<boolean> {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }
@@ -269,7 +283,6 @@ export async function saveTransferItems(items: TransferItem[]): Promise<void> {
   const supabase = getSupabase();
   if (supabase) {
     try {
-      // Upsert nos itens no Supabase
       const payload = items.map((i) => ({
         id: i.id,
         solicitation_code: i.solicitationCode,
@@ -288,11 +301,82 @@ export async function saveTransferItems(items: TransferItem[]): Promise<void> {
         batch_id: i.batchId || null,
       }));
 
-      await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+      if (error) {
+        console.error('Erro ao gravar no Supabase:', error);
+        return false;
+      }
+      return true;
     } catch (err) {
-      console.warn('Não foi possível sincronizar imediatamente com Supabase:', err);
+      console.warn('Falha na requisição para o Supabase:', err);
+      return false;
     }
   }
+
+  return false;
+}
+
+/**
+ * Assina atualizações em Tempo Real (WebSockets + Polling Infallible)
+ * Assim que o Time Buiatte grava no Computador A, o Computador B recebe o evento instantaneamente!
+ */
+export function subscribeToRealtimeTransfers(
+  onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
+): () => void {
+  const supabase = getSupabase();
+  let knownIds = new Set<string>();
+
+  // Helper para atualizar lista e detectar novos itens
+  const refreshLatest = async (isRealtimeEvent = false) => {
+    const res = await fetchTransferItems();
+    const currentList = res.items;
+
+    // Detectar novos itens pendentes criados por outro dispositivo
+    const newPending: TransferItem[] = [];
+    if (knownIds.size > 0) {
+      for (const item of currentList) {
+        if (!knownIds.has(item.id) && item.status === 'pendente') {
+          newPending.push(item);
+        }
+      }
+    }
+
+    knownIds = new Set(currentList.map((i) => i.id));
+    onDataChange(currentList, isRealtimeEvent ? 'realtime' : 'polling', newPending.length > 0 ? newPending : undefined);
+  };
+
+  // Inicializa knownIds na primeira execução
+  refreshLatest();
+
+  let channel: any = null;
+  if (supabase) {
+    try {
+      channel = supabase
+        .channel('transfer_requests_realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'transfer_requests' },
+          () => {
+            refreshLatest(true);
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn('Erro ao assinar canal Supabase Realtime:', e);
+    }
+  }
+
+  // Polling de segurança a cada 4 segundos (garante sincronização mesmo se WebSocket estiver bloqueado)
+  const pollTimer = setInterval(() => {
+    refreshLatest(false);
+  }, 4000);
+
+  return () => {
+    clearInterval(pollTimer);
+    if (channel && supabase) {
+      supabase.removeChannel(channel);
+    }
+  };
 }
 
 export function createRequestsFromMultiSerial(
@@ -376,8 +460,8 @@ export function computeKPIs(items: TransferItem[]): KPIStats {
 }
 
 export function getSupabaseSQLSchema(): string {
-  return `-- SCRIPT SQL DDL PARA O SUPABASE (PostgreSQL)
--- Copie e cole no SQL Editor do seu projeto Supabase (gratuito)
+  return `-- SCRIPT SQL DDL DEFINITIVO PARA SUPABASE (PostgreSQL)
+-- Execute no SQL Editor do seu projeto Supabase:
 
 create table if not exists public.transfer_requests (
   id text primary key,
@@ -397,17 +481,21 @@ create table if not exists public.transfer_requests (
   batch_id text
 );
 
--- Índices para alta performance em buscas de SLA, FIFO e Materiais
+-- Habilitar SUPABASE REALTIME para propagação instantânea entre computadores (estilo AppSheet)
+alter publication supabase_realtime add table public.transfer_requests;
+
+-- Índices para performance máxima de buscas e filtros
 create index if not exists idx_transfer_requests_status on public.transfer_requests (status);
 create index if not exists idx_transfer_requests_criado_em on public.transfer_requests (criado_em);
 create index if not exists idx_transfer_requests_material on public.transfer_requests (material);
 create index if not exists idx_transfer_requests_serial on public.transfer_requests (serial);
 create index if not exists idx_transfer_requests_centro on public.transfer_requests (centro);
 
--- Habilitar Row Level Security (RLS) público ou autenticado
+-- Habilitar Row Level Security (RLS)
 alter table public.transfer_requests enable row level security;
 
--- Política de acesso permissiva para o app operacional compartilhado
+-- Política de leitura e escrita irrestrita para a aplicação compartilhada
+drop policy if exists "Acesso total aos times Midea e Buiatte" on public.transfer_requests;
 create policy "Acesso total aos times Midea e Buiatte"
   on public.transfer_requests
   for all

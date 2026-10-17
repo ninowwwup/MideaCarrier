@@ -1,1 +1,27 @@
 @import "tailwindcss";
+
+@theme {
+  --color-pale-sky: #C2DEEB;
+  --color-blue-bell: #249ED5;
+  --color-imperial: #002664;
+  --color-imperial-dark: #002363;
+}
+
+/* Scrollbar refinada e suave */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C2DEEB;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #249ED5;
+}

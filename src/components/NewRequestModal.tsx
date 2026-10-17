@@ -96,15 +96,15 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-6 py-4.5 bg-gradient-to-r from-blue-900 to-[#0083CA] text-white flex items-center justify-between">
+        <div className="px-6 py-4.5 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-white/10 text-white">
+              <span className="p-1.5 rounded-lg bg-white/10 text-[#C2DEEB]">
                 <Layers className="w-5 h-5" />
               </span>
               <h3 className="text-base font-bold">Nova Solicitação de Transferência SAP</h3>
             </div>
-            <p className="text-xs text-blue-100 mt-0.5">
+            <p className="text-xs text-[#C2DEEB] mt-0.5">
               Suporta múltiplos seriais de um mesmo material em lote (WMS Sênior ➔ SAP Midea)
             </p>
           </div>
@@ -345,9 +345,9 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-[#0083CA] hover:bg-[#0070b0] rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
+                className="px-5 py-2 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] rounded-lg transition-colors shadow-xs flex items-center gap-1.5 active:scale-95"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 text-[#C2DEEB]" />
                 <span>
                   {parsedSerials.length > 1
                     ? `Criar ${parsedSerials.length} Solicitações`
