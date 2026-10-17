@@ -144,7 +144,49 @@ const INITIAL_SEED: TransferItem[] = [
   },
 ];
 
-export async function fetchTransferItems(): Promise<{ items: TransferItem[]; source: 'supabase' | 'local' }> {
+const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Auto-limpeza mensal: Mantém o banco leve preservando apenas o histórico dos últimos 30 dias.
+ * Solicitações pendentes ou em análise são sempre preservadas para evitar perda operacional.
+ */
+export function purgeOldMonthlyRecords(items: TransferItem[]): {
+  active: TransferItem[];
+  purgedCount: number;
+} {
+  const now = Date.now();
+  const active: TransferItem[] = [];
+  const toArchive: TransferItem[] = [];
+
+  for (const item of items) {
+    const itemAge = now - new Date(item.criadoEm).getTime();
+    const isOld = itemAge > THIRTY_DAYS_MS;
+    const isResolved = item.status === 'concluido' || item.status === 'divergencia';
+
+    if (isOld && isResolved) {
+      toArchive.push(item);
+    } else {
+      active.push(item);
+    }
+  }
+
+  // Se houver itens para arquivar, salva no arquivo histórico local silencioso
+  if (toArchive.length > 0 && typeof window !== 'undefined') {
+    try {
+      const existingArchiveRaw = localStorage.getItem(ARCHIVE_KEY);
+      const existingArchive: TransferItem[] = existingArchiveRaw ? JSON.parse(existingArchiveRaw) : [];
+      const updatedArchive = [...toArchive, ...existingArchive];
+      localStorage.setItem(ARCHIVE_KEY, JSON.stringify(updatedArchive.slice(0, 5000)));
+    } catch (e) {
+      console.warn('Erro ao salvar no arquivo histórico:', e);
+    }
+  }
+
+  return { active, purgedCount: toArchive.length };
+}
+
+export async function fetchTransferItems(): Promise<{ items: TransferItem[]; source: 'supabase' | 'local'; purgedCount?: number }> {
   const supabase = getSupabase();
 
   if (supabase) {
@@ -177,7 +219,10 @@ export async function fetchTransferItems(): Promise<{ items: TransferItem[]; sou
             batchId: d.batch_id || d.batchId,
           };
         });
-        return { items: mapped, source: 'supabase' };
+
+        // Aplica auto-limpeza mensal
+        const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
+        return { items: active, source: 'supabase', purgedCount };
       }
     } catch (err) {
       console.warn('Erro ao consultar Supabase, usando armazenamento local:', err);
@@ -190,13 +235,21 @@ export async function fetchTransferItems(): Promise<{ items: TransferItem[]; sou
     if (raw) {
       try {
         const parsed: TransferItem[] = JSON.parse(raw);
+        // Aplica auto-limpeza mensal para manter apenas histórico dos últimos 30 dias
+        const { active, purgedCount } = purgeOldMonthlyRecords(parsed);
+
         // Recalcular SLA e ordenação FIFO
-        const updated = parsed.map((item, idx) => ({
+        const updated = active.map((item, idx) => ({
           ...item,
           prioridadeFifo: idx + 1,
           slaStatus: calculateSLA(item.criadoEm, item.status).slaStatus,
         }));
-        return { items: updated, source: 'local' };
+
+        if (purgedCount > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        }
+
+        return { items: updated, source: 'local', purgedCount };
       } catch (e) {
         console.error('Falha ao ler dados do localStorage:', e);
       }

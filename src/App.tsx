@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Header 
 } from './components/Header';
@@ -21,9 +21,9 @@ import {
   ResolutionModal 
 } from './components/ResolutionModal';
 import { 
-  NewRequestAlertModal,
+  OutlookToastAlert,
   AlertNotification 
-} from './components/NewRequestAlertModal';
+} from './components/OutlookToastAlert';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -42,18 +42,23 @@ import {
   calculateSLA 
 } from './utils/sapFormatter';
 import { 
-  playAlertChime 
+  playAlertChime, 
+  requestNotificationPermission, 
+  sendDesktopNotification 
 } from './utils/audioAlert';
+
+const BASE_PAGE_TITLE = 'Midea Transfer Hub - Gestão SAP & WMS';
 
 export default function App() {
   const [items, setItems] = useState<TransferItem[]>([]);
   const [currentRole, setCurrentRole] = useState<TeamRole>('ambos');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Sistema de Alerta Pop-up para o Time Midea
+  // Sistema de Alerta estilo Outlook (Canto Inferior Esquerdo)
   const [activeAlert, setActiveAlert] = useState<AlertNotification | null>(null);
   const [alertHistory, setAlertHistory] = useState<AlertNotification[]>([]);
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
+  const titleIntervalRef = useRef<any>(null);
 
   // Modais Operacionais
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -75,11 +80,87 @@ export default function App() {
     apenasDivergencias: false,
   });
 
-  // Carregar dados iniciais
+  const [autoPurgedCount, setAutoPurgedCount] = useState<number>(0);
+
+  // Pedir permissão para notificações do sistema (para segundo plano)
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Se estiver digitando em campos de texto, não dispara atalhos de navegação
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable;
+
+      if (e.key === 'Escape') {
+        setIsNewModalOpen(false);
+        setIsBatchPasteOpen(false);
+        setSapModalItems(null);
+        setResolutionData(null);
+        setActiveAlert(null);
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setIsNewModalOpen(true);
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setIsBatchPasteOpen(true);
+      } else if (e.key === '/') {
+        e.preventDefault();
+        const searchInput = document.getElementById('global-search-input');
+        if (searchInput) {
+          searchInput.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Alternar título da aba quando houver novo alerta não lido (piscar na barra de tarefas)
+  useEffect(() => {
+    if (activeAlert) {
+      let isFlashing = false;
+      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
+
+      titleIntervalRef.current = setInterval(() => {
+        document.title = isFlashing
+          ? `🔔 (1) Nova Solicitação SAP! - ${activeAlert.resumoMaterial}`
+          : BASE_PAGE_TITLE;
+        isFlashing = !isFlashing;
+      }, 1200);
+    } else {
+      if (titleIntervalRef.current) {
+        clearInterval(titleIntervalRef.current);
+        titleIntervalRef.current = null;
+      }
+      document.title = BASE_PAGE_TITLE;
+    }
+
+    return () => {
+      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
+    };
+  }, [activeAlert]);
+
+  // Carregar dados iniciais e aplicar auto-limpeza mensal
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    const { items: loadedItems } = await fetchTransferItems();
+    const { items: loadedItems, purgedCount } = await fetchTransferItems();
     setItems(loadedItems);
+    if (purgedCount && purgedCount > 0) {
+      setAutoPurgedCount(purgedCount);
+    }
     setIsLoading(false);
   }, []);
 
@@ -113,7 +194,7 @@ export default function App() {
     await saveTransferItems(newItems);
   };
 
-  // Disparar Alerta Pop-up para o Time Midea
+  // Disparar Alerta estilo Outlook (Canto Inferior Esquerdo + Som + Segundo Plano)
   const triggerMideaAlert = (
     newItems: TransferItem[],
     solicitante: string,
@@ -134,12 +215,18 @@ export default function App() {
       totalSeriais: newItems.length,
     };
 
-    // Tocar sinal sonoro
+    // 1. Tocar som estilo Outlook suave e cristalino
     if (isSoundEnabled) {
       playAlertChime();
     }
 
-    // Exibir Pop-up
+    // 2. Disparar notificação nativa do sistema operacional caso esteja em segundo plano
+    sendDesktopNotification(
+      `Midea Transfer Hub: Nova Solicitação SAP (${centro})`,
+      `${solicitante} solicitou transferência do material ${resumoMaterial} de ${depOrigem} ➔ ${depDestino} (${newItems.length} seriais)`
+    );
+
+    // 3. Exibir o Toast no canto inferior esquerdo
     setActiveAlert(alertData);
     setAlertHistory((prev) => [alertData, ...prev]);
   };
@@ -150,7 +237,7 @@ export default function App() {
     const nextList = [...created, ...items];
     await handleUpdateItems(nextList);
 
-    // Dispara pop-up imediato de alerta para o Time Midea!
+    // Dispara pop-up Outlook no canto inferior esquerdo para o Time Midea!
     triggerMideaAlert(
       created,
       input.solicitante || 'Time Buiatte (Sênior WMS)',
@@ -230,7 +317,7 @@ export default function App() {
     exportToCSV(items, `midea_transferencias_sap_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
-  // Ação ao clicar em "Tratar no SAP Agora" no Pop-up de Alerta
+  // Ação ao clicar em "Tratar no SAP" na notificação Outlook
   const handleFocusMideaView = (alertItems: TransferItem[]) => {
     setCurrentRole('midea');
     if (alertItems.length > 0) {
@@ -242,12 +329,11 @@ export default function App() {
     }
   };
 
-  // Reabrir último alerta pelo sino
+  // Reabrir último alerta pelo sino no topo
   const handleOpenLatestAlert = () => {
     if (alertHistory.length > 0) {
       setActiveAlert(alertHistory[0]);
     } else if (items.length > 0) {
-      // Cria alerta com a solicitação mais recente pendente
       const pendentes = items.filter((i) => i.status === 'pendente');
       const targetItems = pendentes.length > 0 ? [pendentes[0]] : [items[0]];
       const first = targetItems[0];
@@ -280,6 +366,7 @@ export default function App() {
         onOpenLatestAlert={handleOpenLatestAlert}
         isSoundEnabled={isSoundEnabled}
         onToggleSound={() => setIsSoundEnabled((prev) => !prev)}
+        autoPurgedCount={autoPurgedCount}
       />
 
       {/* Conteúdo Principal */}
@@ -319,8 +406,8 @@ export default function App() {
         </div>
       </footer>
 
-      {/* POP-UP DE ALERTA PARA O TIME MIDEA */}
-      <NewRequestAlertModal
+      {/* NOTIFICAÇÃO ESTILO OUTLOOK: CANTO INFERIOR ESQUERDO */}
+      <OutlookToastAlert
         alert={activeAlert}
         onClose={() => setActiveAlert(null)}
         onOpenSAPModal={(selected) => setSapModalItems(selected)}

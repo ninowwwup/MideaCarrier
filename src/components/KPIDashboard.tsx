@@ -28,7 +28,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'pendente' ? 'todos' : 'pendente')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group ${
+        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
           activeStatusFilter === 'pendente'
             ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30'
             : 'bg-white border-slate-200/90 hover:border-amber-300 hover:shadow-xs'
@@ -55,7 +55,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'em_analise' ? 'todos' : 'em_analise')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group ${
+        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
           activeStatusFilter === 'em_analise'
             ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-400/30'
             : 'bg-white border-slate-200/90 hover:border-blue-300 hover:shadow-xs'
@@ -81,7 +81,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'concluido' ? 'todos' : 'concluido')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group ${
+        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
           activeStatusFilter === 'concluido'
             ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-400/30'
             : 'bg-white border-slate-200/90 hover:border-emerald-300 hover:shadow-xs'
@@ -107,7 +107,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'divergencia' ? 'todos' : 'divergencia')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group ${
+        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
           activeStatusFilter === 'divergencia'
             ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-400/30'
             : 'bg-white border-slate-200/90 hover:border-rose-300 hover:shadow-xs'

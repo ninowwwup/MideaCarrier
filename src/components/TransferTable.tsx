@@ -9,14 +9,13 @@ import {
   Clock, 
   AlertOctagon, 
   RefreshCw, 
-  MoreHorizontal,
-  Terminal,
-  FileCheck,
-  ChevronDown,
-  Layers,
-  Sparkles,
-  ExternalLink,
-  MessageSquare
+  Terminal, 
+  FileCheck, 
+  Layers, 
+  Sparkles, 
+  MessageSquare,
+  CornerDownRight,
+  Smartphone
 } from 'lucide-react';
 import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/transfer';
 import { formatForSAPTable, formatSerialsForSAP } from '../utils/sapFormatter';
@@ -146,38 +145,45 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
       {/* Search & Filter Toolbar */}
-      <div className="p-4 border-b border-slate-200 bg-slate-50/50 space-y-3">
+      <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/60 space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Campo de Busca Rápida */}
+          {/* Campo de Busca Rápida com Efeito de Tecla [Ctrl+K] */}
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
+              id="global-search-input"
               type="text"
               placeholder="Buscar por Material, Serial, Centro, Doc SAP ou Depósito..."
               value={filters.busca}
               onChange={(e) => onFilterChange({ ...filters, busca: e.target.value })}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA] focus:border-transparent placeholder:text-slate-400"
+              className="w-full pl-9 pr-14 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA] focus:border-transparent placeholder:text-slate-400 shadow-2xs"
             />
-            {filters.busca && (
-              <button
-                type="button"
-                onClick={() => onFilterChange({ ...filters, busca: '' })}
-                className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            )}
+            <div className="absolute right-2 top-2 flex items-center gap-1">
+              {filters.busca ? (
+                <button
+                  type="button"
+                  onClick={() => onFilterChange({ ...filters, busca: '' })}
+                  className="text-xs text-slate-400 hover:text-slate-600 px-1"
+                >
+                  ✕
+                </button>
+              ) : (
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-500 rounded border border-slate-200">
+                  /
+                </kbd>
+              )}
+            </div>
           </div>
 
-          {/* Filtros em Linha */}
+          {/* Filtros Rápidos */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Status Filter */}
             <select
               value={filters.status}
               onChange={(e) => onFilterChange({ ...filters, status: e.target.value as any })}
-              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA]"
+              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
             >
               <option value="todos">Status: Todos</option>
               <option value="pendente">Pendente (FIFO)</option>
@@ -190,7 +196,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
             <select
               value={filters.centro}
               onChange={(e) => onFilterChange({ ...filters, centro: e.target.value })}
-              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA]"
+              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
             >
               <option value="todos">Centro: Todos</option>
               {allCentros.map((c) => (
@@ -204,7 +210,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
             <select
               value={filters.depositoOrigem}
               onChange={(e) => onFilterChange({ ...filters, depositoOrigem: e.target.value })}
-              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA]"
+              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
             >
               <option value="todos">Dep. Origem: Todos</option>
               {allDepsOrigem.map((d) => (
@@ -218,7 +224,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
             <select
               value={filters.depositoDestino}
               onChange={(e) => onFilterChange({ ...filters, depositoDestino: e.target.value })}
-              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA]"
+              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
             >
               <option value="todos">Dep. Destino: Todos</option>
               {allDepsDestino.map((d) => (
@@ -228,7 +234,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               ))}
             </select>
 
-            {/* Reset Filter Button */}
+            {/* Limpar Filtros */}
             {(filters.busca ||
               filters.status !== 'todos' ||
               filters.centro !== 'todos' ||
@@ -248,9 +254,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     apenasDivergencias: false,
                   })
                 }
-                className="px-2 py-1 text-xs text-rose-600 hover:text-rose-800 font-medium"
+                className="px-2 py-1 text-xs text-rose-600 hover:text-rose-800 font-medium active:scale-95"
               >
-                Limpar filtros
+                Limpar
               </button>
             )}
           </div>
@@ -258,9 +264,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
         {/* Selected Rows Batch Action Bar */}
         {selectedIds.size > 0 && (
-          <div className="flex flex-wrap items-center justify-between p-2.5 bg-blue-50/90 border border-blue-200 rounded-xl animate-in fade-in duration-150 gap-2">
+          <div className="flex flex-wrap items-center justify-between p-2.5 bg-blue-50/95 border border-blue-200 rounded-xl animate-in fade-in duration-150 gap-2 shadow-xs">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-[#0083CA] text-white">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#0083CA] text-white">
                 {selectedIds.size} selecionado(s)
               </span>
               <span className="text-xs text-slate-600 hidden sm:inline">
@@ -272,18 +278,16 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <button
                 type="button"
                 onClick={handleCopySelectedTable}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-blue-300 text-[#00609C] hover:bg-blue-100 shadow-2xs"
-                title="Copiar em formato tabulado para colar nas linhas do SAP"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-blue-300 text-[#00609C] hover:bg-blue-100 transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
               >
                 <Terminal className="w-3.5 h-3.5" />
-                <span>Copiar Tabela SAP (TAB)</span>
+                <span>Copiar TAB</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleCopySelectedSerials}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-blue-300 text-[#00609C] hover:bg-blue-100 shadow-2xs"
-                title="Copiar apenas coluna de seriais (para a tela de seriais da MIGO)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-blue-300 text-[#00609C] hover:bg-blue-100 transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Copiar Seriais</span>
@@ -292,28 +296,28 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenSAPModal(selectedItemsList)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-black text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
               >
-                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+                <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
                 <span>Assistente SAP</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => onOpenResolutionModal(selectedItemsList, 'concluir')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Concluir Selecionados</span>
+                <span>Concluir</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => onOpenResolutionModal(selectedItemsList, 'divergencia')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
               >
                 <AlertOctagon className="w-3.5 h-3.5" />
-                <span>Apontar Divergência</span>
+                <span>Divergência</span>
               </button>
             </div>
           </div>
@@ -328,8 +332,168 @@ export const TransferTable: React.FC<TransferTableProps> = ({
         )}
       </div>
 
-      {/* Main Table */}
-      <div className="overflow-x-auto">
+      {/* 1. VISÃO MOBILE OTIMIZADA (CARD-BASED PARA CELULARES & COLETOR) */}
+      <div className="block md:hidden divide-y divide-slate-200">
+        {filteredItems.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            <Filter className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-sm font-semibold">Nenhuma movimentação encontrada</p>
+          </div>
+        ) : (
+          filteredItems.map((item) => {
+            const isSelected = selectedIds.has(item.id);
+
+            return (
+              <div
+                key={`mobile-${item.id}`}
+                className={`p-3.5 transition-colors ${
+                  isSelected
+                    ? 'bg-blue-50/70'
+                    : item.status === 'divergencia'
+                    ? 'bg-rose-50/40'
+                    : 'bg-white hover:bg-slate-50'
+                }`}
+              >
+                {/* Header do Card Mobile */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelect(item.id)}
+                      className="rounded text-[#0083CA] focus:ring-[#0083CA] cursor-pointer"
+                    />
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                      FIFO #{item.prioridadeFifo}
+                    </span>
+                    <span className="font-mono text-sm font-extrabold text-slate-900">
+                      {item.material}
+                    </span>
+                  </div>
+
+                  {/* Status Badge */}
+                  <div>
+                    {item.status === 'pendente' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        <Clock className="w-3 h-3 text-amber-600" />
+                        <span>Pendente</span>
+                      </span>
+                    )}
+                    {item.status === 'em_analise' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-[#00609C] border border-blue-200">
+                        <RefreshCw className="w-3 h-3 animate-spin-slow" />
+                        <span>Em Validação</span>
+                      </span>
+                    )}
+                    {item.status === 'concluido' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Concluído</span>
+                      </span>
+                    )}
+                    {item.status === 'divergencia' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                        <AlertOctagon className="w-3 h-3 text-rose-600" />
+                        <span>Divergência</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Serial & Centro */}
+                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 mb-2 space-y-1 text-xs">
+                  <div className="flex items-center justify-between font-mono">
+                    <span className="text-slate-500 text-[11px]">Serial:</span>
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <span>{item.serial}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(item.serial);
+                          setCopiedId(`m-ser-${item.id}`);
+                          setTimeout(() => setCopiedId(null), 1500);
+                        }}
+                        className="text-slate-400 hover:text-slate-700 active:scale-90"
+                      >
+                        {copiedId === `m-ser-${item.id}` ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 font-mono text-[11px]">
+                    <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
+                      Centro {item.centro}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold">
+                        {item.depositoOrigem}
+                      </span>
+                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-semibold">
+                        {item.depositoDestino}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Doc SAP ou Observações */}
+                {item.sapDocNumber && (
+                  <div className="text-[11px] font-mono font-bold text-emerald-700 flex items-center gap-1 mb-1.5">
+                    <FileCheck className="w-3.5 h-3.5" />
+                    <span>Doc SAP: {item.sapDocNumber}</span>
+                  </div>
+                )}
+                {item.observacoes && (
+                  <div className={`text-[11px] flex items-center gap-1 mb-2 ${item.status === 'divergencia' ? 'text-rose-700 font-semibold' : 'text-slate-500'}`}>
+                    <MessageSquare className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{item.observacoes}</span>
+                  </div>
+                )}
+
+                {/* Mobile Quick Action Buttons */}
+                <div className="flex items-center justify-between pt-1 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCopySingleRow(item)}
+                    className="flex-1 py-1 px-2 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 flex items-center justify-center gap-1 active:scale-95"
+                  >
+                    <Terminal className="w-3 h-3 text-[#00609C]" />
+                    <span>Copiar TAB</span>
+                  </button>
+
+                  {item.status !== 'concluido' && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenResolutionModal([item], 'concluir')}
+                      className="flex-1 py-1 px-2 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center justify-center gap-1 active:scale-95"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Concluir</span>
+                    </button>
+                  )}
+
+                  {item.status !== 'divergencia' && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenResolutionModal([item], 'divergencia')}
+                      className="py-1 px-2 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg active:scale-95"
+                    >
+                      Divergência
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 2. VISÃO DESKTOP (TABELA COMPLETA COM HEADERS & AÇÕES) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead className="bg-slate-100/80 text-slate-600 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-200">
             <tr>
@@ -393,10 +557,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       />
                     </td>
 
-                    {/* FIFO # & SLA */}
+                    {/* FIFO # */}
                     <td className="py-2.5 px-2 text-center">
                       <span
-                        className={`inline-flex items-center justify-center font-mono font-bold text-[10px] w-6 h-6 rounded-full ${
+                        className={`inline-flex items-center justify-center font-mono font-bold text-[10px] w-6 h-6 rounded-full transition-transform active:scale-95 ${
                           item.prioridadeFifo === 1
                             ? 'bg-amber-500 text-white shadow-xs animate-pulse'
                             : 'bg-slate-200 text-slate-700'
@@ -418,7 +582,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             setCopiedId(`mat-${item.id}`);
                             setTimeout(() => setCopiedId(null), 1500);
                           }}
-                          className="text-slate-300 hover:text-slate-600 transition-colors"
+                          className="text-slate-300 hover:text-slate-600 transition-colors active:scale-90"
                           title="Copiar código do material"
                         >
                           {copiedId === `mat-${item.id}` ? (
@@ -443,7 +607,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             setCopiedId(`ser-${item.id}`);
                             setTimeout(() => setCopiedId(null), 1500);
                           }}
-                          className="text-slate-300 hover:text-slate-600 transition-colors"
+                          className="text-slate-300 hover:text-slate-600 transition-colors active:scale-90"
                           title="Copiar serial"
                         >
                           {copiedId === `ser-${item.id}` ? (
@@ -540,20 +704,20 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </div>
                     </td>
 
-                    {/* Ações Rápidas */}
+                    {/* Ações Rápidas com Efeito de Tecla */}
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {/* Botão Copiar Linha p/ SAP */}
                         <button
                           type="button"
                           onClick={() => handleCopySingleRow(item)}
-                          className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all active:scale-90"
                           title="Copiar linha formato SAP (TAB)"
                         >
                           {copiedId === item.id ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <Check className="w-4 h-4 text-emerald-600" />
                           ) : (
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-4 h-4" />
                           )}
                         </button>
 
@@ -562,10 +726,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenResolutionModal([item], 'concluir')}
-                            className="p-1 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 transition-colors"
+                            className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 transition-all active:scale-90"
                             title="Concluir no SAP (Informar Doc. Material)"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <CheckCircle2 className="w-4 h-4" />
                           </button>
                         )}
 
@@ -573,10 +737,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenResolutionModal([item], 'divergencia')}
-                            className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors"
+                            className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all active:scale-90"
                             title="Apontar Divergência no SAP"
                           >
-                            <AlertOctagon className="w-3.5 h-3.5" />
+                            <AlertOctagon className="w-4 h-4" />
                           </button>
                         )}
 
@@ -584,10 +748,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onUpdateStatusSingle(item.id, 'em_analise')}
-                            className="p-1 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-all active:scale-90"
                             title="Mudar status para Em Validação"
                           >
-                            <RefreshCw className="w-3.5 h-3.5" />
+                            <RefreshCw className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -603,13 +767,13 @@ export const TransferTable: React.FC<TransferTableProps> = ({
       {/* Table Footer with Summary */}
       <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
         <div>
-          Exibindo <strong>{filteredItems.length}</strong> de <strong>{items.length}</strong> movimentações registradas
+          Exibindo <strong>{filteredItems.length}</strong> de <strong>{items.length}</strong> movimentações registradas no ciclo mensal
         </div>
 
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-            Fila FIFO: Ordem rigorosa para proteção de SLA
+            Fila FIFO: Atendimento prioritário para SLA
           </span>
         </div>
       </div>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="mideaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00609C"/>
+      <stop offset="50%" stop-color="#0083CA"/>
+      <stop offset="100%" stop-color="#00A3E0"/>
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded squircle with safe zone -->
+  <rect width="512" height="512" rx="112" fill="url(#mideaGrad)"/>
+  
+  <!-- Central Icon: Warehouse Transfer / SAP Hub -->
+  <g transform="translate(64, 64) scale(0.75)" stroke="#ffffff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Top Box -->
+    <path d="M256 64 L384 138 L256 212 L128 138 Z" fill="url(#boxGrad)" fill-opacity="0.95" stroke="#00609C" stroke-width="16"/>
+    <!-- Box Bottom Left -->
+    <path d="M128 138 L128 276 L256 350 L256 212 Z" fill="#CBD5E1" stroke="#00609C" stroke-width="16"/>
+    <!-- Box Bottom Right -->
+    <path d="M256 212 L256 350 L384 276 L384 138 Z" fill="#F1F5F9" stroke="#00609C" stroke-width="16"/>
+    
+    <!-- Arrows representing transfer / movement -->
+    <path d="M96 384 L416 384" stroke="#ffffff" stroke-width="28"/>
+    <path d="M356 334 L416 384 L356 434" stroke="#ffffff" stroke-width="28"/>
+    
+    <path d="M416 450 L96 450" stroke="#38BDF8" stroke-width="28"/>
+    <path d="M156 500 L96 450 L156 400" stroke="#38BDF8" stroke-width="28"/>
+  </g>
+</svg>

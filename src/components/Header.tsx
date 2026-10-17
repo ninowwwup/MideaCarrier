@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Boxes, 
   PlusCircle, 
@@ -6,12 +6,16 @@ import {
   Download, 
   Layers, 
   Users, 
-  Sparkles,
-  BellRing,
-  Volume2,
-  VolumeX
+  Sparkles, 
+  BellRing, 
+  Volume2, 
+  VolumeX,
+  Menu,
+  X,
+  CalendarCheck2
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentRole: TeamRole;
@@ -25,6 +29,7 @@ interface HeaderProps {
   onOpenLatestAlert: () => void;
   isSoundEnabled: boolean;
   onToggleSound: () => void;
+  autoPurgedCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,41 +44,44 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLatestAlert,
   isSoundEnabled,
   onToggleSound,
+  autoPurgedCount = 0,
 }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      {/* Top Banner with Brand & Role Selector */}
+    <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs backdrop-blur-md bg-white/95">
+      {/* Top Navbar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between py-3.5 gap-3">
+        <div className="flex items-center justify-between py-3 gap-3">
           {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-[#00609C] to-[#0083CA] flex items-center justify-center text-white shadow-sm ring-2 ring-blue-100">
-              <Boxes className="w-5 h-5" />
+            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-[#00609C] via-[#0083CA] to-blue-400 flex items-center justify-center text-white shadow-md ring-2 ring-blue-100 transition-transform active:scale-95 cursor-pointer">
+              <Boxes className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-lg tracking-tight text-[#00609C]">
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-[#00609C]">
                   Midea <span className="font-normal text-slate-500">Carrier</span>
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#0083CA] border border-blue-200">
-                  Transfer Hub SAP
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#0083CA] border border-blue-200 shadow-2xs">
+                  SAP Hub
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">
-                Sincronização Time Buiatte (Sênior WMS) ⟷ Time Midea (SAP)
+              <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">
+                Sincronização Time Buiatte (WMS) ⟷ Time Midea (SAP)
               </p>
             </div>
           </div>
 
-          {/* Perspective Selector (Espelho) */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 self-start md:self-auto">
+          {/* Perspective Selector (Desktop) */}
+          <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/90 shadow-2xs">
             <button
               type="button"
               onClick={() => onSelectRole('ambos')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95 ${
                 currentRole === 'ambos'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
               <Layers className="w-3.5 h-3.5 text-blue-600" />
@@ -82,29 +90,29 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => onSelectRole('buiatte')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95 ${
                 currentRole === 'buiatte'
-                  ? 'bg-[#0083CA] text-white shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#0083CA] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Time Buiatte (WMS)</span>
+              <span>Time Buiatte</span>
               {totalErrors > 0 && (
-                <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>
               )}
             </button>
             <button
               type="button"
               onClick={() => onSelectRole('midea')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95 ${
                 currentRole === 'midea'
-                  ? 'bg-slate-900 text-white shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-slate-900 text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span>Time Midea (SAP)</span>
+              <span>Time Midea</span>
               {totalPending > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400 text-amber-950 font-bold">
                   {totalPending}
@@ -113,15 +121,18 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Action Buttons & Alert Controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Som de Alerta Toggle */}
+          {/* Quick Tools & PWA */}
+          <div className="flex items-center gap-2">
+            {/* PWA Install Button */}
+            <PWAInstallButton />
+
+            {/* Som Toggle */}
             <button
               type="button"
               onClick={onToggleSound}
-              className={`p-2 rounded-lg border transition-colors ${
+              className={`p-2 rounded-xl border transition-all active:scale-90 ${
                 isSoundEnabled
-                  ? 'bg-blue-50 text-[#00609C] border-blue-200 hover:bg-blue-100'
+                  ? 'bg-blue-50 text-[#00609C] border-blue-200 hover:bg-blue-100 shadow-2xs'
                   : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
               }`}
               title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado'}
@@ -129,14 +140,14 @@ export const Header: React.FC<HeaderProps> = ({
               {isSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
 
-            {/* Sino de Notificação / Último Alerta Time Midea */}
+            {/* Sino de Alertas Time Midea */}
             <button
               type="button"
               onClick={onOpenLatestAlert}
-              className="relative p-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors"
-              title="Ver último alerta de solicitação para o Time Midea"
+              className="relative p-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-all active:scale-90 shadow-2xs"
+              title="Ver alertas em tempo real estilo Outlook"
             >
-              <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-600' : 'text-slate-500'}`} />
+              <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-600' : 'text-slate-600'}`} />
               {latestAlertCount > 0 && (
                 <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-600 text-white shadow-xs">
                   {latestAlertCount}
@@ -144,79 +155,137 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Baixar CSV */}
+            {/* Baixar CSV (Desktop) */}
             <button
               type="button"
               onClick={onExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95 shadow-2xs"
               title="Baixar base completa em formato CSV para Excel e indicadores"
             >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <Download className="w-4 h-4 text-slate-500" />
               <span>Baixar CSV</span>
             </button>
 
-            {/* Colar Tabela do Excel */}
+            {/* Menu Mobile Toggle */}
             <button
               type="button"
-              onClick={onOpenBatchPaste}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#00609C] bg-blue-50/80 border border-blue-200 hover:bg-blue-100 transition-colors shadow-2xs"
-              title="Colar tabela do Excel ou mensagem do WhatsApp diretamente"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Colar Tabela</span>
-            </button>
-
-            {/* Nova Solicitação */}
-            <button
-              type="button"
-              onClick={onOpenNewModal}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#0083CA] hover:bg-[#0070b0] transition-colors shadow-xs"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Nova Solicitação</span>
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Expanded Menu */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden py-3 border-t border-slate-200 space-y-3 animate-in fade-in duration-150">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">
+              Alternar Modo de Visualização
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectRole('ambos');
+                  setMobileMenuOpen(false);
+                }}
+                className={`py-2 text-xs rounded-lg font-bold border transition-colors ${
+                  currentRole === 'ambos'
+                    ? 'bg-blue-50 text-[#00609C] border-blue-300'
+                    : 'bg-white text-slate-700 border-slate-200'
+                }`}
+              >
+                Espelho Geral
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectRole('buiatte');
+                  setMobileMenuOpen(false);
+                }}
+                className={`py-2 text-xs rounded-lg font-bold border transition-colors ${
+                  currentRole === 'buiatte'
+                    ? 'bg-[#0083CA] text-white border-transparent'
+                    : 'bg-white text-slate-700 border-slate-200'
+                }`}
+              >
+                Time Buiatte
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectRole('midea');
+                  setMobileMenuOpen(false);
+                }}
+                className={`py-2 text-xs rounded-lg font-bold border transition-colors ${
+                  currentRole === 'midea'
+                    ? 'bg-slate-900 text-white border-transparent'
+                    : 'bg-white text-slate-700 border-slate-200'
+                }`}
+              >
+                Time Midea
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onExportCSV();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg"
+            >
+              <Download className="w-4 h-4 text-slate-500" />
+              <span>Exportar Base em CSV</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Role Context Bar */}
-      <div className="bg-slate-50/70 border-t border-slate-200/60 py-1.5 px-4 sm:px-6 lg:px-8 text-xs text-slate-600 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {currentRole === 'buiatte' && (
-            <span className="inline-flex items-center gap-1 text-[#00609C] font-semibold">
-              <Users className="w-3.5 h-3.5" /> Modo Time Buiatte:
-              <span className="font-normal text-slate-600">
-                Cadastre solicitações com múltiplos seriais. O Time Midea receberá o alerta em pop-up instantaneamente.
-              </span>
+      {/* HERO ACTION BAR: Botões Maiores, Destaque Profissional & Efeito de Teclas */}
+      <div className="bg-gradient-to-r from-slate-900 via-[#0B2545] to-[#00609C] text-white px-4 sm:px-6 lg:px-8 py-3 shadow-inner">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Info & Auto-limpeza status */}
+          <div className="flex items-center gap-2.5 text-xs text-blue-100/90 text-center sm:text-left">
+            <span className="p-1 rounded-md bg-white/10 hidden sm:inline-block">
+              <CalendarCheck2 className="w-4 h-4 text-emerald-400" />
             </span>
-          )}
-          {currentRole === 'midea' && (
-            <span className="inline-flex items-center gap-1 text-slate-900 font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-[#0083CA]" /> Modo Time Midea:
-              <span className="font-normal text-slate-600">
-                Alertas pop-up em tempo real ativados. Copie em lote para o SAP (MIGO 311) e informe o Nº de Doc. Material.
-              </span>
+            <span>
+              <strong>Histórico Mensal Ativo:</strong> Sistema com auto-limpeza automática mensal de 30 dias para performance e leveza.
             </span>
-          )}
-          {currentRole === 'ambos' && (
-            <span className="inline-flex items-center gap-1 text-slate-700 font-medium">
-              <Layers className="w-3.5 h-3.5 text-[#0083CA]" /> Espelho Geral Compartilhado:
-              <span className="text-slate-500">
-                Visualização sincronizada entre Time Buiatte e Time Midea com proteção de SLA e FIFO.
-              </span>
-            </span>
-          )}
-        </div>
+          </div>
 
-        <div className="hidden md:flex items-center gap-3 text-[11px] text-slate-500">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            SLA Meta: 120min
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            FIFO Ativo
-          </span>
+          {/* BOTÕES PRINCIPAIS MAIORES COM EFEITO DE TECLA */}
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            {/* BOTÃO COLAR TABELA (MAIOR, ELEGANTE & TÁTIL) */}
+            <button
+              type="button"
+              onClick={onOpenBatchPaste}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-sm transition-all duration-150 active:translate-y-0.5 active:scale-95 shadow-md hover:shadow-lg group"
+              title="Colar tabela do Excel ou mensagem do WhatsApp diretamente (Atalho: V)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-cyan-300 group-hover:scale-110 transition-transform" />
+              <span>COLAR TABELA</span>
+              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-black/25 text-blue-100 rounded border border-white/20">
+                V
+              </kbd>
+            </button>
+
+            {/* BOTÃO NOVA SOLICITAÇÃO (HERO EM DESTAQUE, MAIOR & TÁTIL) */}
+            <button
+              type="button"
+              onClick={onOpenNewModal}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold text-[#0B2545] bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-amber-300 border-2 border-yellow-200 transition-all duration-150 active:translate-y-0.5 active:scale-95 shadow-lg hover:shadow-amber-400/25 group"
+              title="Nova Solicitação com múltiplos seriais (Atalho: N)"
+            >
+              <PlusCircle className="w-5 h-5 text-[#0B2545] group-hover:rotate-90 transition-transform duration-200" />
+              <span>NOVA SOLICITAÇÃO</span>
+              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-black/15 text-slate-900 rounded border border-black/20">
+                N
+              </kbd>
+            </button>
+          </div>
         </div>
       </div>
     </header>
