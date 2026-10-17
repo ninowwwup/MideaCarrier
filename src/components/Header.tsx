@@ -4,12 +4,12 @@ import {
   PlusCircle, 
   FileSpreadsheet, 
   Download, 
-  Database, 
   Layers, 
   Users, 
-  CheckCircle2, 
-  AlertTriangle,
-  Sparkles
+  Sparkles,
+  BellRing,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 
@@ -18,11 +18,13 @@ interface HeaderProps {
   onSelectRole: (role: TeamRole) => void;
   onOpenNewModal: () => void;
   onOpenBatchPaste: () => void;
-  onOpenSupabaseConfig: () => void;
   onExportCSV: () => void;
-  isSupabaseConnected: boolean;
   totalPending: number;
   totalErrors: number;
+  latestAlertCount: number;
+  onOpenLatestAlert: () => void;
+  isSoundEnabled: boolean;
+  onToggleSound: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,11 +32,13 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectRole,
   onOpenNewModal,
   onOpenBatchPaste,
-  onOpenSupabaseConfig,
   onExportCSV,
-  isSupabaseConnected,
   totalPending,
   totalErrors,
+  latestAlertCount,
+  onOpenLatestAlert,
+  isSoundEnabled,
+  onToggleSound,
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
@@ -109,23 +113,38 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Action Buttons & Cloud Status */}
+          {/* Action Buttons & Alert Controls */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Som de Alerta Toggle */}
             <button
               type="button"
-              onClick={onOpenSupabaseConfig}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                isSupabaseConnected
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              onClick={onToggleSound}
+              className={`p-2 rounded-lg border transition-colors ${
+                isSoundEnabled
+                  ? 'bg-blue-50 text-[#00609C] border-blue-200 hover:bg-blue-100'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
               }`}
-              title="Configurar banco de dados Supabase e deploy Vercel"
+              title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado'}
             >
-              <Database className="w-3.5 h-3.5" />
-              <span>{isSupabaseConnected ? 'Supabase Conectado' : 'Supabase / Vercel'}</span>
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConnected ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+              {isSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
 
+            {/* Sino de Notificação / Último Alerta Time Midea */}
+            <button
+              type="button"
+              onClick={onOpenLatestAlert}
+              className="relative p-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors"
+              title="Ver último alerta de solicitação para o Time Midea"
+            >
+              <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-600' : 'text-slate-500'}`} />
+              {latestAlertCount > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-600 text-white shadow-xs">
+                  {latestAlertCount}
+                </span>
+              )}
+            </button>
+
+            {/* Baixar CSV */}
             <button
               type="button"
               onClick={onExportCSV}
@@ -136,6 +155,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Baixar CSV</span>
             </button>
 
+            {/* Colar Tabela do Excel */}
             <button
               type="button"
               onClick={onOpenBatchPaste}
@@ -146,6 +166,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Colar Tabela</span>
             </button>
 
+            {/* Nova Solicitação */}
             <button
               type="button"
               onClick={onOpenNewModal}
@@ -165,7 +186,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="inline-flex items-center gap-1 text-[#00609C] font-semibold">
               <Users className="w-3.5 h-3.5" /> Modo Time Buiatte:
               <span className="font-normal text-slate-600">
-                Cadastre solicitações com múltiplos seriais e acompanhe o status no SAP em tempo real.
+                Cadastre solicitações com múltiplos seriais. O Time Midea receberá o alerta em pop-up instantaneamente.
               </span>
             </span>
           )}
@@ -173,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="inline-flex items-center gap-1 text-slate-900 font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-[#0083CA]" /> Modo Time Midea:
               <span className="font-normal text-slate-600">
-                Copie em lote para o SAP (MIGO 311), valide estoques e confirme os Nºs de Documentos.
+                Alertas pop-up em tempo real ativados. Copie em lote para o SAP (MIGO 311) e informe o Nº de Doc. Material.
               </span>
             </span>
           )}
@@ -181,7 +202,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="inline-flex items-center gap-1 text-slate-700 font-medium">
               <Layers className="w-3.5 h-3.5 text-[#0083CA]" /> Espelho Geral Compartilhado:
               <span className="text-slate-500">
-                Visualização sincronizada para eliminação de mensagens no WhatsApp e garantia de SLA/FIFO.
+                Visualização sincronizada entre Time Buiatte e Time Midea com proteção de SLA e FIFO.
               </span>
             </span>
           )}
@@ -194,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            FIFO Prioritário
+            FIFO Ativo
           </span>
         </div>
       </div>

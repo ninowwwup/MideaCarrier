@@ -21,11 +21,9 @@ import {
   ResolutionModal 
 } from './components/ResolutionModal';
 import { 
-  SupabaseConfigModal 
-} from './components/SupabaseConfigModal';
-import { 
-  ArchitectureInsights 
-} from './components/ArchitectureInsights';
+  NewRequestAlertModal,
+  AlertNotification 
+} from './components/NewRequestAlertModal';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -44,26 +42,29 @@ import {
   calculateSLA 
 } from './utils/sapFormatter';
 import { 
-  getSupabase 
-} from './services/supabaseClient';
+  playAlertChime 
+} from './utils/audioAlert';
 
 export default function App() {
   const [items, setItems] = useState<TransferItem[]>([]);
   const [currentRole, setCurrentRole] = useState<TeamRole>('ambos');
-  const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Modals
+  // Sistema de Alerta Pop-up para o Time Midea
+  const [activeAlert, setActiveAlert] = useState<AlertNotification | null>(null);
+  const [alertHistory, setAlertHistory] = useState<AlertNotification[]>([]);
+  const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
+
+  // Modais Operacionais
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
-  const [isSupabaseConfigOpen, setIsSupabaseConfigOpen] = useState(false);
   const [sapModalItems, setSapModalItems] = useState<TransferItem[] | null>(null);
   const [resolutionData, setResolutionData] = useState<{
     items: TransferItem[];
     mode: 'concluir' | 'divergencia';
   } | null>(null);
 
-  // Filtros
+  // Filtros de Busca e Status
   const [filters, setFilters] = useState<FilterOptions>({
     busca: '',
     status: 'todos',
@@ -77,9 +78,8 @@ export default function App() {
   // Carregar dados iniciais
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    const { items: loadedItems, source } = await fetchTransferItems();
+    const { items: loadedItems } = await fetchTransferItems();
     setItems(loadedItems);
-    setIsSupabaseConnected(source === 'supabase');
     setIsLoading(false);
   }, []);
 
@@ -113,17 +113,71 @@ export default function App() {
     await saveTransferItems(newItems);
   };
 
+  // Disparar Alerta Pop-up para o Time Midea
+  const triggerMideaAlert = (
+    newItems: TransferItem[],
+    solicitante: string,
+    resumoMaterial: string,
+    centro: string,
+    depOrigem: string,
+    depDestino: string
+  ) => {
+    const alertData: AlertNotification = {
+      id: `alert-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      items: newItems,
+      solicitante,
+      resumoMaterial,
+      centro,
+      depOrigem,
+      depDestino,
+      totalSeriais: newItems.length,
+    };
+
+    // Tocar sinal sonoro
+    if (isSoundEnabled) {
+      playAlertChime();
+    }
+
+    // Exibir Pop-up
+    setActiveAlert(alertData);
+    setAlertHistory((prev) => [alertData, ...prev]);
+  };
+
   // Criar nova solicitação com múltiplos seriais
   const handleCreateRequest = async (input: NewTransferInput) => {
     const created = createRequestsFromMultiSerial(input, items.length);
     const nextList = [...created, ...items];
     await handleUpdateItems(nextList);
+
+    // Dispara pop-up imediato de alerta para o Time Midea!
+    triggerMideaAlert(
+      created,
+      input.solicitante || 'Time Buiatte (Sênior WMS)',
+      input.material,
+      input.centro,
+      input.depositoOrigem,
+      input.depositoDestino
+    );
   };
 
-  // Importar em lote
+  // Importar em lote (Colar Tabela)
   const handleImportBatch = async (batchItems: TransferItem[]) => {
     const nextList = [...batchItems, ...items];
     await handleUpdateItems(nextList);
+
+    if (batchItems.length > 0) {
+      const first = batchItems[0];
+      const materiaisUnicos = Array.from(new Set(batchItems.map((b) => b.material))).join(', ');
+      triggerMideaAlert(
+        batchItems,
+        first.criadoPor || 'Time Buiatte (Sênior WMS)',
+        materiaisUnicos,
+        first.centro,
+        first.depositoOrigem,
+        first.depositoDestino
+      );
+    }
   };
 
   // Alterar status individual rápido
@@ -176,26 +230,60 @@ export default function App() {
     exportToCSV(items, `midea_transferencias_sap_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
+  // Ação ao clicar em "Tratar no SAP Agora" no Pop-up de Alerta
+  const handleFocusMideaView = (alertItems: TransferItem[]) => {
+    setCurrentRole('midea');
+    if (alertItems.length > 0) {
+      setFilters((prev) => ({
+        ...prev,
+        busca: alertItems[0].material,
+        status: 'pendente',
+      }));
+    }
+  };
+
+  // Reabrir último alerta pelo sino
+  const handleOpenLatestAlert = () => {
+    if (alertHistory.length > 0) {
+      setActiveAlert(alertHistory[0]);
+    } else if (items.length > 0) {
+      // Cria alerta com a solicitação mais recente pendente
+      const pendentes = items.filter((i) => i.status === 'pendente');
+      const targetItems = pendentes.length > 0 ? [pendentes[0]] : [items[0]];
+      const first = targetItems[0];
+      setActiveAlert({
+        id: `alert-recent`,
+        timestamp: first.criadoEm,
+        items: targetItems,
+        solicitante: first.criadoPor,
+        resumoMaterial: first.material,
+        centro: first.centro,
+        depOrigem: first.depositoOrigem,
+        depDestino: first.depositoDestino,
+        totalSeriais: targetItems.length,
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
-      {/* Header com Navegação e Ações Rápidas */}
+      {/* Header com Navegação, Controle de Alertas e Ações Rápidas */}
       <Header
         currentRole={currentRole}
         onSelectRole={setCurrentRole}
         onOpenNewModal={() => setIsNewModalOpen(true)}
         onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
-        onOpenSupabaseConfig={() => setIsSupabaseConfigOpen(true)}
         onExportCSV={handleExportCSV}
-        isSupabaseConnected={isSupabaseConnected}
         totalPending={kpis.pendentes}
         totalErrors={kpis.divergencias}
+        latestAlertCount={alertHistory.length}
+        onOpenLatestAlert={handleOpenLatestAlert}
+        isSoundEnabled={isSoundEnabled}
+        onToggleSound={() => setIsSoundEnabled((prev) => !prev)}
       />
 
       {/* Conteúdo Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Banner de Diagnóstico e Melhorias da Operação Midea Carrier */}
-        <ArchitectureInsights />
-
         {/* Dashboard de Indicadores (FIFO, SLA, Concluídos, Divergências) */}
         <KPIDashboard
           stats={kpis}
@@ -231,13 +319,22 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Modais do Sistema */}
+      {/* POP-UP DE ALERTA PARA O TIME MIDEA */}
+      <NewRequestAlertModal
+        alert={activeAlert}
+        onClose={() => setActiveAlert(null)}
+        onOpenSAPModal={(selected) => setSapModalItems(selected)}
+        onFocusMideaView={handleFocusMideaView}
+      />
+
+      {/* Modal de Nova Solicitação (com Múltiplos Seriais) */}
       <NewRequestModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
         onSubmit={handleCreateRequest}
       />
 
+      {/* Modal de Importação em Lote (Colar Tabela Excel/WhatsApp) */}
       <BatchPasteModal
         isOpen={isBatchPasteOpen}
         onClose={() => setIsBatchPasteOpen(false)}
@@ -245,6 +342,7 @@ export default function App() {
         currentCount={items.length}
       />
 
+      {/* Modal de Assistente e Cópia para o SAP */}
       {sapModalItems && (
         <SAPCopyModal
           isOpen={Boolean(sapModalItems)}
@@ -253,6 +351,7 @@ export default function App() {
         />
       )}
 
+      {/* Modal de Resolução (Doc SAP ou Divergência) */}
       {resolutionData && (
         <ResolutionModal
           isOpen={Boolean(resolutionData)}
@@ -262,12 +361,6 @@ export default function App() {
           onSubmit={handleResolutionSubmit}
         />
       )}
-
-      <SupabaseConfigModal
-        isOpen={isSupabaseConfigOpen}
-        onClose={() => setIsSupabaseConfigOpen(false)}
-        onConfigUpdated={loadData}
-      />
     </div>
   );
 }
