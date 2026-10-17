@@ -1,0 +1,6 @@
+{
+  "name": "Midea Transfer Hub - Gestão SAP & WMS",
+  "description": "Plataforma colaborativa entre Time Buiatte (WMS Sênior) e Time Midea para gestão de transferências de depósitos e centros no SAP com múltiplos seriais, SLA e FIFO.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
