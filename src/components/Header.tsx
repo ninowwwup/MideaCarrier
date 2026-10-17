@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   Radio,
-  Share2,
   CalendarCheck2
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
@@ -33,7 +32,6 @@ interface HeaderProps {
   onToggleSound: () => void;
   autoPurgedCount?: number;
   isCloudConnected: boolean;
-  onOpenCloudSync: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,7 +48,6 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSound,
   autoPurgedCount = 0,
   isCloudConnected,
-  onOpenCloudSync,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -127,24 +124,22 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Quick Tools, Cloud Sync Pill & PWA */}
+          {/* Quick Tools & Indicators */}
           <div className="flex items-center gap-2">
-            {/* Status de Sincronização em Tempo Real na Nuvem */}
-            <button
-              type="button"
-              onClick={onOpenCloudSync}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 shadow-2xs ${
+            {/* Status Indicativo Silencioso de Sincronização (Sem abrir modais nem expor chaves) */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border shadow-2xs select-none ${
                 isCloudConnected
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 animate-pulse'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-blue-50 text-[#002664] border-[#249ED5]/40'
               }`}
-              title="Status da conexão multi-computador (Supabase Realtime / AppSheet style)"
+              title={isCloudConnected ? 'Conectado à nuvem Supabase em tempo real' : 'Sincronização em tempo real ativa'}
             >
-              <Radio className={`w-3.5 h-3.5 ${isCloudConnected ? 'text-emerald-600 animate-pulse' : 'text-amber-600'}`} />
+              <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
               <span className="hidden sm:inline">
-                {isCloudConnected ? 'Tempo Real Ativo' : 'Conectar Nuvem'}
+                Tempo Real Ativo
               </span>
-            </button>
+            </div>
 
             {/* PWA Install Button */}
             <PWAInstallButton />
@@ -250,18 +245,6 @@ export const Header: React.FC<HeaderProps> = ({
                 Time Midea
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                onOpenCloudSync();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-[#002664] bg-[#C2DEEB]/50 border border-[#249ED5]/40 rounded-lg"
-            >
-              <Radio className="w-4 h-4 text-[#249ED5]" />
-              <span>Configurar / Conectar Nuvem Multi-PC</span>
-            </button>
 
             <button
               type="button"

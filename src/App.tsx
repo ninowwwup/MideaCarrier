@@ -25,9 +25,6 @@ import {
   AlertNotification 
 } from './components/OutlookToastAlert';
 import { 
-  CloudSyncModal 
-} from './components/CloudSyncModal';
-import { 
   TransferItem, 
   TransferStatus, 
   TeamRole, 
@@ -69,7 +66,6 @@ export default function App() {
   // Modais Operacionais
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
-  const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
   const [sapModalItems, setSapModalItems] = useState<TransferItem[] | null>(null);
   const [resolutionData, setResolutionData] = useState<{
     items: TransferItem[];
@@ -107,7 +103,6 @@ export default function App() {
       if (e.key === 'Escape') {
         setIsNewModalOpen(false);
         setIsBatchPasteOpen(false);
-        setIsCloudSyncOpen(false);
         setSapModalItems(null);
         setResolutionData(null);
         setActiveAlert(null);
@@ -257,11 +252,7 @@ export default function App() {
   // Salvar alterações e sincronizar com Supabase na nuvem
   const handleUpdateItems = async (newItems: TransferItem[]) => {
     setItems(newItems);
-    const success = await saveTransferItems(newItems);
-    if (!success) {
-      // Se falhar a gravação na nuvem, alerta o usuário para verificar a conexão
-      console.warn('Aviso: Os dados foram salvos no cache local deste computador.');
-    }
+    await saveTransferItems(newItems);
   };
 
   // Criar nova solicitação com múltiplos seriais
@@ -401,7 +392,6 @@ export default function App() {
         onToggleSound={() => setIsSoundEnabled((prev) => !prev)}
         autoPurgedCount={autoPurgedCount}
         isCloudConnected={isCloudConnected}
-        onOpenCloudSync={() => setIsCloudSyncOpen(true)}
       />
 
       {/* Conteúdo Principal */}
@@ -447,14 +437,6 @@ export default function App() {
         onClose={() => setActiveAlert(null)}
         onOpenSAPModal={(selected) => setSapModalItems(selected)}
         onFocusMideaView={handleFocusMideaView}
-      />
-
-      {/* Modal de Conexão Nuvem e Link Compartilhável Multi-PC */}
-      <CloudSyncModal
-        isOpen={isCloudSyncOpen}
-        onClose={() => setIsCloudSyncOpen(false)}
-        onConnected={loadData}
-        isConnected={isCloudConnected}
       />
 
       {/* Modal de Nova Solicitação (com Múltiplos Seriais) */}
