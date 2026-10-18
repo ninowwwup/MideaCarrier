@@ -94,130 +94,131 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Perspective Selector (Desktop) */}
-          <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+          {/* Perspective Selector (Desktop) - Apenas Ícones com Tooltips */}
+          <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs gap-0.5">
             <button
               type="button"
               onClick={() => onSelectRole('ambos')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95 ${
+              className={`p-2 rounded-lg text-xs transition-all active:scale-95 ${
                 currentRole === 'ambos'
                   ? 'bg-white text-[#002664] shadow-xs font-bold border border-slate-200'
                   : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
+              title="Espelho Geral: Visualizar todas as solicitações de todos os centros"
+              aria-label="Espelho Geral"
             >
-              <Layers className="w-3.5 h-3.5 text-[#249ED5]" />
-              <span>Espelho Geral</span>
+              <Layers className="w-4 h-4 text-[#249ED5]" />
             </button>
             <button
               type="button"
               onClick={() => onSelectRole('buiatte')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95 ${
+              className={`relative p-2 rounded-lg text-xs transition-all active:scale-95 ${
                 currentRole === 'buiatte'
                   ? 'bg-[#249ED5] text-white shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
+              title="Visão Time Buiatte (WMS Sênior - Solicitações e Divergências)"
+              aria-label="Time Buiatte"
             >
-              <Users className="w-3.5 h-3.5" />
-              <span>Time Buiatte</span>
+              <Users className="w-4 h-4" />
               {totalErrors > 0 && (
-                <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
               )}
             </button>
             <button
               type="button"
               onClick={() => onSelectRole('midea')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95 ${
+              className={`relative p-2 rounded-lg text-xs transition-all active:scale-95 ${
                 currentRole === 'midea'
                   ? 'bg-[#002664] text-white shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
+              title="Visão Time Midea (SAP MIGO - Fila FIFO e Atendimento)"
+              aria-label="Time Midea"
             >
-              <Sparkles className="w-3.5 h-3.5 text-[#C2DEEB]" />
-              <span>Time Midea</span>
+              <Sparkles className="w-4 h-4 text-[#C2DEEB]" />
               {totalPending > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400 text-amber-950 font-bold">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs">
                   {totalPending}
                 </span>
               )}
             </button>
           </div>
 
-          {/* Quick Tools & Indicators */}
-          <div className="flex items-center gap-2">
-            {/* Status Indicativo Silencioso de Sincronização (Sem abrir modais nem expor chaves) */}
+          {/* Quick Tools & Indicators - Todos os Botões Apenas Ícones */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Status Indicativo Silencioso de Sincronização */}
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border shadow-2xs select-none ${
+              className={`p-2 rounded-xl text-xs font-bold border shadow-2xs select-none flex items-center justify-center ${
                 isCloudConnected
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : 'bg-blue-50 text-[#002664] border-[#249ED5]/40'
               }`}
-              title={isCloudConnected ? 'Conectado à nuvem Supabase em tempo real' : 'Sincronização em tempo real ativa'}
+              title={isCloudConnected ? 'Conectado à nuvem Supabase em tempo real (In-time)' : 'Sincronização em tempo real ativa'}
             >
-              <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-              <span className="hidden sm:inline">
-                Tempo Real Ativo
-              </span>
+              <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
             </div>
 
-            {/* PWA Install Button */}
+            {/* PWA Install Button (Apenas Ícone) */}
             <PWAInstallButton />
 
-            {/* Som Toggle & Teste de Gota d'Água */}
-            <div className="flex items-center gap-1 bg-white/70 rounded-xl p-0.5 border border-slate-200">
+            {/* Som Toggle & Teste de Gota d'Água (Apenas Ícones) */}
+            <div className="flex items-center gap-0.5 bg-white/70 rounded-xl p-0.5 border border-slate-200">
               <button
                 type="button"
                 onClick={onToggleSound}
-                className={`p-1.5 rounded-lg border transition-all active:scale-90 ${
+                className={`p-2 rounded-lg border transition-all active:scale-90 ${
                   isSoundEnabled
                     ? 'bg-blue-50 text-[#002664] border-blue-200 hover:bg-blue-100 shadow-2xs'
                     : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
                 }`}
-                title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado'}
+                title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado (Clique para ativar)'}
+                aria-label="Alternar som de alerta"
               >
-                {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#249ED5]" /> : <VolumeX className="w-3.5 h-3.5" />}
+                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-[#249ED5]" /> : <VolumeX className="w-4 h-4" />}
               </button>
               
               <button
                 type="button"
                 onClick={onTestAlertSound}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-[#002664] hover:bg-blue-50 transition-all active:scale-95"
+                className="p-2 rounded-lg text-[#002664] hover:bg-blue-50 transition-all active:scale-95"
                 title="Testar som suave de gota d'água"
+                aria-label="Testar som suave de gota d'água"
               >
-                <Droplets className="w-3.5 h-3.5 text-[#249ED5]" />
-                <span className="hidden md:inline text-[11px]">Gota d'Água</span>
+                <Droplets className="w-4 h-4 text-[#249ED5]" />
               </button>
             </div>
 
-            {/* Controle do Push Manager (Service Worker) */}
+            {/* Controle do Push Manager (Service Worker) - Apenas Ícone */}
             {isPushSubscribed ? (
               <button
                 type="button"
                 onClick={onTestPush}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition-all active:scale-95 shadow-2xs"
-                title="Push Manager Ativo! Clique para testar push notification com app fechado"
+                className="p-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition-all active:scale-95 shadow-2xs"
+                title="Push Manager Ativo! Clique para testar notificação nativa"
+                aria-label="Testar Notificação Push"
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="hidden xl:inline text-[11px]">Push Ativo</span>
-                <span className="text-[10px] bg-emerald-200/80 px-1.5 py-0.5 rounded text-emerald-900 font-extrabold">Testar Push</span>
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={onEnablePushManager}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md transition-all active:scale-95 animate-pulse"
-                title="Ativar Service Worker Push Manager para receber notificações com app fechado ou em segundo plano"
+                className="p-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md transition-all active:scale-95 animate-pulse"
+                title="Ativar Service Worker Push Manager para receber notificações em segundo plano"
+                aria-label="Ativar Push Manager"
               >
-                <Bell className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-[11px]">Ativar Push Manager</span>
+                <Bell className="w-4 h-4" />
               </button>
             )}
 
-            {/* Sino de Alertas Time Midea */}
+            {/* Sino de Alertas Time Midea - Apenas Ícone */}
             <button
               type="button"
               onClick={onOpenLatestAlert}
               className="relative p-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-all active:scale-90 shadow-2xs"
               title="Ver alertas em tempo real estilo Outlook"
+              aria-label="Ver alertas estilo Outlook"
             >
               <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-600' : 'text-slate-600'}`} />
               {latestAlertCount > 0 && (
@@ -227,15 +228,15 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Baixar CSV (Desktop) */}
+            {/* Baixar Base em Excel - Apenas Ícone do Excel */}
             <button
               type="button"
               onClick={onExportCSV}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95 shadow-2xs"
-              title="Baixar base completa em formato CSV para Excel e indicadores"
+              className="p-2 rounded-xl text-emerald-800 bg-emerald-50/90 border border-emerald-300 hover:bg-emerald-100 transition-all active:scale-95 shadow-2xs group"
+              title="Baixar base completa em formato Excel / CSV para indicadores"
+              aria-label="Baixar planilha Excel"
             >
-              <Download className="w-4 h-4 text-[#249ED5]" />
-              <span>Baixar CSV</span>
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
             </button>
 
             {/* Menu Mobile Toggle */}
@@ -243,8 +244,10 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100"
+              title="Menu de navegação"
+              aria-label="Menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
           </div>
         </div>
@@ -306,10 +309,10 @@ export const Header: React.FC<HeaderProps> = ({
                 onExportCSV();
                 setMobileMenuOpen(false);
               }}
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg"
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg"
             >
-              <Download className="w-4 h-4 text-slate-500" />
-              <span>Exportar Base em CSV</span>
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>Exportar Base em Excel (CSV)</span>
             </button>
           </div>
         )}

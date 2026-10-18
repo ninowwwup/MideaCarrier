@@ -246,13 +246,14 @@ function loadPersistentStore(): any[] {
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed) && parsed.length >= 3) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
   } catch (e) {
     console.warn('Erro ao carregar transfers_data.json:', e);
   }
+  savePersistentStore(DEFAULT_SEED);
   return DEFAULT_SEED;
 }
 
@@ -276,21 +277,37 @@ export function registerSSEClient(req: IncomingMessage, res: ServerResponse) {
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
     'Access-Control-Allow-Origin': '*',
+    'X-Accel-Buffering': 'no',
   });
 
+  if (typeof (res as any).flushHeaders === 'function') {
+    (res as any).flushHeaders();
+  }
+
   res.write(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now(), itemsCount: memoryStore.length })}\n\n`);
+  if (typeof (res as any).flush === 'function') {
+    (res as any).flush();
+  }
+
   sseClients.add(res);
 
   const heartbeat = setInterval(() => {
     try {
       res.write(`: ping ${Date.now()}\n\n`);
+      if (typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
     } catch (e) {
       clearInterval(heartbeat);
       sseClients.delete(res);
     }
-  }, 15000);
+  }, 10000);
 
   req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+  });
+  req.on('error', () => {
     clearInterval(heartbeat);
     sseClients.delete(res);
   });
@@ -301,6 +318,9 @@ export function broadcastSSE(data: any) {
   for (const client of sseClients) {
     try {
       client.write(payload);
+      if (typeof (client as any).flush === 'function') {
+        (client as any).flush();
+      }
     } catch (e) {
       sseClients.delete(client);
     }

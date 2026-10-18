@@ -115,18 +115,18 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-6 py-4.5 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
+        <div className="shrink-0 px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
               <span className="p-1.5 rounded-lg bg-white/10 text-[#C2DEEB]">
                 <Layers className="w-5 h-5" />
               </span>
-              <h3 className="text-base font-bold">Nova Solicitação de Transferência SAP</h3>
+              <h3 className="text-sm sm:text-base font-bold">Nova Solicitação de Transferência SAP</h3>
             </div>
-            <p className="text-xs text-[#C2DEEB] mt-0.5">
+            <p className="text-[11px] sm:text-xs text-[#C2DEEB] mt-0.5">
               Suporta múltiplos seriais de um mesmo material em lote (WMS Sênior ➔ SAP Midea)
             </p>
           </div>
@@ -134,13 +134,16 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             type="button"
             onClick={onClose}
             className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            title="Fechar"
+            aria-label="Fechar modal"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {/* Modal Body & Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 sm:space-y-4 overscroll-contain">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Material */}
             <div>
@@ -455,9 +458,11 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             )}
           </div>
 
-          {/* Modal Footer */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-            <div className="text-xs text-slate-500">
+          </div>
+
+          {/* Modal Footer - Sempre visível e fixo no rodapé */}
+          <div className="shrink-0 px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+            <div className="text-xs text-slate-500 w-full sm:w-auto text-center sm:text-left">
               {parsedSerials.length > 1 ? (
                 <span className="font-semibold text-[#00609C]">
                   Serão geradas {parsedSerials.length} linhas agrupadas no mesmo lote.
@@ -467,17 +472,17 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                className="flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] rounded-lg transition-colors shadow-xs flex items-center gap-1.5 active:scale-95"
+                className="flex-1 sm:flex-initial px-5 py-2 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5 active:scale-95"
               >
                 <Plus className="w-4 h-4 text-[#C2DEEB]" />
                 <span>

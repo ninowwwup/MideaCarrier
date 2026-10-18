@@ -17,11 +17,11 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={install}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition-all shadow-2xs active:scale-95"
-        title="Instalar como aplicativo nativo no computador ou celular"
+        className="p-2 rounded-xl text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition-all shadow-2xs active:scale-95"
+        title="Instalar aplicativo MIGOU (PWA)"
+        aria-label="Instalar aplicativo MIGOU"
       >
-        <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-        <span>Instalar App</span>
+        <Smartphone className="w-4 h-4 text-emerald-600" />
       </button>
     );
   }
@@ -33,11 +33,11 @@ export const PWAInstallButton: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowIOSGuide(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition-all shadow-2xs active:scale-95"
-          title="Como instalar no iPhone ou iPad"
+          className="p-2 rounded-xl text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition-all shadow-2xs active:scale-95"
+          title="Instalar aplicativo no iPhone ou iPad (PWA)"
+          aria-label="Instalar no iOS"
         >
-          <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Instalar no iOS</span>
+          <Smartphone className="w-4 h-4 text-emerald-600" />
         </button>
 
         {showIOSGuide && (

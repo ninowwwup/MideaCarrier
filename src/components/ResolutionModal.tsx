@@ -69,11 +69,11 @@ export const ResolutionModal: React.FC<ResolutionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div
-          className={`px-6 py-4 text-white flex items-center justify-between ${
+          className={`shrink-0 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between ${
             mode === 'concluir'
               ? 'bg-gradient-to-r from-emerald-800 to-emerald-600'
               : 'bg-gradient-to-r from-rose-900 to-rose-700'
@@ -84,10 +84,10 @@ export const ResolutionModal: React.FC<ResolutionModalProps> = ({
               {mode === 'concluir' ? <CheckCircle2 className="w-5 h-5" /> : <AlertOctagon className="w-5 h-5" />}
             </span>
             <div>
-              <h3 className="text-base font-bold">
+              <h3 className="text-sm sm:text-base font-bold">
                 {mode === 'concluir' ? 'Concluir Movimentação no SAP' : 'Apontar Divergência / Erro'}
               </h3>
-              <p className="text-xs text-white/80">
+              <p className="text-[11px] sm:text-xs text-white/80">
                 {isBatch
                   ? `Aplicar em ${items.length} itens selecionados`
                   : `Item: ${items[0].material} • Serial: ${items[0].serial}`}
@@ -98,13 +98,16 @@ export const ResolutionModal: React.FC<ResolutionModalProps> = ({
             type="button"
             onClick={onClose}
             className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10"
+            title="Fechar"
+            aria-label="Fechar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {/* Body Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 sm:space-y-4 overscroll-contain">
           {/* Resumo dos Itens Selecionados */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
             <div className="font-semibold text-slate-700 flex items-center justify-between">
@@ -213,19 +216,20 @@ export const ResolutionModal: React.FC<ResolutionModalProps> = ({
               className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
             />
           </div>
+        </div>
 
-          {/* Footer */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+        {/* Footer - Fixo no rodapé */}
+        <div className="shrink-0 px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className={`px-5 py-2 text-xs font-bold text-white rounded-lg transition-colors shadow-xs flex items-center gap-1.5 ${
+              className={`px-5 py-2 text-xs font-bold text-white rounded-lg transition-colors shadow-xs flex items-center gap-1.5 active:scale-95 ${
                 mode === 'concluir'
                   ? 'bg-emerald-600 hover:bg-emerald-700'
                   : 'bg-rose-600 hover:bg-rose-700'

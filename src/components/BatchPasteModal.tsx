@@ -77,17 +77,17 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
+        <div className="shrink-0 px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="p-2 rounded-xl bg-white/10 text-[#C2DEEB]">
               <FileSpreadsheet className="w-5 h-5" />
             </span>
             <div>
-              <h3 className="text-base font-bold">Importação Rápida por Colagem (Excel / Tabela)</h3>
-              <p className="text-xs text-[#C2DEEB]">
+              <h3 className="text-sm sm:text-base font-bold">Importação Rápida por Colagem (Excel / Tabela)</h3>
+              <p className="text-[11px] sm:text-xs text-[#C2DEEB]">
                 Cole a planilha que o Time Buiatte enviou diretamente aqui para criar as movimentações
               </p>
             </div>
@@ -96,24 +96,26 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
             type="button"
             onClick={onClose}
             className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            title="Fechar"
+            aria-label="Fechar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        {/* Modal Body (Scrollable) */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 sm:space-y-4 overscroll-contain">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div className="text-xs text-slate-600">
               Formato esperado (separado por TAB ou ponto-e-vírgula):
-              <span className="font-mono font-bold text-slate-800 ml-1">
+              <span className="font-mono font-bold text-slate-800 ml-1 block sm:inline">
                 Material | Serial | Centro | Deposito Origem | Deposito Destino
               </span>
             </div>
             <button
               type="button"
               onClick={handleLoadSample}
-              className="text-xs text-[#00609C] hover:underline font-semibold flex items-center gap-1"
+              className="text-xs text-[#00609C] hover:underline font-semibold flex items-center gap-1 shrink-0"
             >
               <Sparkles className="w-3.5 h-3.5" />
               Carregar Exemplo Real
@@ -122,7 +124,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
 
           {/* Area de colagem */}
           <textarea
-            rows={5}
+            rows={4}
             value={pastedText}
             onChange={(e) => setPastedText(e.target.value)}
             placeholder="Copie as linhas da sua planilha no Excel e aperte Ctrl+V aqui..."
@@ -140,7 +142,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                   <Check className="w-3 h-3" /> Formato Válido
                 </span>
               </div>
-              <div className="max-h-56 overflow-y-auto">
+              <div className="max-h-48 sm:max-h-56 overflow-y-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                     <tr>
@@ -179,9 +181,9 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <div className="text-xs text-slate-500">
+        {/* Modal Footer (Sticky, always visible) */}
+        <div className="shrink-0 px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          <div className="text-xs text-slate-500 w-full sm:w-auto text-center sm:text-left">
             {parsedRows.length > 0 ? (
               <span>Entrarão na fila FIFO com status <strong>Pendente</strong>.</span>
             ) : (
@@ -189,11 +191,11 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded-lg transition-colors"
+              className="flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded-lg transition-colors"
             >
               Cancelar
             </button>
@@ -201,7 +203,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
               type="button"
               disabled={parsedRows.length === 0}
               onClick={handleImport}
-              className="px-5 py-2 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg transition-colors shadow-xs flex items-center gap-1.5 active:scale-95"
+              className="flex-1 sm:flex-initial px-5 py-2 text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5 active:scale-95"
             >
               <ClipboardPaste className="w-4 h-4 text-[#C2DEEB]" />
               <span>Importar {parsedRows.length} Movimentações</span>

@@ -289,7 +289,12 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  // Assinatura em Tempo Real (Supabase Realtime WebSockets + Polling Infallible)
+  const triggerMideaAlertRef = useRef(triggerMideaAlert);
+  useEffect(() => {
+    triggerMideaAlertRef.current = triggerMideaAlert;
+  }, [triggerMideaAlert]);
+
+  // Assinatura em Tempo Real (Supabase Realtime WebSockets + SSE + Polling Infallible)
   useEffect(() => {
     loadData();
 
@@ -301,7 +306,7 @@ export default function App() {
       if (newIncomingPending && newIncomingPending.length > 0) {
         const first = newIncomingPending[0];
         const materiaisUnicos = Array.from(new Set(newIncomingPending.map((i) => i.material))).join(', ');
-        triggerMideaAlert(
+        triggerMideaAlertRef.current(
           newIncomingPending,
           first.criadoPor || 'Time Buiatte (Sênior WMS)',
           materiaisUnicos,
@@ -315,7 +320,7 @@ export default function App() {
     return () => {
       unsubscribe();
     };
-  }, [loadData, triggerMideaAlert]);
+  }, [loadData]);
 
   // Recalcular SLA a cada 60 segundos
   useEffect(() => {
@@ -506,40 +511,6 @@ export default function App() {
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-10">
-        {/* Banner de Ativação do Push Manager / Service Worker para segundo plano */}
-        {!isPushSubscribed && (
-          <div className="mb-4 p-4 bg-gradient-to-r from-[#002664]/95 via-[#0E2A54]/95 to-[#002363]/95 text-white backdrop-blur-xl rounded-2xl border border-[#249ED5]/40 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
-            <div className="flex items-center gap-3">
-              <span className="p-2.5 rounded-xl bg-[#249ED5]/20 text-[#C2DEEB] shrink-0 shadow-inner">
-                <Bell className="w-5 h-5 text-[#249ED5] animate-bounce" />
-              </span>
-              <div>
-                <strong className="text-sm font-extrabold tracking-wide text-white block">
-                  🔔 Ativação Obrigatória: Service Worker com Push Manager
-                </strong>
-                <p className="text-[#C2DEEB] text-xs mt-0.5 leading-snug">
-                  Garante que o pop-up de 5 segundos e o som suave de gota d’água apareçam mesmo se você estiver com o SAP GUI ou Excel aberto, ou com o MIGOU fechado em segundo plano.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleTestAlertSound}
-                className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white/90 hover:bg-white shrink-0 shadow-md transition-all active:scale-95"
-              >
-                Testar Gota d'Água
-              </button>
-              <button
-                type="button"
-                onClick={handleEnablePushManager}
-                className="px-4 py-2 rounded-xl text-xs font-extrabold text-[#002664] bg-gradient-to-r from-[#C2DEEB] to-white hover:brightness-105 shrink-0 shadow-lg transition-all active:scale-95 ring-2 ring-white/80"
-              >
-                Ativar Push Manager
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Dashboard de Indicadores Glassmorphism (FIFO, SLA, Concluídos, Divergências) */}
         <KPIDashboard

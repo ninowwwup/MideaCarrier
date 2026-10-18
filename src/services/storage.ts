@@ -251,7 +251,7 @@ export async function fetchTransferItems(): Promise<{
   if (typeof window !== 'undefined') {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch('/api/transfers', {
         headers: { 'Accept': 'application/json' },
@@ -269,7 +269,7 @@ export async function fetchTransferItems(): Promise<{
         }
       }
     } catch (backendErr) {
-      // Backend offline ou rodando em ambiente local sem rota
+      // Backend offline ou temporariamente inacessível
     }
   }
 
@@ -333,6 +333,8 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
         sap_doc_number: i.sapDocNumber || null,
         observacoes: i.observacoes || null,
         batch_id: i.batchId || null,
+        label_photo_url: i.labelPhotoUrl || null,
+        originator_client_id: i.originatorClientId || null,
       }));
 
       const { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
@@ -388,7 +390,7 @@ export const BROWSER_CLIENT_ID: string = typeof window !== 'undefined'
     })()
   : 'server_client';
 
-// Rastreamento local dos IDs criados/solicitados por ESTE computador (salvo em localStorage para compartilhar entre abas do mesmo PC)
+// Rastreamento local dos IDs criados/solicitados por ESTE computador
 const locallyRequestedIds = new Set<string>();
 
 if (typeof window !== 'undefined') {
@@ -419,10 +421,13 @@ export function isItemRequestedByMe(itemId: string): boolean {
   return locallyRequestedIds.has(itemId);
 }
 
+// Conjunto global para rastrear IDs conhecidos entre chamadas e reconexões
+const globalKnownItemIds = new Set<string>();
+
 /**
  * Assina atualizações em Tempo Real (In-time entre computadores via SSE + Worker Heartbeat + Polling)
  * Garante que assim que o Time Buiatte grava no Computador A:
- * - O Computador B recebe o evento instantaneamente (<10ms via SSE ou <1.5s via Worker).
+ * - O Computador B recebe o evento instantaneamente (<10ms via SSE ou <2.5s via Worker).
  * - O som suave de gota d'água toca no Computador B.
  * - O pop-up estilo Outlook e a notificação desktop aparecem no Computador B e somem em 5s.
  * - O Computador A (solicitante) NUNCA recebe o pop-up ou som de alerta de si mesmo.
@@ -431,8 +436,7 @@ export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
 ): () => void {
   const supabase = getSupabase();
-  let knownIds = new Set<string>();
-  let isFirstRun = true;
+  let isInitialSync = globalKnownItemIds.size === 0;
 
   // Processa uma lista de itens e detecta se há novas solicitações pendentes de OUTRO computador
   const processIncomingItems = (
@@ -442,9 +446,9 @@ export function subscribeToRealtimeTransfers(
   ) => {
     const newPending: TransferItem[] = [];
 
-    if (!isFirstRun && knownIds.size > 0) {
+    if (!isInitialSync && globalKnownItemIds.size > 0) {
       for (const item of currentList) {
-        if (!knownIds.has(item.id) && item.status === 'pendente') {
+        if (!globalKnownItemIds.has(item.id) && item.status === 'pendente') {
           // Se o item foi criado por ESTE mesmo computador, IGNORAR (não disparar alerta para o próprio solicitante)
           const isCreatedByMe =
             locallyRequestedIds.has(item.id) ||
@@ -461,8 +465,9 @@ export function subscribeToRealtimeTransfers(
       }
     }
 
-    isFirstRun = false;
-    knownIds = new Set(currentList.map((i) => i.id));
+    isInitialSync = false;
+    currentList.forEach((i) => globalKnownItemIds.add(i.id));
+
     onDataChange(
       currentList,
       source,
@@ -499,7 +504,7 @@ export function subscribeToRealtimeTransfers(
         }
       };
       eventSource.onerror = () => {
-        // Fallback contínuo via Polling e Worker caso a conexão SSE oscile
+        // EventSource reconecta automaticamente
       };
     } catch (e) {
       console.warn('SSE indisponível, utilizando Worker heartbeat');
@@ -507,8 +512,10 @@ export function subscribeToRealtimeTransfers(
   }
 
   // 2. Web Worker imune ao estrangulamento de abas em segundo plano do Chrome/Windows
-  // Garante que mesmo com SAP ou Excel aberto na frente, o timer roda a cada 1.5s
+  // Garante que mesmo com SAP ou Excel aberto na frente, a verificação roda a cada 2.5s
   let backgroundWorker: Worker | null = null;
+  let fallbackInterval: any = null;
+
   if (typeof window !== 'undefined' && typeof Worker !== 'undefined') {
     try {
       const workerBlob = new Blob([
@@ -516,7 +523,7 @@ export function subscribeToRealtimeTransfers(
         self.onmessage = function(e) {
           if (e.data === 'START') {
             if (timer) clearInterval(timer);
-            timer = setInterval(() => self.postMessage('TICK'), 1500);
+            timer = setInterval(() => self.postMessage('TICK'), 2500);
           } else if (e.data === 'STOP') {
             if (timer) clearInterval(timer);
             timer = null;
@@ -532,8 +539,10 @@ export function subscribeToRealtimeTransfers(
       };
       backgroundWorker.postMessage('START');
     } catch (e) {
-      // Worker fallback
+      fallbackInterval = setInterval(() => refreshLatest(false), 2500);
     }
+  } else if (typeof window !== 'undefined') {
+    fallbackInterval = setInterval(() => refreshLatest(false), 2500);
   }
 
   // 3. Canal Supabase Realtime (se ativo)
@@ -566,13 +575,10 @@ export function subscribeToRealtimeTransfers(
     } catch (e) {}
   }
 
-  // 5. Polling de alta frequência como salvaguarda
-  const pollTimer = setInterval(() => {
-    refreshLatest(false);
-  }, 1500);
-
   return () => {
-    clearInterval(pollTimer);
+    if (fallbackInterval) {
+      clearInterval(fallbackInterval);
+    }
     if (eventSource) {
       eventSource.close();
     }
