@@ -4,9 +4,11 @@ import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 
-const DATA_FILE = path.join(process.cwd(), 'transfers_data.json');
-const VAPID_FILE = path.join(process.cwd(), 'vapid_keys.json');
-const SUBS_FILE = path.join(process.cwd(), 'push_subscriptions.json');
+const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isVercel ? '/tmp' : process.cwd();
+const DATA_FILE = path.join(DATA_DIR, 'transfers_data.json');
+const VAPID_FILE = path.join(DATA_DIR, 'vapid_keys.json');
+const SUBS_FILE = path.join(DATA_DIR, 'push_subscriptions.json');
 
 // Carregar ou gerar chaves VAPID persistentes
 function loadVapidKeys(): { publicKey: string; privateKey: string } {
@@ -579,8 +581,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         if (supabase) {
           try {
             const payload = items.map((i: any) => ({
-              id: i.id,
-              solicitation_code: i.solicitationCode,
+              id: String(i.id),
+              solicitation_code: i.solicitationCode || null,
               material: i.material,
               serial: i.serial,
               centro: i.centro,
@@ -598,7 +600,26 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
               originator_client_id: i.originatorClientId || null,
             }));
 
-            await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+            let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+
+            if (error && (error.code === '42703' || error.message?.includes('column'))) {
+              console.warn('Backend: colunas estendidas ausentes no Supabase, tentando com campos base...');
+              const corePayload = items.map((i: any) => ({
+                id: String(i.id),
+                material: i.material,
+                serial: i.serial,
+                centro: i.centro,
+                deposito_origem: i.depositoOrigem,
+                deposito_destino: i.depositoDestino,
+                status: i.status,
+                criado_em: i.criadoEm,
+                criado_por: i.criadoPor,
+                atualizado_em: i.atualizadoEm || new Date().toISOString(),
+                sap_doc_number: i.sapDocNumber || null,
+                observacoes: i.observacoes || null,
+              }));
+              await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
+            }
           } catch (e) {
             console.warn('Erro ao atualizar Supabase no POST:', e);
           }

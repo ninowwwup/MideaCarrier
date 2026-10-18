@@ -41,6 +41,7 @@ interface HeaderProps {
   onTestPush: () => void;
   autoPurgedCount?: number;
   isCloudConnected: boolean;
+  onOpenDatabaseDiagnostic?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -63,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   onTestPush,
   autoPurgedCount = 0,
   isCloudConnected,
+  onOpenDatabaseDiagnostic,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -83,9 +85,6 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
                 <span className="text-[10px] font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#002664] text-white shadow-2xs">
                   SAP MIGO
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#C2DEEB]/50 text-[#002664] border border-[#249ED5]/30 hidden sm:inline-block">
-                  v2.0
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">
@@ -147,17 +146,24 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Tools & Indicators - Todos os Botões Apenas Ícones */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Status Indicativo Silencioso de Sincronização */}
-            <div
-              className={`p-2 rounded-xl text-xs font-bold border shadow-2xs select-none flex items-center justify-center ${
+            {/* Status Indicativo Silencioso / Diagnóstico Supabase & Nuvem */}
+            <button
+              type="button"
+              onClick={onOpenDatabaseDiagnostic}
+              className={`p-2 rounded-xl text-xs font-bold border shadow-2xs select-none flex items-center justify-center transition-all active:scale-95 hover:ring-2 hover:ring-[#249ED5]/50 ${
                 isCloudConnected
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                  : 'bg-blue-50 text-[#002664] border-[#249ED5]/40'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                  : 'bg-blue-50 text-[#002664] border-[#249ED5]/40 hover:bg-blue-100'
               }`}
-              title={isCloudConnected ? 'Conectado à nuvem Supabase em tempo real (In-time)' : 'Sincronização em tempo real ativa'}
+              title={
+                isCloudConnected
+                  ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Script SQL do Supabase)'
+                  : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico e Script SQL do Supabase)'
+              }
+              aria-label="Diagnóstico do Banco de Dados e Supabase"
             >
               <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
-            </div>
+            </button>
 
             {/* PWA Install Button (Apenas Ícone) */}
             <PWAInstallButton />
@@ -314,6 +320,20 @@ export const Header: React.FC<HeaderProps> = ({
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span>Exportar Base em Excel (CSV)</span>
             </button>
+
+            {onOpenDatabaseDiagnostic && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenDatabaseDiagnostic();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-[#002664] bg-blue-50 border border-blue-200 rounded-lg"
+              >
+                <Radio className="w-4 h-4 text-[#249ED5]" />
+                <span>Diagnóstico do Banco & Supabase</span>
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -232,12 +232,13 @@ export async function fetchTransferItems(): Promise<{
       if (!error && data && data.length > 0) {
         const mapped: TransferItem[] = data.map((d: any, index: number) => mapRowToTransferItem(d, index));
         const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
+        const resolved = applyPendingLocalUpdates(active);
         
         if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(active));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
         }
 
-        return { items: active, source: 'supabase', purgedCount, isConnected: true };
+        return { items: resolved, source: 'supabase', purgedCount, isConnected: true };
       } else if (!error && data && data.length === 0) {
         await saveTransferItems(INITIAL_SEED);
         return { items: INITIAL_SEED, source: 'supabase', isConnected: true };
@@ -264,8 +265,9 @@ export async function fetchTransferItems(): Promise<{
         if (json && Array.isArray(json.items) && json.items.length > 0) {
           const mapped: TransferItem[] = json.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
           const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(active));
-          return { items: active, source: 'backend', purgedCount, isConnected: true };
+          const resolved = applyPendingLocalUpdates(active);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+          return { items: resolved, source: 'backend', purgedCount, isConnected: true };
         }
       }
     } catch (backendErr) {
@@ -287,11 +289,13 @@ export async function fetchTransferItems(): Promise<{
           slaStatus: calculateSLA(item.criadoEm, item.status).slaStatus,
         }));
 
+        const resolved = applyPendingLocalUpdates(updated);
+
         if (purgedCount > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
         }
 
-        return { items: updated, source: 'local', purgedCount, isConnected: false };
+        return { items: resolved, source: 'local', purgedCount, isConnected: false };
       } catch (e) {
         console.error('Falha ao ler dados do localStorage:', e);
       }
@@ -300,6 +304,147 @@ export async function fetchTransferItems(): Promise<{
   }
 
   return { items: INITIAL_SEED, source: 'local', isConnected: false };
+}
+
+// Rastreamento de modificações locais recentes com período de carência de 15 segundos
+// Garante que o polling de 2.5s NUNCA reverta ou congele o status alterado pelo operador
+interface PendingLocalUpdate {
+  status: TransferStatus;
+  updatedAt: number;
+  item: Partial<TransferItem>;
+}
+
+const pendingLocalUpdates = new Map<string, PendingLocalUpdate>();
+
+export function registerLocalPendingUpdate(item: TransferItem) {
+  pendingLocalUpdates.set(item.id, {
+    status: item.status,
+    updatedAt: Date.now(),
+    item: {
+      status: item.status,
+      atualizadoEm: item.atualizadoEm,
+      atualizadoPor: item.atualizadoPor,
+      sapDocNumber: item.sapDocNumber,
+      observacoes: item.observacoes,
+    },
+  });
+}
+
+function applyPendingLocalUpdates(items: TransferItem[]): TransferItem[] {
+  const now = Date.now();
+  return items.map((item) => {
+    if (pendingLocalUpdates.has(item.id)) {
+      const local = pendingLocalUpdates.get(item.id)!;
+      const remoteTime = new Date(item.atualizadoEm || 0).getTime();
+      // Se a resposta remota já refletir nossa atualização ou data mais recente, confirmar e limpar
+      if (item.status === local.status || remoteTime >= local.updatedAt) {
+        pendingLocalUpdates.delete(item.id);
+      } else if (now - local.updatedAt < 15000) {
+        // Preserva o status otimista local para que a tela NUNCA reverta
+        return {
+          ...item,
+          ...local.item,
+        };
+      } else {
+        pendingLocalUpdates.delete(item.id);
+      }
+    }
+    return item;
+  });
+}
+
+/**
+ * Atualizar status e dados de itens específicos de forma cirúrgica e resiliente
+ * (Comando direto de UPDATE no banco de dados e Supabase)
+ */
+export async function updateSpecificTransferItems(
+  affectedItems: TransferItem[],
+  allUpdatedItems?: TransferItem[]
+): Promise<boolean> {
+  // 1. Registra no lock otimista local de imediato
+  affectedItems.forEach((item) => registerLocalPendingUpdate(item));
+
+  // 2. Salva no cache local de imediato
+  if (allUpdatedItems && typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allUpdatedItems));
+  }
+
+  let anySuccess = false;
+  const supabase = getSupabase();
+
+  // 3. Atualização direta no Supabase
+  if (supabase) {
+    for (const item of affectedItems) {
+      try {
+        const fullUpdate: any = {
+          status: item.status,
+          atualizado_em: item.atualizadoEm || new Date().toISOString(),
+          atualizado_por: item.atualizadoPor || null,
+          sap_doc_number: item.sapDocNumber || null,
+          observacoes: item.observacoes || null,
+        };
+        if (item.labelPhotoUrl) fullUpdate.label_photo_url = item.labelPhotoUrl;
+        if (item.batchId) fullUpdate.batch_id = item.batchId;
+        if (item.originatorClientId) fullUpdate.originator_client_id = item.originatorClientId;
+
+        let { error } = await supabase
+          .from('transfer_requests')
+          .update(fullUpdate)
+          .eq('id', item.id);
+
+        // Se falhar por coluna ausente no Supabase (ex: código 42703), tenta com campos base
+        if (error && (error.code === '42703' || error.message?.includes('column'))) {
+          console.warn(`Supabase: coluna ausente ao atualizar ${item.id}, aplicando campos essenciais...`);
+          const coreUpdate = {
+            status: item.status,
+            atualizado_em: item.atualizadoEm || new Date().toISOString(),
+            sap_doc_number: item.sapDocNumber || null,
+            observacoes: item.observacoes || null,
+          };
+          const retry = await supabase
+            .from('transfer_requests')
+            .update(coreUpdate)
+            .eq('id', item.id);
+          error = retry.error;
+        }
+
+        if (!error) {
+          anySuccess = true;
+        } else {
+          console.error(`Aviso: Supabase update error no item ${item.id}:`, error.message);
+        }
+      } catch (err) {
+        console.warn(`Exceção ao atualizar item ${item.id} no Supabase:`, err);
+      }
+    }
+  }
+
+  // 4. Gravar no Backend Vercel /api/transfers
+  if (allUpdatedItems && typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: allUpdatedItems, clientId: BROWSER_CLIENT_ID }),
+      });
+      if (res.ok) {
+        anySuccess = true;
+      }
+    } catch (e) {
+      // Backend offline
+    }
+
+    // 5. Notificar abas no mesmo computador instantaneamente
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({ type: 'STATUS_UPDATED', items: affectedItems, timestamp: Date.now() });
+        bc.close();
+      }
+    } catch (e) {}
+  }
+
+  return anySuccess;
 }
 
 /**
@@ -318,8 +463,8 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
   if (supabase) {
     try {
       const payload = items.map((i) => ({
-        id: i.id,
-        solicitation_code: i.solicitationCode,
+        id: String(i.id),
+        solicitation_code: i.solicitationCode || null,
         material: i.material,
         serial: i.serial,
         centro: i.centro,
@@ -337,9 +482,33 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
         originator_client_id: i.originatorClientId || null,
       }));
 
-      const { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+      let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+
+      // Se falhar por colunas ausentes no schema existente do Supabase (código 42703)
+      if (error && (error.code === '42703' || error.message?.includes('column'))) {
+        console.warn('Supabase: detectada ausência de colunas opcionais. Executando upsert resiliente com campos base...');
+        const corePayload = items.map((i) => ({
+          id: String(i.id),
+          material: i.material,
+          serial: i.serial,
+          centro: i.centro,
+          deposito_origem: i.depositoOrigem,
+          deposito_destino: i.depositoDestino,
+          status: i.status,
+          criado_em: i.criadoEm,
+          criado_por: i.criadoPor,
+          atualizado_em: i.atualizadoEm,
+          sap_doc_number: i.sapDocNumber || null,
+          observacoes: i.observacoes || null,
+        }));
+        const retryRes = await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
+        error = retryRes.error;
+      }
+
       if (!error) {
         savedSuccessfully = true;
+      } else {
+        console.error('Aviso: Supabase upsert error:', error.message);
       }
     } catch (err) {
       console.warn('Falha na requisição para o Supabase:', err);
@@ -440,10 +609,11 @@ export function subscribeToRealtimeTransfers(
 
   // Processa uma lista de itens e detecta se há novas solicitações pendentes de OUTRO computador
   const processIncomingItems = (
-    currentList: TransferItem[],
+    rawList: TransferItem[],
     source: 'realtime' | 'polling',
     originatorClientId?: string
   ) => {
+    const currentList = applyPendingLocalUpdates(rawList);
     const newPending: TransferItem[] = [];
 
     if (!isInitialSync && globalKnownItemIds.size > 0) {

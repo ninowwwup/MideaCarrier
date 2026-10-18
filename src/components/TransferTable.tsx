@@ -32,6 +32,7 @@ interface TransferTableProps {
   onOpenSAPModal: (items: TransferItem[]) => void;
   onOpenResolutionModal: (items: TransferItem[], mode: 'concluir' | 'divergencia') => void;
   onUpdateStatusSingle: (id: string, newStatus: TransferStatus) => void;
+  onBatchUpdateStatus?: (ids: string[], newStatus: TransferStatus) => void;
   onAttachLabelPhoto?: (itemId: string, photoUrl: string) => void;
 }
 
@@ -72,6 +73,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   onOpenSAPModal,
   onOpenResolutionModal,
   onUpdateStatusSingle,
+  onBatchUpdateStatus,
   onAttachLabelPhoto,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -440,15 +442,27 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                   type="button"
                   onClick={() => onOpenResolutionModal(selectedItemsList, 'concluir')}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  title="Concluir itens selecionados no SAP"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Concluir</span>
+                  <span>Concluir ({selectedItemsList.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onBatchUpdateStatus?.(selectedItemsList.map(i => i.id), 'em_analise')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  title="Alterar status dos itens selecionados para Em Análise"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Em Análise</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => onOpenResolutionModal(selectedItemsList, 'divergencia')}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  title="Registrar divergência nos itens selecionados"
                 >
                   <AlertOctagon className="w-3.5 h-3.5" />
                   <span>Divergência</span>
@@ -505,32 +519,34 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </span>
                     </div>
 
-                    {/* Status Badge */}
+                    {/* Status Badge Interativo Mobile */}
                     <div>
-                      {item.status === 'pendente' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          <span>Pendente</span>
-                        </span>
-                      )}
-                      {item.status === 'em_analise' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-[#00609C] border border-blue-200">
-                          <RefreshCw className="w-3 h-3 animate-spin-slow" />
-                          <span>Em Validação</span>
-                        </span>
-                      )}
-                      {item.status === 'concluido' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Concluído</span>
-                        </span>
-                      )}
-                      {item.status === 'divergencia' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                          <AlertOctagon className="w-3 h-3 text-rose-600" />
-                          <span>Divergência</span>
-                        </span>
-                      )}
+                      <select
+                        value={item.status}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as TransferStatus;
+                          if (newStatus === 'concluido' || newStatus === 'divergencia') {
+                            onOpenResolutionModal([item], newStatus);
+                          } else {
+                            onUpdateStatusSingle(item.id, newStatus);
+                          }
+                        }}
+                        className={`text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer transition-all outline-hidden appearance-none ${
+                          item.status === 'pendente'
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : item.status === 'em_analise'
+                            ? 'bg-blue-100 text-[#00609C] border-blue-300'
+                            : item.status === 'concluido'
+                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                            : 'bg-rose-100 text-rose-900 border-rose-300'
+                        }`}
+                        title="Tocar para alterar status"
+                      >
+                        <option value="pendente">⏳ Pendente</option>
+                        <option value="em_analise">🔄 Em Análise</option>
+                        <option value="concluido">✓ Concluído</option>
+                        <option value="divergencia">⚠ Divergência</option>
+                      </select>
                     </div>
                   </div>
 
@@ -952,32 +968,34 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </div>
                       </td>
 
-                      {/* 7. Status Badge */}
+                      {/* 7. Status Badge com Troca Rápida */}
                       <td className="py-2 px-2">
-                        {item.status === 'pendente' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                            <Clock className="w-2.5 h-2.5 text-amber-600" />
-                            <span>Pendente</span>
-                          </span>
-                        )}
-                        {item.status === 'em_analise' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-[#00609C] border border-blue-200">
-                            <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" />
-                            <span>Em Análise</span>
-                          </span>
-                        )}
-                        {item.status === 'concluido' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                            <span>Concluído</span>
-                          </span>
-                        )}
-                        {item.status === 'divergencia' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
-                            <AlertOctagon className="w-2.5 h-2.5 text-rose-600" />
-                            <span>Divergência</span>
-                          </span>
-                        )}
+                        <select
+                          value={item.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value as TransferStatus;
+                            if (newStatus === 'concluido' || newStatus === 'divergencia') {
+                              onOpenResolutionModal([item], newStatus);
+                            } else {
+                              onUpdateStatusSingle(item.id, newStatus);
+                            }
+                          }}
+                          className={`text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer transition-all outline-hidden appearance-none ${
+                            item.status === 'pendente'
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                              : item.status === 'em_analise'
+                              ? 'bg-blue-100 text-[#00609C] border-blue-300 hover:bg-blue-200'
+                              : item.status === 'concluido'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
+                              : 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200'
+                          }`}
+                          title="Clique para alterar status imediatamente"
+                        >
+                          <option value="pendente">⏳ Pendente</option>
+                          <option value="em_analise">🔄 Em Análise</option>
+                          <option value="concluido">✓ Concluído</option>
+                          <option value="divergencia">⚠ Divergência</option>
+                        </select>
                       </td>
 
                       {/* 8. Foto Label (Novo!) */}
@@ -1116,15 +1134,27 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             </button>
                           )}
 
-                          {/* Mudar status para Em Validação */}
+                          {/* Mudar status para Em Análise */}
                           {item.status === 'pendente' && (
                             <button
                               type="button"
                               onClick={() => onUpdateStatusSingle(item.id, 'em_analise')}
                               className="p-1 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-all active:scale-90"
-                              title="Mudar status para Em Validação"
+                              title="Mudar status para Em Análise"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* Reabrir para Pendente se estiver em análise, concluído ou divergência */}
+                          {item.status !== 'pendente' && (
+                            <button
+                              type="button"
+                              onClick={() => onUpdateStatusSingle(item.id, 'pendente')}
+                              className="p-1 rounded text-slate-400 hover:text-amber-700 hover:bg-amber-50 transition-all active:scale-90"
+                              title="Reabrir item (Voltar para Pendente)"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
