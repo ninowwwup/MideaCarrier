@@ -9,18 +9,21 @@ function apiTransfersPlugin(): Plugin {
   return {
     name: 'api-transfers-plugin',
     configureServer(server) {
-      server.middlewares.use('/api/events', (req, res) => {
-        try {
-          registerSSEClient(req as any, res as any);
-        } catch (err) {
-          console.error('Erro na rota /api/events:', err);
+      server.middlewares.use('/api', async (req, res, next) => {
+        const url = req.url || '';
+        if (url === '/events' || url.startsWith('/events') || (req as any).originalUrl?.includes('/api/events')) {
+          try {
+            registerSSEClient(req as any, res as any);
+          } catch (err) {
+            console.error('Erro na rota /api/events:', err);
+          }
+          return;
         }
-      });
-      server.middlewares.use('/api/transfers', async (req, res, next) => {
+
         try {
           await handler(req as any, res as any);
         } catch (err) {
-          console.error('Erro na rota /api/transfers:', err);
+          console.error('Erro na rota /api:', err);
           if (!res.headersSent) {
             res.statusCode = 500;
             res.end(JSON.stringify({ error: String(err) }));

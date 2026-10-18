@@ -50,6 +50,13 @@ import {
   requestNotificationPermission, 
   sendDesktopNotification 
 } from './utils/audioAlert';
+import { 
+  subscribeToPushNotifications,
+  getExistingPushSubscription,
+  triggerPushTest,
+  setupServiceWorkerMessageListener,
+  isPushSupported
+} from './services/pushNotification';
 import { getSupabaseConfig } from './services/supabaseClient';
 
 const BASE_PAGE_TITLE = 'MIGOU - Gestão de Transferências SAP';
@@ -59,6 +66,7 @@ export default function App() {
   const [currentRole, setCurrentRole] = useState<TeamRole>('ambos');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
+  const [isPushSubscribed, setIsPushSubscribed] = useState<boolean>(false);
 
   // Sistema de Alerta estilo Outlook (Canto Inferior Esquerdo)
   const [activeAlert, setActiveAlert] = useState<AlertNotification | null>(null);
@@ -103,25 +111,71 @@ export default function App() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
 
+  // Função central para disparar o Alerta estilo Outlook
+  const triggerMideaAlert = useCallback((
+    newItems: TransferItem[],
+    solicitante: string,
+    resumoMaterial: string,
+    centro: string,
+    depOrigem: string,
+    depDestino: string
+  ) => {
+    const alertData: AlertNotification = {
+      id: `alert-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      items: newItems,
+      solicitante,
+      resumoMaterial,
+      centro,
+      depOrigem,
+      depDestino,
+      totalSeriais: newItems.length,
+    };
+
+    if (isSoundEnabled) {
+      playAlertChime();
+    }
+
+    sendDesktopNotification(
+      `MIGOU: Nova Solicitação SAP (${centro})`,
+      `${solicitante} solicitou transferência de ${resumoMaterial} (${depOrigem} ➔ ${depDestino}) com ${newItems.length} seriais`
+    );
+
+    setActiveAlert(alertData);
+    setAlertHistory((prev) => [alertData, ...prev]);
+  }, [isSoundEnabled]);
+
+  const handleEnablePushManager = async () => {
+    await unlockAudioNow();
+    const res = await subscribeToPushNotifications();
+    if (res.success) {
+      setIsPushSubscribed(true);
+      setDesktopNotifPermission('granted');
+      showSuccessNotice(
+        'Push Manager Ativado!',
+        'Notificações e som de gota d’água ativos mesmo com o navegador em segundo plano ou fechado.'
+      );
+    } else {
+      showSuccessNotice('Status do Push', res.error || 'Não foi possível ativar Push no navegador.');
+    }
+  };
+
+  const handleTestPush = async () => {
+    await unlockAudioNow();
+    const res = await triggerPushTest();
+    showSuccessNotice('Disparo de Push', res.message);
+  };
+
   const handleRequestDesktopPermission = async () => {
     await unlockAudioNow();
-    const res = await requestNotificationPermission();
-    if (res) {
-      setDesktopNotifPermission(res);
-      if (res === 'granted') {
-        sendDesktopNotification(
-          'MIGOU: Alertas Ativados com Sucesso!',
-          'Pop-up estilo Outlook (5s) e som suave de gota d’água ativos mesmo em segundo plano.'
-        );
-      }
-    }
+    await handleEnablePushManager();
   };
 
   const handleTestAlertSound = async () => {
     await unlockAudioNow();
     if (desktopNotifPermission === 'granted') {
       sendDesktopNotification(
-        'MIGOU: Teste de Notificação Outlook',
+        'MIGOU: Teste de Notificação Outlook (5s)',
         'Som suave de gota d’água e pop-up de 5 segundos funcionando perfeitamente!'
       );
     }
@@ -131,7 +185,32 @@ export default function App() {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setDesktopNotifPermission(Notification.permission);
     }
-  }, []);
+
+    getExistingPushSubscription().then((sub) => {
+      if (sub) {
+        setIsPushSubscribed(true);
+        setDesktopNotifPermission('granted');
+      }
+    });
+
+    // Escuta eventos vindos do Service Worker quando um Push é recebido
+    const unsubscribeSW = setupServiceWorkerMessageListener((payload) => {
+      if (payload && payload.items && payload.items.length > 0) {
+        const first = payload.items[0];
+        const materiaisUnicos = Array.from(new Set(payload.items.map((i: any) => i.material))).join(', ');
+        triggerMideaAlert(
+          payload.items,
+          first.criadoPor || 'Time Buiatte (Sênior WMS)',
+          materiaisUnicos,
+          first.centro,
+          first.depositoOrigem,
+          first.depositoDestino
+        );
+      }
+    });
+
+    return () => unsubscribeSW();
+  }, [triggerMideaAlert]);
 
   // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
   useEffect(() => {
@@ -197,40 +276,6 @@ export default function App() {
       if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
     };
   }, [activeAlert]);
-
-  // Função central para disparar o Alerta estilo Outlook
-  const triggerMideaAlert = useCallback((
-    newItems: TransferItem[],
-    solicitante: string,
-    resumoMaterial: string,
-    centro: string,
-    depOrigem: string,
-    depDestino: string
-  ) => {
-    const alertData: AlertNotification = {
-      id: `alert-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      items: newItems,
-      solicitante,
-      resumoMaterial,
-      centro,
-      depOrigem,
-      depDestino,
-      totalSeriais: newItems.length,
-    };
-
-    if (isSoundEnabled) {
-      playAlertChime();
-    }
-
-    sendDesktopNotification(
-      `MIGOU: Nova Solicitação SAP (${centro})`,
-      `${solicitante} solicitou transferência de ${resumoMaterial} (${depOrigem} ➔ ${depDestino}) com ${newItems.length} seriais`
-    );
-
-    setActiveAlert(alertData);
-    setAlertHistory((prev) => [alertData, ...prev]);
-  }, [isSoundEnabled]);
 
   // Carregar dados e Iniciar Sincronização em Tempo Real (In-time entre computadores)
   const loadData = useCallback(async () => {
@@ -452,25 +497,28 @@ export default function App() {
         onTestAlertSound={handleTestAlertSound}
         desktopNotifPermission={desktopNotifPermission}
         onRequestDesktopPermission={handleRequestDesktopPermission}
+        isPushSubscribed={isPushSubscribed}
+        onEnablePushManager={handleEnablePushManager}
+        onTestPush={handleTestPush}
         autoPurgedCount={autoPurgedCount}
         isCloudConnected={isCloudConnected}
       />
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-10">
-        {/* Banner de Ativação de Notificações em 2º Plano / Windows caso permissão ainda não tenha sido dada */}
-        {desktopNotifPermission !== 'granted' && (
-          <div className="mb-4 p-3.5 bg-gradient-to-r from-amber-500/90 via-amber-600/90 to-amber-700/90 text-white backdrop-blur-xl rounded-2xl border border-amber-300/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
+        {/* Banner de Ativação do Push Manager / Service Worker para segundo plano */}
+        {!isPushSubscribed && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-[#002664]/95 via-[#0E2A54]/95 to-[#002363]/95 text-white backdrop-blur-xl rounded-2xl border border-[#249ED5]/40 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
             <div className="flex items-center gap-3">
-              <span className="p-2 rounded-xl bg-white/20 text-white shrink-0 shadow-inner">
-                <Bell className="w-5 h-5 animate-bounce" />
+              <span className="p-2.5 rounded-xl bg-[#249ED5]/20 text-[#C2DEEB] shrink-0 shadow-inner">
+                <Bell className="w-5 h-5 text-[#249ED5] animate-bounce" />
               </span>
               <div>
                 <strong className="text-sm font-extrabold tracking-wide text-white block">
-                  🔔 Ativação Obrigatória: Pop-up e Som em Segundo Plano
+                  🔔 Ativação Obrigatória: Service Worker com Push Manager
                 </strong>
-                <p className="text-amber-100 text-xs mt-0.5 leading-snug">
-                  Para que o chamado do Time Buiatte toque o som de gota d’água e exiba o pop-up de 5s enquanto você usa o SAP GUI ou Excel, clique em ativar abaixo.
+                <p className="text-[#C2DEEB] text-xs mt-0.5 leading-snug">
+                  Garante que o pop-up de 5 segundos e o som suave de gota d’água apareçam mesmo se você estiver com o SAP GUI ou Excel aberto, ou com o MIGOU fechado em segundo plano.
                 </p>
               </div>
             </div>
@@ -478,16 +526,16 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleTestAlertSound}
-                className="px-3 py-2 rounded-xl text-xs font-bold text-amber-950 bg-white/90 hover:bg-white shrink-0 shadow-md transition-all active:scale-95"
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white/90 hover:bg-white shrink-0 shadow-md transition-all active:scale-95"
               >
                 Testar Gota d'Água
               </button>
               <button
                 type="button"
-                onClick={handleRequestDesktopPermission}
-                className="px-4 py-2 rounded-xl text-xs font-extrabold text-[#002664] bg-white hover:bg-amber-50 shrink-0 shadow-lg transition-all active:scale-95 ring-2 ring-white/80"
+                onClick={handleEnablePushManager}
+                className="px-4 py-2 rounded-xl text-xs font-extrabold text-[#002664] bg-gradient-to-r from-[#C2DEEB] to-white hover:brightness-105 shrink-0 shadow-lg transition-all active:scale-95 ring-2 ring-white/80"
               >
-                Ativar Pop-up no Windows
+                Ativar Push Manager
               </button>
             </div>
           </div>
@@ -570,6 +618,26 @@ export default function App() {
           onClose={() => setResolutionData(null)}
           onSubmit={handleResolutionSubmit}
         />
+      )}
+
+      {/* Notificação Toast de Sucesso/Feedback do Sistema */}
+      {successNotice && (
+        <div className="fixed top-20 right-6 z-50 bg-[#002664] text-white px-4 py-3 rounded-2xl shadow-2xl border border-[#249ED5]/50 flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-200 max-w-md">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <Check className="w-5 h-5" />
+          </div>
+          <div className="flex-1 text-xs">
+            <div className="font-bold text-white text-[13px]">{successNotice.title}</div>
+            <div className="text-white/80 mt-0.5">{successNotice.message}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessNotice(null)}
+            className="text-white/60 hover:text-white p-1 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </div>
   );

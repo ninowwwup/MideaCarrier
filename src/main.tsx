@@ -2,11 +2,11 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Registro do Service Worker para suporte a PWA e operação offline
-if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'development') {
+// Registro automático do Service Worker para suporte a PWA e Push Manager
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('Falha ao registrar Service Worker do PWA:', err);
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
+      console.warn('Falha ao registrar Service Worker do MIGOU:', err);
     });
   });
 }

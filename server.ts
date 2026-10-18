@@ -21,12 +21,12 @@ app.get('/api/events', (req, res) => {
   }
 });
 
-// Rota de API /api/transfers compatível com Vercel
-app.all('/api/transfers', async (req, res) => {
+// Rotas de API (/api/transfers, /api/push-subscribe, /api/push-vapid-key, /api/push-test, etc.)
+app.all('/api/*', async (req, res) => {
   try {
     await handler(req as any, res as any);
   } catch (err) {
-    console.error('Erro na rota /api/transfers:', err);
+    console.error('Erro na rota /api:', err);
     if (!res.headersSent) {
       res.status(500).json({ error: String(err) });
     }

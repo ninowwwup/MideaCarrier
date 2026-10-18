@@ -15,7 +15,8 @@ import {
   Radio,
   CalendarCheck2,
   Droplets,
-  Bell
+  Bell,
+  ShieldCheck
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -35,6 +36,9 @@ interface HeaderProps {
   onTestAlertSound: () => void;
   desktopNotifPermission: string;
   onRequestDesktopPermission: () => void;
+  isPushSubscribed: boolean;
+  onEnablePushManager: () => void;
+  onTestPush: () => void;
   autoPurgedCount?: number;
   isCloudConnected: boolean;
 }
@@ -54,6 +58,9 @@ export const Header: React.FC<HeaderProps> = ({
   onTestAlertSound,
   desktopNotifPermission,
   onRequestDesktopPermission,
+  isPushSubscribed,
+  onEnablePushManager,
+  onTestPush,
   autoPurgedCount = 0,
   isCloudConnected,
 }) => {
@@ -181,16 +188,27 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Ativação Rápida de Notificações em Segundo Plano (se ainda não concedido) */}
-            {desktopNotifPermission !== 'granted' && (
+            {/* Controle do Push Manager (Service Worker) */}
+            {isPushSubscribed ? (
               <button
                 type="button"
-                onClick={onRequestDesktopPermission}
+                onClick={onTestPush}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition-all active:scale-95 shadow-2xs"
+                title="Push Manager Ativo! Clique para testar push notification com app fechado"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden xl:inline text-[11px]">Push Ativo</span>
+                <span className="text-[10px] bg-emerald-200/80 px-1.5 py-0.5 rounded text-emerald-900 font-extrabold">Testar Push</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onEnablePushManager}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md transition-all active:scale-95 animate-pulse"
-                title="Ativar pop-ups no Windows mesmo com SAP ou Excel aberto"
+                title="Ativar Service Worker Push Manager para receber notificações com app fechado ou em segundo plano"
               >
                 <Bell className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-[11px]">Ativar Pop-up em 2º Plano</span>
+                <span className="hidden sm:inline text-[11px]">Ativar Push Manager</span>
               </button>
             )}
 
