@@ -21,6 +21,7 @@ export interface TransferItem {
   slaStatus: 'no_prazo' | 'atencao' | 'estourado';
   batchId?: string; // ID do lote caso tenha sido submetido em lote
   labelPhotoUrl?: string; // Comprovação de foto da label/etiqueta do produto
+  originatorClientId?: string; // Identificador único do dispositivo que criou a solicitação
 }
 
 export interface NewTransferInput {
@@ -32,6 +33,7 @@ export interface NewTransferInput {
   observacoes?: string;
   solicitante?: string;
   labelPhotoUrl?: string;
+  originatorClientId?: string;
 }
 
 export interface FilterOptions {

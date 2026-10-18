@@ -46,6 +46,7 @@ import {
 } from './utils/sapFormatter';
 import { 
   playAlertChime, 
+  unlockAudioNow,
   requestNotificationPermission, 
   sendDesktopNotification 
 } from './utils/audioAlert';
@@ -103,16 +104,33 @@ export default function App() {
   );
 
   const handleRequestDesktopPermission = async () => {
+    await unlockAudioNow();
     const res = await requestNotificationPermission();
     if (res) {
       setDesktopNotifPermission(res);
+      if (res === 'granted') {
+        sendDesktopNotification(
+          'MIGOU: Alertas Ativados com Sucesso!',
+          'Pop-up estilo Outlook (5s) e som suave de gota d’água ativos mesmo em segundo plano.'
+        );
+      }
+    }
+  };
+
+  const handleTestAlertSound = async () => {
+    await unlockAudioNow();
+    if (desktopNotifPermission === 'granted') {
+      sendDesktopNotification(
+        'MIGOU: Teste de Notificação Outlook',
+        'Som suave de gota d’água e pop-up de 5 segundos funcionando perfeitamente!'
+      );
     }
   };
 
   useEffect(() => {
-    requestNotificationPermission().then((perm) => {
-      if (perm) setDesktopNotifPermission(perm);
-    });
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setDesktopNotifPermission(Notification.permission);
+    }
   }, []);
 
   // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
@@ -431,6 +449,9 @@ export default function App() {
         onOpenLatestAlert={handleOpenLatestAlert}
         isSoundEnabled={isSoundEnabled}
         onToggleSound={() => setIsSoundEnabled((prev) => !prev)}
+        onTestAlertSound={handleTestAlertSound}
+        desktopNotifPermission={desktopNotifPermission}
+        onRequestDesktopPermission={handleRequestDesktopPermission}
         autoPurgedCount={autoPurgedCount}
         isCloudConnected={isCloudConnected}
       />
@@ -438,26 +459,37 @@ export default function App() {
       {/* Conteúdo Principal com Camadas Frosted Glass */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-10">
         {/* Banner de Ativação de Notificações em 2º Plano / Windows caso permissão ainda não tenha sido dada */}
-        {desktopNotifPermission === 'default' && (
-          <div className="mb-4 p-3 bg-white/85 backdrop-blur-xl rounded-2xl border border-white/60 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-700 animate-in fade-in duration-200">
-            <div className="flex items-center gap-2.5">
-              <span className="p-1.5 rounded-xl bg-blue-100 text-[#002664]">
-                <Bell className="w-4 h-4 text-[#249ED5]" />
+        {desktopNotifPermission !== 'granted' && (
+          <div className="mb-4 p-3.5 bg-gradient-to-r from-amber-500/90 via-amber-600/90 to-amber-700/90 text-white backdrop-blur-xl rounded-2xl border border-amber-300/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <span className="p-2 rounded-xl bg-white/20 text-white shrink-0 shadow-inner">
+                <Bell className="w-5 h-5 animate-bounce" />
               </span>
               <div>
-                <strong className="text-slate-900">Alertas na tela em Segundo Plano:</strong>
-                <p className="text-slate-600 text-[11px]">
-                  Permita notificações nativas para que o pop-up apareça mesmo se você estiver com o SAP aberto ou em outra tarefa.
+                <strong className="text-sm font-extrabold tracking-wide text-white block">
+                  🔔 Ativação Obrigatória: Pop-up e Som em Segundo Plano
+                </strong>
+                <p className="text-amber-100 text-xs mt-0.5 leading-snug">
+                  Para que o chamado do Time Buiatte toque o som de gota d’água e exiba o pop-up de 5s enquanto você usa o SAP GUI ou Excel, clique em ativar abaixo.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleRequestDesktopPermission}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] shrink-0 shadow-md transition-all active:scale-95"
-            >
-              Ativar Alertas em 2º Plano
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleTestAlertSound}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-amber-950 bg-white/90 hover:bg-white shrink-0 shadow-md transition-all active:scale-95"
+              >
+                Testar Gota d'Água
+              </button>
+              <button
+                type="button"
+                onClick={handleRequestDesktopPermission}
+                className="px-4 py-2 rounded-xl text-xs font-extrabold text-[#002664] bg-white hover:bg-amber-50 shrink-0 shadow-lg transition-all active:scale-95 ring-2 ring-white/80"
+              >
+                Ativar Pop-up no Windows
+              </button>
+            </div>
           </div>
         )}
 

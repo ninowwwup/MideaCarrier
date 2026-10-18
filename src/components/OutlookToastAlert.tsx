@@ -40,30 +40,27 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [progress, setProgress] = useState(100);
 
-  // Auto-dispensar após 5 segundos se o usuário não passar o mouse por cima (requisito do usuário)
+  // Auto-dispensar estritamente após 5 segundos (requisito do usuário: sumir em 5 segundos estilo Outlook)
   useEffect(() => {
     if (!alert) return;
     setProgress(100);
 
-    const duration = 5000; // 5 segundos
-    const interval = 50;
-    const step = (interval / duration) * 100;
+    const duration = 5000; // 5 segundos exatos
+    const startTime = Date.now();
 
     const timer = setInterval(() => {
-      if (!isHovered) {
-        setProgress((prev) => {
-          if (prev <= step) {
-            clearInterval(timer);
-            onClose();
-            return 0;
-          }
-          return prev - step;
-        });
+      const elapsed = Date.now() - startTime;
+      const remainingPct = Math.max(0, 100 - (elapsed / duration) * 100);
+      setProgress(remainingPct);
+
+      if (elapsed >= duration) {
+        clearInterval(timer);
+        onClose();
       }
-    }, interval);
+    }, 40);
 
     return () => clearInterval(timer);
-  }, [alert, isHovered, onClose]);
+  }, [alert, onClose]);
 
   if (!alert) return null;
 

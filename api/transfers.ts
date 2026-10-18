@@ -1,8 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import fs from 'fs';
+import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 
-// Memória compartilhada em processo para Vercel Serverless / Node.js
-let memoryStore: any[] = [
+const DATA_FILE = path.join(process.cwd(), 'transfers_data.json');
+
+// Dados iniciais padrão para demonstração operacional
+const DEFAULT_SEED = [
   {
     id: 'seed-1',
     solicitationCode: 'SOL-2401',
@@ -19,6 +23,7 @@ let memoryStore: any[] = [
     slaStatus: 'no_prazo',
     batchId: 'BATCH-001',
     observacoes: 'Urgente para expedição da tarde',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-2',
@@ -35,6 +40,7 @@ let memoryStore: any[] = [
     prioridadeFifo: 2,
     slaStatus: 'no_prazo',
     batchId: 'BATCH-001',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-3',
@@ -53,6 +59,7 @@ let memoryStore: any[] = [
     slaStatus: 'atencao',
     batchId: 'BATCH-002',
     observacoes: 'Validando saldo físico x contábil no SAP MMBE',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-4',
@@ -72,6 +79,7 @@ let memoryStore: any[] = [
     slaStatus: 'no_prazo',
     batchId: 'BATCH-003',
     observacoes: 'Movimentação 311 efetuada no SAP. Liberado no WMS.',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-5',
@@ -90,6 +98,7 @@ let memoryStore: any[] = [
     slaStatus: 'estourado',
     batchId: 'BATCH-004',
     observacoes: 'Divergência: Serial não encontrado em estoque no depósito B110 do Centro B123.',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-6',
@@ -106,6 +115,7 @@ let memoryStore: any[] = [
     prioridadeFifo: 6,
     slaStatus: 'no_prazo',
     batchId: 'BATCH-005',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-7',
@@ -122,6 +132,7 @@ let memoryStore: any[] = [
     prioridadeFifo: 7,
     slaStatus: 'no_prazo',
     batchId: 'BATCH-006',
+    originatorClientId: 'initial_seed',
   },
   {
     id: 'seed-8',
@@ -138,10 +149,78 @@ let memoryStore: any[] = [
     prioridadeFifo: 8,
     slaStatus: 'no_prazo',
     batchId: 'BATCH-006',
+    originatorClientId: 'initial_seed',
   },
 ];
 
+// Carregar memória persistida do disco ou usar seed
+function loadPersistentStore(): any[] {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const content = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length >= 3) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar transfers_data.json:', e);
+  }
+  return DEFAULT_SEED;
+}
+
+function savePersistentStore(items: any[]) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(items, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Erro ao salvar transfers_data.json:', e);
+  }
+}
+
+let memoryStore: any[] = loadPersistentStore();
 let lastModified = Date.now();
+
+// Conjunto de clientes Server-Sent Events (SSE) conectados em tempo real
+const sseClients = new Set<ServerResponse>();
+
+export function registerSSEClient(req: IncomingMessage, res: ServerResponse) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  // Envia confirmação de conexão imediata
+  res.write(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now(), itemsCount: memoryStore.length })}\n\n`);
+  sseClients.add(res);
+
+  // Heartbeat a cada 15 segundos para manter o socket aberto através de proxies
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: ping ${Date.now()}\n\n`);
+    } catch (e) {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+  });
+}
+
+export function broadcastSSE(data: any) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(payload);
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}
 
 function getSupabaseServerClient() {
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -156,7 +235,7 @@ function getSupabaseServerClient() {
 }
 
 export default async function handler(req: IncomingMessage & { body?: any }, res: ServerResponse) {
-  // CORS Headers
+  // CORS Headers para permitir requisições de outros dispositivos e portas
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -167,9 +246,15 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
+  // Rota SSE para sincronização instantânea (<10ms) entre computadores
+  if (req.url && req.url.includes('/api/events')) {
+    registerSSEClient(req, res);
+    return;
+  }
+
   const supabase = getSupabaseServerClient();
 
-  // GET: Obter itens mais recentes
+  // GET: Obter itens mais recentes compartilhados entre todos os navegadores
   if (req.method === 'GET') {
     if (supabase) {
       try {
@@ -197,36 +282,40 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
             prioridadeFifo: index + 1,
             batchId: d.batch_id,
             labelPhotoUrl: d.label_photo_url || d.labelPhotoUrl,
+            originatorClientId: d.originator_client_id || d.originatorClientId,
           }));
 
           memoryStore = mapped;
+          savePersistentStore(mapped);
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;
           res.end(JSON.stringify({ success: true, source: 'supabase', items: mapped, lastModified }));
           return;
         }
       } catch (err) {
-        console.warn('Erro ao consultar Supabase no backend, usando memória:', err);
+        console.warn('Erro ao consultar Supabase no backend, usando arquivo/memória:', err);
       }
+    }
+
+    if (!memoryStore || memoryStore.length === 0) {
+      memoryStore = DEFAULT_SEED;
+      savePersistentStore(DEFAULT_SEED);
     }
 
     res.setHeader('Content-Type', 'application/json');
     res.statusCode = 200;
-    res.end(JSON.stringify({ success: true, source: 'backend_memory', items: memoryStore, lastModified }));
+    res.end(JSON.stringify({ success: true, source: 'shared_server_file', items: memoryStore, lastModified }));
     return;
   }
 
   // POST: Atualizar itens ou gravar novas solicitações
   if (req.method === 'POST') {
-    let bodyData = '';
-    req.on('data', (chunk) => {
-      bodyData += chunk;
-    });
-
-    req.on('end', async () => {
+    // Processamento de corpo tanto se veio de middleware Express (req.body) quanto de stream puro
+    const processBody = async (body: any) => {
       try {
-        const parsed = JSON.parse(bodyData || '{}');
+        const parsed = typeof body === 'string' ? JSON.parse(body || '{}') : body;
         const items = parsed.items || (Array.isArray(parsed) ? parsed : null);
+        const originatorClientId = parsed.clientId || parsed.originatorClientId;
 
         if (!items || !Array.isArray(items)) {
           res.statusCode = 400;
@@ -237,6 +326,15 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
         memoryStore = items;
         lastModified = Date.now();
+        savePersistentStore(items);
+
+        // Notifica instantaneamente todos os outros computadores conectados via SSE
+        broadcastSSE({
+          type: 'TRANSFER_UPDATE',
+          items: memoryStore,
+          originatorClientId,
+          timestamp: lastModified,
+        });
 
         if (supabase) {
           try {
@@ -257,6 +355,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
               observacoes: i.observacoes || null,
               batch_id: i.batchId || null,
               label_photo_url: i.labelPhotoUrl || null,
+              originator_client_id: i.originatorClientId || null,
             }));
 
             await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
@@ -273,6 +372,20 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ success: false, error: String(err) }));
       }
+    };
+
+    if (req.body) {
+      await processBody(req.body);
+      return;
+    }
+
+    let bodyData = '';
+    req.on('data', (chunk) => {
+      bodyData += chunk;
+    });
+
+    req.on('end', async () => {
+      await processBody(bodyData);
     });
     return;
   }

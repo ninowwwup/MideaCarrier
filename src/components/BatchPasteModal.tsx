@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { TransferItem } from '../types/transfer';
 import { parsePastedTable } from '../utils/sapFormatter';
+import { BROWSER_CLIENT_ID } from '../services/storage';
 
 interface BatchPasteModalProps {
   isOpen: boolean;
@@ -54,6 +55,7 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
       prioridadeFifo: currentCount + idx + 1,
       slaStatus: 'no_prazo',
       batchId,
+      originatorClientId: BROWSER_CLIENT_ID,
     }));
 
     onImportItems(newItems);

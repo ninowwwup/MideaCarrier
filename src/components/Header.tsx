@@ -13,7 +13,9 @@ import {
   Menu,
   X,
   Radio,
-  CalendarCheck2
+  CalendarCheck2,
+  Droplets,
+  Bell
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -30,6 +32,9 @@ interface HeaderProps {
   onOpenLatestAlert: () => void;
   isSoundEnabled: boolean;
   onToggleSound: () => void;
+  onTestAlertSound: () => void;
+  desktopNotifPermission: string;
+  onRequestDesktopPermission: () => void;
   autoPurgedCount?: number;
   isCloudConnected: boolean;
 }
@@ -46,6 +51,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLatestAlert,
   isSoundEnabled,
   onToggleSound,
+  onTestAlertSound,
+  desktopNotifPermission,
+  onRequestDesktopPermission,
   autoPurgedCount = 0,
   isCloudConnected,
 }) => {
@@ -147,19 +155,44 @@ export const Header: React.FC<HeaderProps> = ({
             {/* PWA Install Button */}
             <PWAInstallButton />
 
-            {/* Som Toggle */}
-            <button
-              type="button"
-              onClick={onToggleSound}
-              className={`p-2 rounded-xl border transition-all active:scale-90 ${
-                isSoundEnabled
-                  ? 'bg-blue-50 text-[#002664] border-blue-200 hover:bg-blue-100 shadow-2xs'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-              }`}
-              title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado'}
-            >
-              {isSoundEnabled ? <Volume2 className="w-4 h-4 text-[#249ED5]" /> : <VolumeX className="w-4 h-4" />}
-            </button>
+            {/* Som Toggle & Teste de Gota d'Água */}
+            <div className="flex items-center gap-1 bg-white/70 rounded-xl p-0.5 border border-slate-200">
+              <button
+                type="button"
+                onClick={onToggleSound}
+                className={`p-1.5 rounded-lg border transition-all active:scale-90 ${
+                  isSoundEnabled
+                    ? 'bg-blue-50 text-[#002664] border-blue-200 hover:bg-blue-100 shadow-2xs'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado'}
+              >
+                {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#249ED5]" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
+              
+              <button
+                type="button"
+                onClick={onTestAlertSound}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-[#002664] hover:bg-blue-50 transition-all active:scale-95"
+                title="Testar som suave de gota d'água"
+              >
+                <Droplets className="w-3.5 h-3.5 text-[#249ED5]" />
+                <span className="hidden md:inline text-[11px]">Gota d'Água</span>
+              </button>
+            </div>
+
+            {/* Ativação Rápida de Notificações em Segundo Plano (se ainda não concedido) */}
+            {desktopNotifPermission !== 'granted' && (
+              <button
+                type="button"
+                onClick={onRequestDesktopPermission}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md transition-all active:scale-95 animate-pulse"
+                title="Ativar pop-ups no Windows mesmo com SAP ou Excel aberto"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">Ativar Pop-up em 2º Plano</span>
+              </button>
+            )}
 
             {/* Sino de Alertas Time Midea */}
             <button

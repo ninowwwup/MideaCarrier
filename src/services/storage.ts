@@ -168,6 +168,8 @@ export function mapRowToTransferItem(d: any, index = 0): TransferItem {
     prioridadeFifo: index + 1,
     slaStatus: sla.slaStatus,
     batchId: d.batch_id || d.batchId,
+    labelPhotoUrl: d.label_photo_url || d.labelPhotoUrl,
+    originatorClientId: d.originator_client_id || d.originatorClientId,
   };
 }
 
@@ -342,54 +344,74 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
     }
   }
 
-  // 2. Gravar no Backend Vercel /api/transfers
+  // 2. Gravar no Backend /api/transfers
   if (typeof window !== 'undefined') {
     try {
       const res = await fetch('/api/transfers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, clientId: CURRENT_CLIENT_ID }),
+        body: JSON.stringify({ items, clientId: BROWSER_CLIENT_ID }),
       });
       if (res.ok) {
         savedSuccessfully = true;
       }
     } catch (e) {
-      // Backend não disponível ou erro de rede
+      // Backend offline ou erro de rede
     }
+
+    // Notificar outras abas no mesmo computador imediatamente
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({ type: 'DATA_SAVED', timestamp: Date.now() });
+        bc.close();
+      }
+    } catch (e) {}
   }
 
   return savedSuccessfully;
 }
 
-// Rastreamento local dos IDs criados/solicitados por ESTE computador/navegador
-// O pop-up não deve aparecer na tela de quem solicita, apenas na de quem recebe
+// Identificador único persistente deste navegador/computador
+export const BROWSER_CLIENT_ID: string = typeof window !== 'undefined'
+  ? (() => {
+      try {
+        let id = localStorage.getItem('migou_browser_client_id');
+        if (!id) {
+          id = 'pc_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+          localStorage.setItem('migou_browser_client_id', id);
+        }
+        return id;
+      } catch (e) {
+        return 'pc_' + Math.random().toString(36).substring(2, 9);
+      }
+    })()
+  : 'server_client';
+
+// Rastreamento local dos IDs criados/solicitados por ESTE computador (salvo em localStorage para compartilhar entre abas do mesmo PC)
 const locallyRequestedIds = new Set<string>();
 
 if (typeof window !== 'undefined') {
   try {
-    const raw = sessionStorage.getItem('midea_locally_requested_ids');
+    const raw = localStorage.getItem('migou_locally_requested_ids');
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
         arr.forEach((id) => locallyRequestedIds.add(id));
       }
     }
-  } catch (e) {
-    // sessionStorage indisponível
-  }
+  } catch (e) {}
 }
 
 export function registerLocallyRequestedItems(items: TransferItem[]) {
   items.forEach((item) => locallyRequestedIds.add(item.id));
   if (typeof window !== 'undefined') {
     try {
-      sessionStorage.setItem(
-        'midea_locally_requested_ids',
+      localStorage.setItem(
+        'migou_locally_requested_ids',
         JSON.stringify(Array.from(locallyRequestedIds).slice(-1000))
       );
-    } catch (e) {
-      // sessionStorage indisponível
-    }
+    } catch (e) {}
   }
 }
 
@@ -398,49 +420,123 @@ export function isItemRequestedByMe(itemId: string): boolean {
 }
 
 /**
- * Assina atualizações em Tempo Real (WebSockets + Polling Infallible estilo AppSheet)
- * Garante que assim que o Time Buiatte grava no Computador A,
- * o Computador B recebe o evento instantaneamente com som de gota d'água e toast Outlook!
+ * Assina atualizações em Tempo Real (In-time entre computadores via SSE + Worker Heartbeat + Polling)
+ * Garante que assim que o Time Buiatte grava no Computador A:
+ * - O Computador B recebe o evento instantaneamente (<10ms via SSE ou <1.5s via Worker).
+ * - O som suave de gota d'água toca no Computador B.
+ * - O pop-up estilo Outlook e a notificação desktop aparecem no Computador B e somem em 5s.
+ * - O Computador A (solicitante) NUNCA recebe o pop-up ou som de alerta de si mesmo.
  */
 export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
 ): () => void {
   const supabase = getSupabase();
   let knownIds = new Set<string>();
-  let isFirstLoad = true;
+  let isFirstRun = true;
 
-  const refreshLatest = async (isRealtimeEvent = false) => {
-    const res = await fetchTransferItems();
-    const currentList = res.items;
-
-    // Detectar novos itens pendentes criados por outro dispositivo
-    // O pop-up e som NÃO tocam na máquina de quem solicita, apenas na de quem recebe
+  // Processa uma lista de itens e detecta se há novas solicitações pendentes de OUTRO computador
+  const processIncomingItems = (
+    currentList: TransferItem[],
+    source: 'realtime' | 'polling',
+    originatorClientId?: string
+  ) => {
     const newPending: TransferItem[] = [];
-    if (!isFirstLoad && knownIds.size > 0) {
+
+    if (!isFirstRun && knownIds.size > 0) {
       for (const item of currentList) {
         if (!knownIds.has(item.id) && item.status === 'pendente') {
-          // Se o item foi solicitado por esta mesma máquina, IGNORAR (não disparar alerta para o próprio solicitante)
-          if (locallyRequestedIds.has(item.id)) {
+          // Se o item foi criado por ESTE mesmo computador, IGNORAR (não disparar alerta para o próprio solicitante)
+          const isCreatedByMe =
+            locallyRequestedIds.has(item.id) ||
+            (item.originatorClientId && item.originatorClientId === BROWSER_CLIENT_ID) ||
+            (originatorClientId && originatorClientId === BROWSER_CLIENT_ID);
+
+          if (isCreatedByMe) {
             continue;
           }
 
-          // Apenas alerta se criado nos últimos 15 minutos para evitar falso-positivo em seeds
-          const ageMs = Date.now() - new Date(item.criadoEm).getTime();
-          if (ageMs < 15 * 60 * 1000) {
-            newPending.push(item);
-          }
+          // O item veio de OUTRO computador/usuário -> DISPARAR ALERTA NO RECEPTOR!
+          newPending.push(item);
         }
       }
     }
 
-    isFirstLoad = false;
+    isFirstRun = false;
     knownIds = new Set(currentList.map((i) => i.id));
-    onDataChange(currentList, isRealtimeEvent ? 'realtime' : 'polling', newPending.length > 0 ? newPending : undefined);
+    onDataChange(
+      currentList,
+      source,
+      newPending.length > 0 ? newPending : undefined
+    );
   };
 
-  // Primeira execução
+  const refreshLatest = async (isRealtimeEvent = false) => {
+    try {
+      const res = await fetchTransferItems();
+      processIncomingItems(res.items, isRealtimeEvent ? 'realtime' : 'polling');
+    } catch (err) {
+      console.warn('Erro na sincronização realtime:', err);
+    }
+  };
+
+  // Primeira execução imediata
   refreshLatest();
 
+  // 1. Canal Server-Sent Events (SSE) nativo para transmissão instantânea entre computadores
+  let eventSource: EventSource | null = null;
+  if (typeof window !== 'undefined' && 'EventSource' in window) {
+    try {
+      eventSource = new EventSource('/api/events');
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.type === 'TRANSFER_UPDATE' && Array.isArray(data.items)) {
+            const mapped = data.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
+            processIncomingItems(mapped, 'realtime', data.originatorClientId);
+          }
+        } catch (e) {
+          // Ignorar mensagens de ping / heartbeat
+        }
+      };
+      eventSource.onerror = () => {
+        // Fallback contínuo via Polling e Worker caso a conexão SSE oscile
+      };
+    } catch (e) {
+      console.warn('SSE indisponível, utilizando Worker heartbeat');
+    }
+  }
+
+  // 2. Web Worker imune ao estrangulamento de abas em segundo plano do Chrome/Windows
+  // Garante que mesmo com SAP ou Excel aberto na frente, o timer roda a cada 1.5s
+  let backgroundWorker: Worker | null = null;
+  if (typeof window !== 'undefined' && typeof Worker !== 'undefined') {
+    try {
+      const workerBlob = new Blob([
+        `let timer = null;
+        self.onmessage = function(e) {
+          if (e.data === 'START') {
+            if (timer) clearInterval(timer);
+            timer = setInterval(() => self.postMessage('TICK'), 1500);
+          } else if (e.data === 'STOP') {
+            if (timer) clearInterval(timer);
+            timer = null;
+          }
+        };`
+      ], { type: 'application/javascript' });
+      const workerUrl = URL.createObjectURL(workerBlob);
+      backgroundWorker = new Worker(workerUrl);
+      backgroundWorker.onmessage = (e) => {
+        if (e.data === 'TICK') {
+          refreshLatest(false);
+        }
+      };
+      backgroundWorker.postMessage('START');
+    } catch (e) {
+      // Worker fallback
+    }
+  }
+
+  // 3. Canal Supabase Realtime (se ativo)
   let channel: any = null;
   if (supabase) {
     try {
@@ -459,17 +555,36 @@ export function subscribeToRealtimeTransfers(
     }
   }
 
-  // Polling de sincronização em tempo real (In-time) a cada 2.5 segundos
-  // Isso garante que mesmo entre computadores com redes restritas, proxy corporativo ou sem websockets,
-  // os dados e pop-ups aparecem pontualmente como no AppSheet!
+  // 4. BroadcastChannel para sincronização instantânea entre abas no mesmo computador
+  let bc: BroadcastChannel | null = null;
+  if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+    try {
+      bc = new BroadcastChannel('migou_sync_realtime');
+      bc.onmessage = () => {
+        refreshLatest(true);
+      };
+    } catch (e) {}
+  }
+
+  // 5. Polling de alta frequência como salvaguarda
   const pollTimer = setInterval(() => {
     refreshLatest(false);
-  }, 2500);
+  }, 1500);
 
   return () => {
     clearInterval(pollTimer);
+    if (eventSource) {
+      eventSource.close();
+    }
+    if (backgroundWorker) {
+      backgroundWorker.postMessage('STOP');
+      backgroundWorker.terminate();
+    }
     if (channel && supabase) {
       supabase.removeChannel(channel);
+    }
+    if (bc) {
+      bc.close();
     }
   };
 }
@@ -500,6 +615,7 @@ export function createRequestsFromMultiSerial(
     batchId: batchCode,
     observacoes: input.observacoes?.trim() || undefined,
     labelPhotoUrl: input.labelPhotoUrl || undefined,
+    originatorClientId: BROWSER_CLIENT_ID,
   }));
 
   // Registra que foram criados por este computador para não disparar pop-up na tela do solicitante

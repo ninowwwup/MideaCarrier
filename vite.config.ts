@@ -3,54 +3,29 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, Plugin } from 'vite';
 
-// Memória local para simulação da rota /api/transfers em desenvolvimento
-let devMemoryStore: any[] | null = null;
+import handler, { registerSSEClient } from './api/transfers';
 
-function apiMockPlugin(): Plugin {
+function apiTransfersPlugin(): Plugin {
   return {
-    name: 'api-transfers-mock',
+    name: 'api-transfers-plugin',
     configureServer(server) {
-      server.middlewares.use('/api/transfers', (req, res, next) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 200;
-          res.end();
-          return;
+      server.middlewares.use('/api/events', (req, res) => {
+        try {
+          registerSSEClient(req as any, res as any);
+        } catch (err) {
+          console.error('Erro na rota /api/events:', err);
         }
-
-        if (req.method === 'GET') {
-          res.setHeader('Content-Type', 'application/json');
-          res.statusCode = 200;
-          res.end(JSON.stringify({ success: true, items: devMemoryStore || [] }));
-          return;
+      });
+      server.middlewares.use('/api/transfers', async (req, res, next) => {
+        try {
+          await handler(req as any, res as any);
+        } catch (err) {
+          console.error('Erro na rota /api/transfers:', err);
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: String(err) }));
+          }
         }
-
-        if (req.method === 'POST') {
-          let body = '';
-          req.on('data', (chunk) => {
-            body += chunk;
-          });
-          req.on('end', () => {
-            try {
-              const parsed = JSON.parse(body || '{}');
-              if (parsed.items) {
-                devMemoryStore = parsed.items;
-              }
-              res.setHeader('Content-Type', 'application/json');
-              res.statusCode = 200;
-              res.end(JSON.stringify({ success: true, items: devMemoryStore }));
-            } catch (e) {
-              res.statusCode = 500;
-              res.end(JSON.stringify({ error: String(e) }));
-            }
-          });
-          return;
-        }
-
-        next();
       });
     },
   };
@@ -58,7 +33,7 @@ function apiMockPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), apiMockPlugin()],
+    plugins: [react(), tailwindcss(), apiTransfersPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
