@@ -20,6 +20,7 @@ export interface TransferItem {
   prioridadeFifo: number; // Índice FIFO (1 é o mais antigo)
   slaStatus: 'no_prazo' | 'atencao' | 'estourado';
   batchId?: string; // ID do lote caso tenha sido submetido em lote
+  labelPhotoUrl?: string; // Comprovação de foto da label/etiqueta do produto
 }
 
 export interface NewTransferInput {
@@ -30,6 +31,7 @@ export interface NewTransferInput {
   depositoDestino: string;
   observacoes?: string;
   solicitante?: string;
+  labelPhotoUrl?: string;
 }
 
 export interface FilterOptions {

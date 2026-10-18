@@ -48,7 +48,7 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
             <div>
               <h3 className="text-base font-bold">Assistente de Colagem no SAP (MIGO 311)</h3>
               <p className="text-xs text-[#C2DEEB]">
-                Formatos otimizados para colar diretamente nas transações MIGO, MB1B ou LT01 do SAP GUI
+                Formatos otimizados para colar diretamente na transação MIGO do SAP GUI
               </p>
             </div>
           </div>

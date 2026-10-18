@@ -499,6 +499,7 @@ export function createRequestsFromMultiSerial(
     slaStatus: 'no_prazo',
     batchId: batchCode,
     observacoes: input.observacoes?.trim() || undefined,
+    labelPhotoUrl: input.labelPhotoUrl || undefined,
   }));
 
   // Registra que foram criados por este computador para não disparar pop-up na tela do solicitante

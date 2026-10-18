@@ -99,8 +99,8 @@ export const OutlookToastAlert: React.FC<OutlookToastAlertProps> = ({
           <div className="w-5 h-5 rounded-md bg-[#002664] flex items-center justify-center text-white shadow-2xs">
             <Boxes className="w-3.5 h-3.5 text-[#C2DEEB]" />
           </div>
-          <span className="text-[11px] font-bold text-[#002664] tracking-tight">
-            Midea Transfer Hub
+          <span className="text-[11px] font-extrabold text-[#002664] tracking-tight">
+            MIGOU
           </span>
           <span className="text-[10px] text-slate-500 font-medium">• fecha em 5s</span>
         </div>

@@ -118,13 +118,31 @@ export const ResolutionModal: React.FC<ResolutionModalProps> = ({
                 Material: <strong className="text-slate-800">{items[0].material}</strong> | Serial: {items[0].serial}
               </div>
             )}
+            {!isBatch && items[0].labelPhotoUrl && (
+              <div className="pt-2 border-t border-slate-200 mt-2 flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-700">Comprovação da Label:</span>
+                <a
+                  href={items[0].labelPhotoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-[#00609C] hover:underline font-medium"
+                >
+                  <img
+                    src={items[0].labelPhotoUrl}
+                    alt="Foto da Label"
+                    className="w-6 h-6 object-cover rounded border border-slate-300 shadow-2xs"
+                  />
+                  <span>Ver foto da etiqueta</span>
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Se for Concluir: Nº Doc SAP */}
           {mode === 'concluir' && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nº Documento de Material SAP (MIGO / MB1B) *
+                Nº Documento de Material SAP (MIGO) *
               </label>
               <div className="relative">
                 <input

@@ -51,7 +51,7 @@ import {
 } from './utils/audioAlert';
 import { getSupabaseConfig } from './services/supabaseClient';
 
-const BASE_PAGE_TITLE = 'Midea Transfer Hub - Gestão SAP & WMS';
+const BASE_PAGE_TITLE = 'MIGOU - Gestão de Transferências SAP';
 
 export default function App() {
   const [items, setItems] = useState<TransferItem[]>([]);
@@ -163,7 +163,7 @@ export default function App() {
 
       titleIntervalRef.current = setInterval(() => {
         document.title = isFlashing
-          ? `🔔 (1) Nova Solicitação SAP! - ${activeAlert.resumoMaterial}`
+          ? `🔔 (1) Nova Solicitação - MIGOU! (${activeAlert.resumoMaterial})`
           : BASE_PAGE_TITLE;
         isFlashing = !isFlashing;
       }, 1200);
@@ -206,7 +206,7 @@ export default function App() {
     }
 
     sendDesktopNotification(
-      `Midea Transfer Hub: Nova Solicitação SAP (${centro})`,
+      `MIGOU: Nova Solicitação SAP (${centro})`,
       `${solicitante} solicitou transferência de ${resumoMaterial} (${depOrigem} ➔ ${depDestino}) com ${newItems.length} seriais`
     );
 
@@ -325,6 +325,24 @@ export default function App() {
     await handleUpdateItems(updated);
   };
 
+  // Anexar foto da etiqueta/label diretamente do item
+  const handleAttachLabelPhoto = async (itemId: string, photoUrl: string) => {
+    const updated = items.map((i) =>
+      i.id === itemId
+        ? {
+            ...i,
+            labelPhotoUrl: photoUrl,
+            atualizadoEm: new Date().toISOString(),
+          }
+        : i
+    );
+    await handleUpdateItems(updated);
+    showSuccessNotice(
+      'Foto da Etiqueta Anexada!',
+      'Comprovação da label salva com sucesso para conferência do Time Midea no SAP.'
+    );
+  };
+
   // Resolução de Conclusão ou Divergência
   const handleResolutionSubmit = async (data: {
     sapDocNumber?: string;
@@ -356,7 +374,7 @@ export default function App() {
 
   // Exportar para CSV
   const handleExportCSV = () => {
-    exportToCSV(items, `midea_transferencias_sap_${new Date().toISOString().slice(0, 10)}.csv`);
+    exportToCSV(items, `migou_transferencias_sap_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   // Ação ao clicar em "Tratar no SAP" na notificação Outlook
@@ -394,8 +412,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
-      {/* Header com Paleta Exata Midea: Imperial Blue, Blue Bell e Pale Sky */}
+    <div className="min-h-screen bg-gradient-to-br from-[#071630] via-[#0E2A54] to-[#051026] flex flex-col text-slate-800 relative overflow-hidden font-sans selection:bg-[#249ED5] selection:text-white">
+      {/* Elementos Mesh Ambientais de Glassmorfismo Moderno */}
+      <div className="absolute top-[-10rem] left-[-10rem] w-[35rem] h-[35rem] rounded-full bg-[#0083CA]/25 blur-[130px] pointer-events-none" />
+      <div className="absolute top-[25%] right-[-10rem] w-[38rem] h-[38rem] rounded-full bg-[#249ED5]/20 blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-[-10rem] left-[25%] w-[42rem] h-[42rem] rounded-full bg-indigo-600/15 blur-[160px] pointer-events-none" />
+
+      {/* Header com Paleta Midea e Glassmorphism */}
       <Header
         currentRole={currentRole}
         onSelectRole={setCurrentRole}
@@ -412,16 +435,40 @@ export default function App() {
         isCloudConnected={isCloudConnected}
       />
 
-      {/* Conteúdo Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Dashboard de Indicadores (FIFO, SLA, Concluídos, Divergências) */}
+      {/* Conteúdo Principal com Camadas Frosted Glass */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-10">
+        {/* Banner de Ativação de Notificações em 2º Plano / Windows caso permissão ainda não tenha sido dada */}
+        {desktopNotifPermission === 'default' && (
+          <div className="mb-4 p-3 bg-white/85 backdrop-blur-xl rounded-2xl border border-white/60 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-700 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <span className="p-1.5 rounded-xl bg-blue-100 text-[#002664]">
+                <Bell className="w-4 h-4 text-[#249ED5]" />
+              </span>
+              <div>
+                <strong className="text-slate-900">Alertas na tela em Segundo Plano:</strong>
+                <p className="text-slate-600 text-[11px]">
+                  Permita notificações nativas para que o pop-up apareça mesmo se você estiver com o SAP aberto ou em outra tarefa.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRequestDesktopPermission}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] shrink-0 shadow-md transition-all active:scale-95"
+            >
+              Ativar Alertas em 2º Plano
+            </button>
+          </div>
+        )}
+
+        {/* Dashboard de Indicadores Glassmorphism (FIFO, SLA, Concluídos, Divergências) */}
         <KPIDashboard
           stats={kpis}
           activeStatusFilter={filters.status}
           onFilterByStatus={(st) => setFilters({ ...filters, status: st })}
         />
 
-        {/* Tabela Operacional de Movimentações */}
+        {/* Tabela Operacional de Movimentações (AppSheet Responsive Grid) */}
         <TransferTable
           items={items}
           currentRole={currentRole}
@@ -432,19 +479,20 @@ export default function App() {
             setResolutionData({ items: selected, mode })
           }
           onUpdateStatusSingle={handleUpdateStatusSingle}
+          onAttachLabelPhoto={handleAttachLabelPhoto}
         />
       </main>
 
-      {/* Rodapé Corporativo com Imperial Blue & Imperial Blue 2 */}
-      <footer className="bg-[#002363] text-white border-t border-[#002664] py-4 text-xs">
+      {/* Rodapé Corporativo com Estilo Glassmorphism */}
+      <footer className="bg-[#002363]/90 backdrop-blur-md text-white border-t border-white/10 py-4 text-xs relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-[#C2DEEB]">Midea Carrier</span>
+            <span className="font-extrabold text-[#C2DEEB] tracking-wide">MIGOU</span>
             <span>•</span>
-            <span className="text-white/80">Operação Logística & Sincronização Sênior WMS ⟷ SAP</span>
+            <span className="text-white/80">Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea</span>
           </div>
           <div className="text-[#C2DEEB]/80 text-[11px]">
-            Sincronização em tempo real (In-time) protegida por FIFO e SLA.
+            Sincronização em tempo real (In-time) protegida por FIFO, SLA e comprovação de label.
           </div>
         </div>
       </footer>

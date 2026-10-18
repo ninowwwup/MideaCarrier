@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Midea Transfer Hub - Gestão SAP & WMS",
-  "short_name": "Transfer Hub",
+  "name": "MIGOU - Gestão de Transferências SAP & WMS",
+  "short_name": "MIGOU",
   "description": "Plataforma de transferências de depósitos entre Time Buiatte e Time Midea com suporte a múltiplos seriais e SAP MIGO.",
   "start_url": "/",
   "scope": "/",

@@ -28,10 +28,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'pendente' ? 'todos' : 'pendente')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
           activeStatusFilter === 'pendente'
-            ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30'
-            : 'bg-white border-slate-200/90 hover:border-amber-300 hover:shadow-xs'
+            ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/40 shadow-amber-500/10'
+            : 'bg-white/85 border-white/70 hover:border-amber-300 hover:bg-white/95'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -55,10 +55,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'em_analise' ? 'todos' : 'em_analise')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
           activeStatusFilter === 'em_analise'
-            ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-400/30'
-            : 'bg-white border-slate-200/90 hover:border-blue-300 hover:shadow-xs'
+            ? 'bg-blue-50/90 border-blue-300 ring-2 ring-blue-400/40 shadow-blue-500/10'
+            : 'bg-white/85 border-white/70 hover:border-blue-300 hover:bg-white/95'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -81,10 +81,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'concluido' ? 'todos' : 'concluido')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
           activeStatusFilter === 'concluido'
-            ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-400/30'
-            : 'bg-white border-slate-200/90 hover:border-emerald-300 hover:shadow-xs'
+            ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-400/40 shadow-emerald-500/10'
+            : 'bg-white/85 border-white/70 hover:border-emerald-300 hover:bg-white/95'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -99,7 +99,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
           {stats.concluidos}
         </div>
         <p className="text-[11px] text-slate-500 mt-1">
-          Movimentação 311 gerada
+          Movimentação 311 efetuada
         </p>
       </button>
 
@@ -107,10 +107,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'divergencia' ? 'todos' : 'divergencia')}
-        className={`text-left p-3.5 rounded-xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 shadow-2xs ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
           activeStatusFilter === 'divergencia'
-            ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-400/30'
-            : 'bg-white border-slate-200/90 hover:border-rose-300 hover:shadow-xs'
+            ? 'bg-rose-50/90 border-rose-300 ring-2 ring-rose-400/40 shadow-rose-500/10'
+            : 'bg-white/85 border-white/70 hover:border-rose-300 hover:bg-white/95'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -130,7 +130,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       </button>
 
       {/* 5. SLA Compliance */}
-      <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white text-sm">
+      <div className="p-3.5 rounded-2xl border border-white/70 bg-white/85 backdrop-blur-xl shadow-lg text-sm">
         <div className="flex items-center justify-between text-slate-500 mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
             SLA no Prazo
@@ -142,7 +142,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         <div className="text-2xl font-bold text-slate-900">
           {stats.taxaSlaNoPrazo}%
         </div>
-        <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+        <div className="w-full bg-slate-200/60 h-1.5 rounded-full mt-2 overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
               stats.taxaSlaNoPrazo >= 90
@@ -157,7 +157,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       </div>
 
       {/* 6. Volume de Seriais & Tempo Médio */}
-      <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white text-sm">
+      <div className="p-3.5 rounded-2xl border border-white/70 bg-white/85 backdrop-blur-xl shadow-lg text-sm">
         <div className="flex items-center justify-between text-slate-500 mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             Volume & Média
@@ -172,7 +172,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         </div>
         <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
           <TrendingUp className="w-3 h-3 text-emerald-600" />
-          <span>Tempo Médio: {stats.tempoMedioAtendimentoMin} min</span>
+          <span>Média: {stats.tempoMedioAtendimentoMin} min</span>
         </div>
       </div>
     </div>

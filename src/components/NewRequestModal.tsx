@@ -7,10 +7,14 @@ import {
   CheckCircle2, 
   AlertCircle,
   Copy,
-  Trash2
+  Trash2,
+  Camera,
+  UploadCloud,
+  Image as ImageIcon
 } from 'lucide-react';
 import { NewTransferInput } from '../types/transfer';
 import { extractSerialsFromInput } from '../utils/sapFormatter';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface NewRequestModalProps {
   isOpen: boolean;
@@ -33,6 +37,8 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [depositoDestino, setDepositoDestino] = useState('B110');
   const [observacoes, setObservacoes] = useState('');
   const [solicitante, setSolicitante] = useState('Time Buiatte (Sênior WMS)');
+  const [labelPhotoUrl, setLabelPhotoUrl] = useState<string | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
 
   // Parsing em tempo real de múltiplos seriais
   const parsedSerials = useMemo(() => {
@@ -56,6 +62,20 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const handleRemoveSingleSerial = (indexToRemove: number) => {
     const updated = parsedSerials.filter((_, idx) => idx !== indexToRemove);
     setRawSerials(updated.join('\n'));
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!file) return;
+    try {
+      setIsProcessingPhoto(true);
+      const compressed = await compressImageFile(file, 1024, 0.78);
+      setLabelPhotoUrl(compressed);
+    } catch (err) {
+      console.error('Erro ao processar imagem:', err);
+      alert('Não foi possível processar a imagem da label. Tente outra foto.');
+    } finally {
+      setIsProcessingPhoto(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -83,12 +103,14 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
       depositoDestino: depositoDestino.trim().toUpperCase(),
       observacoes: observacoes.trim(),
       solicitante: solicitante.trim(),
+      labelPhotoUrl: labelPhotoUrl || undefined,
     });
 
     // Reset form
     setMaterial('');
     setRawSerials('');
     setObservacoes('');
+    setLabelPhotoUrl(null);
     onClose();
   };
 
@@ -321,6 +343,116 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               onChange={(e) => setObservacoes(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA] focus:border-transparent"
             />
+          </div>
+
+          {/* Anexo de Foto da Etiqueta / Label (Comprovação contra divergências) */}
+          <div className="p-3.5 bg-gradient-to-r from-blue-50/60 to-indigo-50/40 border border-blue-200/80 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[#002664] flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-[#249ED5]" />
+                <span>Foto da Etiqueta / Label do Produto (Comprovação)</span>
+              </label>
+              <span className="text-[10px] text-slate-500 font-medium">
+                Útil para validação física caso haja divergência
+              </span>
+            </div>
+
+            {labelPhotoUrl ? (
+              <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-emerald-300 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <img
+                    src={labelPhotoUrl}
+                    alt="Preview da label"
+                    className="w-12 h-12 object-cover rounded-md border border-slate-200 shadow-xs"
+                  />
+                  <div>
+                    <div className="flex items-center gap-1 text-xs font-bold text-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Foto da label anexada com sucesso</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Disponível para conferência visual do Time Midea no SAP
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer text-xs font-semibold text-[#002664] hover:underline px-2 py-1 rounded bg-slate-100 hover:bg-slate-200">
+                    Trocar
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handlePhotoUpload(file);
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setLabelPhotoUrl(null)}
+                    className="text-xs text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
+                    title="Remover foto"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handlePhotoUpload(file);
+                }}
+                className="border-2 border-dashed border-blue-300 hover:border-[#249ED5] bg-white/80 p-3 rounded-lg text-center transition-colors"
+              >
+                {isProcessingPhoto ? (
+                  <div className="py-2 text-xs font-semibold text-[#002664] flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-[#002664] border-t-transparent rounded-full animate-spin" />
+                    <span>Otimizando foto da etiqueta...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <div className="text-xs text-slate-600">
+                      <span className="font-semibold text-slate-800">Arraste a foto da etiqueta</span> ou use as opções:
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#002664] hover:bg-[#002363] text-white shadow-2xs transition-colors">
+                        <Camera className="w-3.5 h-3.5 text-[#C2DEEB]" />
+                        <span>Tirar Foto</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file);
+                          }}
+                        />
+                      </label>
+                      <label className="cursor-pointer flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 shadow-2xs transition-colors">
+                        <UploadCloud className="w-3.5 h-3.5 text-[#249ED5]" />
+                        <span>Galeria / Arquivo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file);
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Modal Footer */}

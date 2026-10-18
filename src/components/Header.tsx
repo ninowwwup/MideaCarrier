@@ -52,26 +52,29 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="bg-white border-b border-[#C2DEEB]/80 sticky top-0 z-30 shadow-xs backdrop-blur-md bg-white/95">
+    <header className="bg-white/85 backdrop-blur-xl border-b border-white/40 sticky top-0 z-30 shadow-md">
       {/* Top Navbar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-3 gap-3">
           {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-[#002363] via-[#002664] to-[#249ED5] flex items-center justify-center text-white shadow-md ring-2 ring-[#C2DEEB] transition-transform active:scale-95 cursor-pointer">
+            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-[#002363] via-[#002664] to-[#249ED5] flex items-center justify-center text-white shadow-md ring-2 ring-white/60 transition-transform active:scale-95 cursor-pointer">
               <Boxes className="w-6 h-6 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-[#002664]">
-                  Midea <span className="font-normal text-slate-500">Carrier</span>
+                <span className="font-extrabold text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] bg-clip-text text-transparent">
+                  MIGOU
                 </span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#C2DEEB]/40 text-[#002664] border border-[#249ED5]/30 shadow-2xs">
-                  SAP Hub
+                <span className="text-[10px] font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#002664] text-white shadow-2xs">
+                  SAP MIGO
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#C2DEEB]/50 text-[#002664] border border-[#249ED5]/30 hidden sm:inline-block">
+                  v2.0
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">
-                Sincronização em Tempo Real • Time Buiatte ⟷ Time Midea
+                Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea
               </p>
             </div>
           </div>

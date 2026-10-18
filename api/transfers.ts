@@ -196,6 +196,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
             observacoes: d.observacoes,
             prioridadeFifo: index + 1,
             batchId: d.batch_id,
+            labelPhotoUrl: d.label_photo_url || d.labelPhotoUrl,
           }));
 
           memoryStore = mapped;
@@ -255,6 +256,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
               sap_doc_number: i.sapDocNumber || null,
               observacoes: i.observacoes || null,
               batch_id: i.batchId || null,
+              label_photo_url: i.labelPhotoUrl || null,
             }));
 
             await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
