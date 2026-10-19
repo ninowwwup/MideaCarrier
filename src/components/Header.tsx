@@ -171,32 +171,17 @@ export const Header: React.FC<HeaderProps> = ({
             {/* PWA Install Button (Apenas Ícone) */}
             <PWAInstallButton />
 
-            {/* Som Toggle & Teste de Gota d'Água (Apenas Ícones) */}
-            <div className="flex items-center gap-0.5 bg-white/15 backdrop-blur-md rounded-xl p-0.5 border border-white/25 shadow-xs">
-              <button
-                type="button"
-                onClick={onToggleSound}
-                className={`p-2 rounded-lg transition-all duration-200 active:scale-90 ${
-                  isSoundEnabled
-                    ? 'bg-white/25 text-white shadow-2xs'
-                    : 'text-white/50 hover:text-white'
-                }`}
-                title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado (Clique para ativar)'}
-                aria-label="Alternar som de alerta"
-              >
-                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-cyan-200" /> : <VolumeX className="w-4 h-4" />}
-              </button>
-              
-              <button
-                type="button"
-                onClick={onTestAlertSound}
-                className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-all duration-200 active:scale-90"
-                title="Testar som suave de gota d'água"
-                aria-label="Testar som suave de gota d'água"
-              >
-                <Droplets className="w-4 h-4 text-cyan-200" />
-              </button>
-            </div>
+            {/* Alerta Sonoro de Gota d'Água Ativo (Obrigatório) - Teste Imediato */}
+            <button
+              type="button"
+              onClick={onTestAlertSound}
+              className="p-2.5 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs flex items-center gap-1.5"
+              title="Alerta Sonoro de Gota d'Água Ativo (Obrigatório) • Clique para testar o som"
+              aria-label="Alerta Sonoro de Gota d'Água Ativo - Clique para testar"
+            >
+              <Droplets className="w-4 h-4 text-cyan-200 animate-pulse" />
+              <span className="hidden sm:inline text-[11px] text-cyan-100 font-medium">Som Ativo</span>
+            </button>
 
             {/* Controle do Push Manager (Service Worker) - Apenas Ícone */}
             {isPushSubscribed ? (
@@ -322,6 +307,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
               <span>Exportar Base em Excel (CSV)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onTestAlertSound();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
+            >
+              <Droplets className="w-4 h-4 text-cyan-200 animate-pulse" />
+              <span>Testar Som de Gota d'Água (Ativo)</span>
             </button>
 
             {onOpenDatabaseDiagnostic && (

@@ -17,13 +17,15 @@ if (typeof window !== 'undefined') {
   try {
     preloadedAudio = new Audio('/audio/water_drop.wav');
     preloadedAudio.preload = 'auto';
-    preloadedAudio.volume = 0.85;
+    preloadedAudio.volume = 1.0;
   } catch (e) {
     // Silently ignore if audio element not supported
   }
 }
 
-// Desbloqueia o contexto de áudio em qualquer interação inicial do usuário
+/**
+ * Desbloqueia o contexto de áudio em qualquer interação inicial do usuário (click, touch, pointerdown, keydown)
+ */
 export function initAudioOnUserInteraction() {
   if (typeof window === 'undefined') return;
 
@@ -34,33 +36,65 @@ export function initAudioOnUserInteraction() {
         sharedAudioCtx = new AudioContextClass();
       }
 
-      if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
-        sharedAudioCtx.resume().then(() => {
+      if (sharedAudioCtx) {
+        if (sharedAudioCtx.state === 'suspended') {
+          sharedAudioCtx.resume().then(() => {
+            isAudioUnlocked = true;
+            window.dispatchEvent(new CustomEvent('migou_audio_ready'));
+          }).catch(() => {});
+        } else if (sharedAudioCtx.state === 'running') {
           isAudioUnlocked = true;
-        }).catch(() => {});
-      } else if (sharedAudioCtx && sharedAudioCtx.state === 'running') {
-        isAudioUnlocked = true;
+          window.dispatchEvent(new CustomEvent('migou_audio_ready'));
+        }
+
+        // Toca buffer silencioso de 1 sample para autorizar o áudio no Chrome/Safari em segundo plano
+        try {
+          const silentBuf = sharedAudioCtx.createBuffer(1, 1, 22050);
+          const src = sharedAudioCtx.createBufferSource();
+          src.buffer = silentBuf;
+          src.connect(sharedAudioCtx.destination);
+          src.start(0);
+        } catch (e) {}
       }
 
+      // Pré-autoriza o elemento HTML5 Audio
       if (preloadedAudio) {
-        // Pré-aquece o elemento sem emitir som audível
-        preloadedAudio.load();
+        try {
+          preloadedAudio.volume = 0.001;
+          const p = preloadedAudio.play();
+          if (p) {
+            p.then(() => {
+              preloadedAudio?.pause();
+              if (preloadedAudio) {
+                preloadedAudio.currentTime = 0;
+                preloadedAudio.volume = 1.0;
+              }
+            }).catch(() => {});
+          }
+        } catch (e) {}
       }
-    } catch (e) {
-      // Ignorar
-    }
+    } catch (e) {}
   };
 
-  window.addEventListener('click', unlock, { once: false, passive: true });
-  window.addEventListener('keydown', unlock, { once: false, passive: true });
-  window.addEventListener('touchstart', unlock, { once: false, passive: true });
+  const events = ['click', 'pointerdown', 'mousedown', 'keydown', 'touchstart'];
+  events.forEach((evt) => {
+    window.addEventListener(evt, unlock, { once: false, passive: true });
+  });
 }
 
 // Inicializa os ouvintes globais
 initAudioOnUserInteraction();
 
 /**
- * Desbloqueia o áudio imediatamente e toca uma amostra do som suave de gota d'água
+ * Verifica se o áudio já está desbloqueado pelo usuário
+ */
+export function isAudioReady(): boolean {
+  if (typeof window === 'undefined') return false;
+  return isAudioUnlocked || (sharedAudioCtx !== null && sharedAudioCtx.state === 'running');
+}
+
+/**
+ * Desbloqueia o áudio imediatamente e toca uma amostra do som de gota d'água
  */
 export async function unlockAudioNow(): Promise<boolean> {
   try {
@@ -76,17 +110,20 @@ export async function unlockAudioNow(): Promise<boolean> {
       await sharedAudioCtx.resume();
     }
     isAudioUnlocked = true;
+    window.dispatchEvent(new CustomEvent('migou_audio_ready'));
 
-    // Toca o som de gota d'água como confirmação auditiva imediata
-    await playAlertChime();
+    // Toca o som de gota d'água imediatamente como confirmação
+    playAlertChime();
     return true;
   } catch (e) {
-    console.warn('Erro ao desbloquear áudio:', e);
-    // Tenta fallback com elemento de áudio
+    console.warn('Tentando fallback com elemento de áudio:', e);
     try {
       if (preloadedAudio) {
         preloadedAudio.currentTime = 0;
+        preloadedAudio.volume = 1.0;
         await preloadedAudio.play();
+        isAudioUnlocked = true;
+        window.dispatchEvent(new CustomEvent('migou_audio_ready'));
         return true;
       }
     } catch (err) {}
@@ -95,34 +132,25 @@ export async function unlockAudioNow(): Promise<boolean> {
 }
 
 /**
- * Síntese acústica de gota d'água cristalina suave (Water Droplet)
- * Utiliza dois métodos simultâneos para máxima confiabilidade:
- * 1. Arquivo WAV pré-carregado (/audio/water_drop.wav)
- * 2. Sintetizador harmônico procedural com Web Audio API
+ * Síntese acústica e reprodução obrigatória do som de gota d'água suave ("plop-plink")
+ * Executa tanto o sintetizador Web Audio quanto o arquivo WAV em paralelo para 100% de confiabilidade.
  */
 export function playAlertChime() {
-  let playedViaAudioTag = false;
-
-  // 1. Tentar tocar via HTML5 Audio element (muito estável em abas em segundo plano)
+  // 1. Tentar tocar via elemento de áudio WAV (excelente para navegadores móveis e desktop)
   if (typeof window !== 'undefined') {
     try {
       const audio = new Audio('/audio/water_drop.wav');
-      audio.volume = 0.85;
+      audio.volume = 1.0;
       const playPromise = audio.play();
       if (playPromise !== undefined) {
-        playPromise.then(() => {
-          playedViaAudioTag = true;
-        }).catch((err) => {
-          // Autoplay policy pode bloquear se ainda não houve interação
-          console.warn('Audio tag play bloqueado, usando sintetizador Web Audio:', err);
+        playPromise.catch(() => {
+          // Se bloqueado por política de autoplay, o sintetizador abaixo cobre
         });
       }
-    } catch (e) {
-      // Fallback para Web Audio abaixo
-    }
+    } catch (e) {}
   }
 
-  // 2. Sintetizador Web Audio API: Gota d'água suave com pitch-sweep e ressonância de orvalho
+  // 2. Sintetizador Web Audio API: Gota d'água cristalina procedural (imune a cache ou falhas de rede)
   try {
     const AudioContextClass = typeof window !== 'undefined'
       ? (window.AudioContext || (window as any).webkitAudioContext)
@@ -141,17 +169,17 @@ export function playAlertChime() {
 
     const now = ctx.currentTime;
 
-    // Gota Principal (Frequência deslizando suavemente de 900Hz para 1800Hz e decaindo suavemente para 1350Hz)
+    // Gota Principal (Frequência deslizando suavemente de 950Hz para 1900Hz e decaindo suavemente para 1380Hz)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
 
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(900, now);
-    osc1.frequency.exponentialRampToValueAtTime(1800, now + 0.035);
-    osc1.frequency.exponentialRampToValueAtTime(1350, now + 0.16);
+    osc1.frequency.setValueAtTime(950, now);
+    osc1.frequency.exponentialRampToValueAtTime(1900, now + 0.035);
+    osc1.frequency.exponentialRampToValueAtTime(1380, now + 0.16);
 
     gain1.gain.setValueAtTime(0.0001, now);
-    gain1.gain.linearRampToValueAtTime(0.35, now + 0.012);
+    gain1.gain.linearRampToValueAtTime(0.65, now + 0.012);
     gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.30);
 
     osc1.connect(gain1);
@@ -160,18 +188,18 @@ export function playAlertChime() {
     osc1.start(now);
     osc1.stop(now + 0.32);
 
-    // Segundo respingo harmônico suave de água cristalina ("ripple" - t + 0.08s)
-    const t2 = now + 0.08;
+    // Segundo respingo harmônico suave de água ("ripple" - t + 0.075s)
+    const t2 = now + 0.075;
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
 
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1350, t2);
-    osc2.frequency.exponentialRampToValueAtTime(2250, t2 + 0.025);
-    osc2.frequency.exponentialRampToValueAtTime(1650, t2 + 0.12);
+    osc2.frequency.setValueAtTime(1420, t2);
+    osc2.frequency.exponentialRampToValueAtTime(2350, t2 + 0.025);
+    osc2.frequency.exponentialRampToValueAtTime(1700, t2 + 0.12);
 
     gain2.gain.setValueAtTime(0.0001, t2);
-    gain2.gain.linearRampToValueAtTime(0.18, t2 + 0.01);
+    gain2.gain.linearRampToValueAtTime(0.35, t2 + 0.01);
     gain2.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.22);
 
     osc2.connect(gain2);

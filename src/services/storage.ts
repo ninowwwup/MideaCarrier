@@ -1,6 +1,7 @@
 import { TransferItem, NewTransferInput, KPIStats } from '../types/transfer';
 import { getSupabase, CURRENT_CLIENT_ID } from './supabaseClient';
 import { calculateSLA } from '../utils/sapFormatter';
+import { playAlertChime } from '../utils/audioAlert';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
@@ -535,7 +536,12 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('migou_sync_realtime');
-        bc.postMessage({ type: 'DATA_SAVED', timestamp: Date.now() });
+        const hasPending = items.some((i) => i.status === 'pendente');
+        bc.postMessage({
+          type: hasPending ? 'NEW_PENDING_TRANSFERS' : 'DATA_SAVED',
+          originatorSessionId: CURRENT_SESSION_ID,
+          timestamp: Date.now(),
+        });
         bc.close();
       }
     } catch (e) {}
@@ -560,47 +566,41 @@ export const BROWSER_CLIENT_ID: string = typeof window !== 'undefined'
     })()
   : 'server_client';
 
-// Rastreamento local dos IDs criados/solicitados por ESTE computador
-const locallyRequestedIds = new Set<string>();
-
-if (typeof window !== 'undefined') {
-  try {
-    const raw = localStorage.getItem('migou_locally_requested_ids');
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        arr.forEach((id) => locallyRequestedIds.add(id));
+// Identificador único desta aba/janela nesta sessão (permite testes instantâneos entre abas e computadores)
+export const CURRENT_SESSION_ID: string = typeof window !== 'undefined'
+  ? (() => {
+      try {
+        let id = sessionStorage.getItem('migou_session_tab_id');
+        if (!id) {
+          id = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+          sessionStorage.setItem('migou_session_tab_id', id);
+        }
+        return id;
+      } catch (e) {
+        return 'sess_' + Math.random().toString(36).substring(2, 9);
       }
-    }
-  } catch (e) {}
-}
+    })()
+  : 'server_session';
+
+// Rastreamento dos IDs criados especificamente por ESTA janela nesta sessão
+const sessionCreatedItemIds = new Set<string>();
 
 export function registerLocallyRequestedItems(items: TransferItem[]) {
-  items.forEach((item) => locallyRequestedIds.add(item.id));
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(
-        'migou_locally_requested_ids',
-        JSON.stringify(Array.from(locallyRequestedIds).slice(-1000))
-      );
-    } catch (e) {}
-  }
+  items.forEach((item) => sessionCreatedItemIds.add(item.id));
 }
 
 export function isItemRequestedByMe(itemId: string): boolean {
-  return locallyRequestedIds.has(itemId);
+  return sessionCreatedItemIds.has(itemId);
 }
 
 // Conjunto global para rastrear IDs conhecidos entre chamadas e reconexões
 const globalKnownItemIds = new Set<string>();
 
 /**
- * Assina atualizações em Tempo Real (In-time entre computadores via SSE + Worker Heartbeat + Polling)
- * Garante que assim que o Time Buiatte grava no Computador A:
- * - O Computador B recebe o evento instantaneamente (<10ms via SSE ou <2.5s via Worker).
- * - O som suave de gota d'água toca no Computador B.
- * - O pop-up estilo Outlook e a notificação desktop aparecem no Computador B e somem em 5s.
- * - O Computador A (solicitante) NUNCA recebe o pop-up ou som de alerta de si mesmo.
+ * Assina atualizações em Tempo Real (In-time entre computadores via Supabase Realtime + Worker Heartbeat + BroadcastChannel)
+ * Garante que assim que o Time Buiatte grava:
+ * - O som suave de gota d'água toca OBRIGATORIAMENTE no outro computador ou janela aberta.
+ * - A janela que realizou o cadastro NÃO toca o som nela mesma (já possui feedback visual).
  */
 export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
@@ -608,7 +608,7 @@ export function subscribeToRealtimeTransfers(
   const supabase = getSupabase();
   let isInitialSync = globalKnownItemIds.size === 0;
 
-  // Processa uma lista de itens e detecta se há novas solicitações pendentes de OUTRO computador
+  // Processa uma lista de itens e detecta se há novas solicitações pendentes de OUTRO computador/janela
   const processIncomingItems = (
     rawList: TransferItem[],
     source: 'realtime' | 'polling',
@@ -620,17 +620,17 @@ export function subscribeToRealtimeTransfers(
     if (!isInitialSync && globalKnownItemIds.size > 0) {
       for (const item of currentList) {
         if (!globalKnownItemIds.has(item.id) && item.status === 'pendente') {
-          // Se o item foi criado por ESTE mesmo computador, IGNORAR (não disparar alerta para o próprio solicitante)
+          // Se o item foi criado por ESTA janela específica, ignorar som nela mesma
           const isCreatedByMe =
-            locallyRequestedIds.has(item.id) ||
-            (item.originatorClientId && item.originatorClientId === BROWSER_CLIENT_ID) ||
-            (originatorClientId && originatorClientId === BROWSER_CLIENT_ID);
+            sessionCreatedItemIds.has(item.id) ||
+            (originatorClientId && originatorClientId === CURRENT_SESSION_ID) ||
+            (item.originatorClientId && item.originatorClientId === CURRENT_SESSION_ID);
 
           if (isCreatedByMe) {
             continue;
           }
 
-          // O item veio de OUTRO computador/usuário -> DISPARAR ALERTA NO RECEPTOR!
+          // O item veio de OUTRO computador/usuário -> DISPARAR ALERTA SONORO OBRIGATÓRIO!
           newPending.push(item);
         }
       }
@@ -638,6 +638,11 @@ export function subscribeToRealtimeTransfers(
 
     isInitialSync = false;
     currentList.forEach((i) => globalKnownItemIds.add(i.id));
+
+    // Se detectou novos itens pendentes de outro operador, dispara o som de gota d'água obrigatoriamente
+    if (newPending.length > 0) {
+      playAlertChime();
+    }
 
     onDataChange(
       currentList,
@@ -657,30 +662,6 @@ export function subscribeToRealtimeTransfers(
 
   // Primeira execução imediata
   refreshLatest();
-
-  // 1. Canal Server-Sent Events (SSE) nativo para transmissão instantânea entre computadores
-  let eventSource: EventSource | null = null;
-  if (typeof window !== 'undefined' && 'EventSource' in window) {
-    try {
-      eventSource = new EventSource('/api/events');
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data && data.type === 'TRANSFER_UPDATE' && Array.isArray(data.items)) {
-            const mapped = data.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
-            processIncomingItems(mapped, 'realtime', data.originatorClientId);
-          }
-        } catch (e) {
-          // Ignorar mensagens de ping / heartbeat
-        }
-      };
-      eventSource.onerror = () => {
-        // EventSource reconecta automaticamente
-      };
-    } catch (e) {
-      console.warn('SSE indisponível, utilizando Worker heartbeat');
-    }
-  }
 
   // 2. Web Worker imune ao estrangulamento de abas em segundo plano do Chrome/Windows
   // Garante que mesmo com SAP ou Excel aberto na frente, a verificação roda a cada 2.5s
@@ -725,7 +706,16 @@ export function subscribeToRealtimeTransfers(
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'transfer_requests' },
-          () => {
+          (payload: any) => {
+            if (payload?.eventType === 'INSERT' && payload.new) {
+              const row = payload.new;
+              const isFromOther =
+                row.originator_client_id !== CURRENT_SESSION_ID &&
+                !sessionCreatedItemIds.has(String(row.id));
+              if (row.status === 'pendente' && isFromOther) {
+                playAlertChime();
+              }
+            }
             refreshLatest(true);
           }
         )
@@ -740,8 +730,14 @@ export function subscribeToRealtimeTransfers(
   if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
     try {
       bc = new BroadcastChannel('migou_sync_realtime');
-      bc.onmessage = () => {
-        refreshLatest(true);
+      bc.onmessage = (ev) => {
+        if (ev?.data?.originatorSessionId && ev.data.originatorSessionId === CURRENT_SESSION_ID) {
+          return;
+        }
+        if (ev?.data?.type === 'NEW_PENDING_TRANSFERS') {
+          playAlertChime();
+        }
+        refreshLatest(true, ev?.data?.originatorSessionId);
       };
     } catch (e) {}
   }
@@ -749,9 +745,6 @@ export function subscribeToRealtimeTransfers(
   return () => {
     if (fallbackInterval) {
       clearInterval(fallbackInterval);
-    }
-    if (eventSource) {
-      eventSource.close();
     }
     if (backgroundWorker) {
       backgroundWorker.postMessage('STOP');
@@ -792,10 +785,10 @@ export function createRequestsFromMultiSerial(
     batchId: batchCode,
     observacoes: input.observacoes?.trim() || undefined,
     labelPhotoUrl: input.labelPhotoUrl || undefined,
-    originatorClientId: BROWSER_CLIENT_ID,
+    originatorClientId: CURRENT_SESSION_ID,
   }));
 
-  // Registra que foram criados por este computador para não disparar pop-up na tela do solicitante
+  // Registra que foram criados por esta janela para não disparar som nela mesma
   registerLocallyRequestedItems(created);
 
   return created;

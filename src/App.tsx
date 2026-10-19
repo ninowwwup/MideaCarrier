@@ -23,11 +23,7 @@ import {
 import {
   DatabaseDiagnosticModal
 } from './components/DatabaseDiagnosticModal';
-import { 
-  OutlookToastAlert,
-  AlertNotification 
-} from './components/OutlookToastAlert';
-import { Check, X, Bell } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -51,6 +47,7 @@ import {
 import { 
   playAlertChime, 
   unlockAudioNow,
+  isAudioReady,
   requestNotificationPermission, 
   sendDesktopNotification 
 } from './utils/audioAlert';
@@ -72,10 +69,8 @@ export default function App() {
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
   const [isPushSubscribed, setIsPushSubscribed] = useState<boolean>(false);
 
-  // Sistema de Alerta estilo Outlook (Canto Inferior Esquerdo)
-  const [activeAlert, setActiveAlert] = useState<AlertNotification | null>(null);
-  const [alertHistory, setAlertHistory] = useState<AlertNotification[]>([]);
-  const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
+  // Estado de liberação do áudio e piscar título
+  const [isAudioActive, setIsAudioActive] = useState<boolean>(() => isAudioReady());
   const titleIntervalRef = useRef<any>(null);
 
   // Modais Operacionais
@@ -116,39 +111,48 @@ export default function App() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
 
-  // Função central para disparar o Alerta estilo Outlook
-  const triggerMideaAlert = useCallback((
-    newItems: TransferItem[],
-    solicitante: string,
-    resumoMaterial: string,
-    centro: string,
-    depOrigem: string,
-    depDestino: string
-  ) => {
-    const alertData: AlertNotification = {
-      id: `alert-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      items: newItems,
-      solicitante,
-      resumoMaterial,
-      centro,
-      depOrigem,
-      depDestino,
-      totalSeriais: newItems.length,
+  // Monitorar permissão e desbloqueio do áudio por gestos do usuário
+  useEffect(() => {
+    const handleReady = () => setIsAudioActive(true);
+    window.addEventListener('migou_audio_ready', handleReady);
+
+    const onUserInteraction = () => {
+      if (isAudioReady()) {
+        setIsAudioActive(true);
+      }
     };
 
-    if (isSoundEnabled) {
-      playAlertChime();
-    }
+    window.addEventListener('click', onUserInteraction, { passive: true });
+    window.addEventListener('keydown', onUserInteraction, { passive: true });
+    window.addEventListener('touchstart', onUserInteraction, { passive: true });
 
-    sendDesktopNotification(
-      `MIGOU: Nova Solicitação SAP (${centro})`,
-      `${solicitante} solicitou transferência de ${resumoMaterial} (${depOrigem} ➔ ${depDestino}) com ${newItems.length} seriais`
-    );
+    return () => {
+      window.removeEventListener('migou_audio_ready', handleReady);
+      window.removeEventListener('click', onUserInteraction);
+      window.removeEventListener('keydown', onUserInteraction);
+      window.removeEventListener('touchstart', onUserInteraction);
+    };
+  }, []);
 
-    setActiveAlert(alertData);
-    setAlertHistory((prev) => [alertData, ...prev]);
-  }, [isSoundEnabled]);
+  // Piscar título da aba para chamar atenção do operador na barra de tarefas (sem pop-up na tela)
+  const flashTitleNotification = useCallback((count: number) => {
+    if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
+    let isFlashing = false;
+    let cycles = 0;
+    titleIntervalRef.current = setInterval(() => {
+      cycles++;
+      document.title = isFlashing
+        ? `💧 (${count}) Nova Solicitação - MIGOU!`
+        : BASE_PAGE_TITLE;
+      isFlashing = !isFlashing;
+
+      if (cycles > 14) {
+        clearInterval(titleIntervalRef.current);
+        titleIntervalRef.current = null;
+        document.title = BASE_PAGE_TITLE;
+      }
+    }, 1000);
+  }, []);
 
   const handleEnablePushManager = async () => {
     await unlockAudioNow();
@@ -178,12 +182,11 @@ export default function App() {
 
   const handleTestAlertSound = async () => {
     await unlockAudioNow();
-    if (desktopNotifPermission === 'granted') {
-      sendDesktopNotification(
-        'MIGOU: Teste de Notificação Outlook (5s)',
-        'Som suave de gota d’água e pop-up de 5 segundos funcionando perfeitamente!'
-      );
-    }
+    setIsAudioActive(true);
+    showSuccessNotice(
+      'Som de Gota d’Água Testado!',
+      'Alerta sonoro ativo e obrigatório para todas as novas solicitações.'
+    );
   };
 
   useEffect(() => {
@@ -201,21 +204,13 @@ export default function App() {
     // Escuta eventos vindos do Service Worker quando um Push é recebido
     const unsubscribeSW = setupServiceWorkerMessageListener((payload) => {
       if (payload && payload.items && payload.items.length > 0) {
-        const first = payload.items[0];
-        const materiaisUnicos = Array.from(new Set(payload.items.map((i: any) => i.material))).join(', ');
-        triggerMideaAlert(
-          payload.items,
-          first.criadoPor || 'Time Buiatte (Sênior WMS)',
-          materiaisUnicos,
-          first.centro,
-          first.depositoOrigem,
-          first.depositoDestino
-        );
+        playAlertChime();
+        flashTitleNotification(payload.items.length);
       }
     });
 
     return () => unsubscribeSW();
-  }, [triggerMideaAlert]);
+  }, [flashTitleNotification]);
 
   // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
   useEffect(() => {
@@ -232,7 +227,6 @@ export default function App() {
         setIsBatchPasteOpen(false);
         setSapModalItems(null);
         setResolutionData(null);
-        setActiveAlert(null);
         return;
       }
 
@@ -257,31 +251,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Alternar título da aba quando houver novo alerta não lido (piscar na barra de tarefas)
-  useEffect(() => {
-    if (activeAlert) {
-      let isFlashing = false;
-      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
-
-      titleIntervalRef.current = setInterval(() => {
-        document.title = isFlashing
-          ? `🔔 (1) Nova Solicitação - MIGOU! (${activeAlert.resumoMaterial})`
-          : BASE_PAGE_TITLE;
-        isFlashing = !isFlashing;
-      }, 1200);
-    } else {
-      if (titleIntervalRef.current) {
-        clearInterval(titleIntervalRef.current);
-        titleIntervalRef.current = null;
-      }
-      document.title = BASE_PAGE_TITLE;
-    }
-
-    return () => {
-      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
-    };
-  }, [activeAlert]);
-
   // Carregar dados e Iniciar Sincronização em Tempo Real (In-time entre computadores)
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -294,12 +263,7 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  const triggerMideaAlertRef = useRef(triggerMideaAlert);
-  useEffect(() => {
-    triggerMideaAlertRef.current = triggerMideaAlert;
-  }, [triggerMideaAlert]);
-
-  // Assinatura em Tempo Real (Supabase Realtime WebSockets + SSE + Polling Infallible)
+  // Assinatura em Tempo Real (Supabase Realtime WebSockets + Polling Infallible)
   useEffect(() => {
     loadData();
 
@@ -307,25 +271,17 @@ export default function App() {
       setItems(updatedItems);
       setIsCloudConnected(true);
 
-      // Se novos itens pendentes chegaram de outro computador, DISPARAR O POP-UP OUTLOOK NO OUTRO COMPUTADOR!
+      // Se novos itens pendentes chegaram de outro operador, tocar obrigatoriamente o som de gota d'água!
       if (newIncomingPending && newIncomingPending.length > 0) {
-        const first = newIncomingPending[0];
-        const materiaisUnicos = Array.from(new Set(newIncomingPending.map((i) => i.material))).join(', ');
-        triggerMideaAlertRef.current(
-          newIncomingPending,
-          first.criadoPor || 'Time Buiatte (Sênior WMS)',
-          materiaisUnicos,
-          first.centro,
-          first.depositoOrigem,
-          first.depositoDestino
-        );
+        playAlertChime();
+        flashTitleNotification(newIncomingPending.length);
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [loadData]);
+  }, [loadData, flashTitleNotification]);
 
   // Recalcular SLA a cada 60 segundos
   useEffect(() => {
@@ -480,26 +436,13 @@ export default function App() {
     }
   };
 
-  // Reabrir último alerta pelo sino no topo
+  // Focar solicitações pendentes na visão do Time Midea pelo sino
   const handleOpenLatestAlert = () => {
-    if (alertHistory.length > 0) {
-      setActiveAlert(alertHistory[0]);
-    } else if (items.length > 0) {
-      const pendentes = items.filter((i) => i.status === 'pendente');
-      const targetItems = pendentes.length > 0 ? [pendentes[0]] : [items[0]];
-      const first = targetItems[0];
-      setActiveAlert({
-        id: `alert-recent`,
-        timestamp: first.criadoEm,
-        items: targetItems,
-        solicitante: first.criadoPor,
-        resumoMaterial: first.material,
-        centro: first.centro,
-        depOrigem: first.depositoOrigem,
-        depDestino: first.depositoDestino,
-        totalSeriais: targetItems.length,
-      });
-    }
+    setCurrentRole('midea');
+    setFilters((prev) => ({
+      ...prev,
+      status: 'pendente',
+    }));
   };
 
   return (
@@ -529,10 +472,10 @@ export default function App() {
         onExportCSV={handleExportCSV}
         totalPending={kpis.pendentes}
         totalErrors={kpis.divergencias}
-        latestAlertCount={alertHistory.length}
+        latestAlertCount={kpis.pendentes}
         onOpenLatestAlert={handleOpenLatestAlert}
-        isSoundEnabled={isSoundEnabled}
-        onToggleSound={() => setIsSoundEnabled((prev) => !prev)}
+        isSoundEnabled={true}
+        onToggleSound={handleTestAlertSound}
         onTestAlertSound={handleTestAlertSound}
         desktopNotifPermission={desktopNotifPermission}
         onRequestDesktopPermission={handleRequestDesktopPermission}
@@ -583,13 +526,21 @@ export default function App() {
         </div>
       </footer>
 
-      {/* NOTIFICAÇÃO ESTILO OUTLOOK: CANTO INFERIOR ESQUERDO */}
-      <OutlookToastAlert
-        alert={activeAlert}
-        onClose={() => setActiveAlert(null)}
-        onOpenSAPModal={(selected) => setSapModalItems(selected)}
-        onFocusMideaView={handleFocusMideaView}
-      />
+      {/* Alerta de Desbloqueio de Áudio (surge apenas se o navegador ainda não recebeu interação) */}
+      {!isAudioActive && (
+        <button
+          type="button"
+          onClick={async () => {
+            await unlockAudioNow();
+            setIsAudioActive(true);
+          }}
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-[#002664]/95 text-white border border-[#249ED5]/60 px-5 py-2.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl flex items-center gap-3 cursor-pointer hover:bg-[#003380] transition-all duration-200 animate-bounce text-xs font-medium"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+          <span className="font-semibold text-cyan-200">💧 Alerta Sonoro de Gota d'Água:</span>
+          <span className="text-white/90">Clique aqui para liberar o som no seu navegador</span>
+        </button>
+      )}
 
       {/* Modal de Nova Solicitação (com Múltiplos Seriais) */}
       <NewRequestModal
