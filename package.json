@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "start": "node server.ts",
     "clean": "rm -rf dist server.js",
+    "reset": "node clearDatabase.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
