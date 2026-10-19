@@ -9,14 +9,17 @@ import {
   RefreshCw, 
   ExternalLink,
   ShieldAlert,
-  Server
+  Server,
+  Trash2
 } from 'lucide-react';
 import { getSupabase, getSupabaseConfig } from '../services/supabaseClient';
+import { clearAllTransferRecords } from '../services/storage';
 
 interface DatabaseDiagnosticModalProps {
   isOpen: boolean;
   onClose: () => void;
   isCloudConnected: boolean;
+  onRecordsCleared?: () => void;
 }
 
 export const SUPABASE_REPAIR_SQL = `-- ========================================================
@@ -65,9 +68,11 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
   isOpen,
   onClose,
   isCloudConnected,
+  onRecordsCleared,
 }) => {
   const [copiedSql, setCopiedSql] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [testResult, setTestResult] = useState<{
     status: 'idle' | 'success' | 'warning' | 'error';
     message: string;
@@ -83,6 +88,34 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
     navigator.clipboard.writeText(SUPABASE_REPAIR_SQL);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 3000);
+  };
+
+  const handleClearAll = async () => {
+    const confirmed = window.confirm(
+      'Tem certeza que deseja limpar TODOS os registros de transferências?\\n\\nEsta ação apagará os dados de teste do Supabase, do servidor e do cache local para que a equipe possa iniciar a operação oficial do zero.'
+    );
+    if (!confirmed) return;
+
+    setIsClearing(true);
+    try {
+      await clearAllTransferRecords();
+      if (onRecordsCleared) {
+        onRecordsCleared();
+      }
+      setTestResult({
+        status: 'success',
+        message: 'Todos os registros foram zerados com sucesso!',
+        details: 'O banco de dados, servidor e cache foram limpos. O sistema está 100% pronto para iniciar do zero.'
+      });
+    } catch (e: any) {
+      setTestResult({
+        status: 'error',
+        message: 'Erro ao limpar registros.',
+        details: String(e?.message || e)
+      });
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   const handleRunDiagnosticTest = async () => {
@@ -310,6 +343,28 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Zona de Limpeza de Registros para Iniciar do Zero */}
+          <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Limpar Registros (Iniciar do Zero)</span>
+              </div>
+              <p className="text-[11px] text-rose-700 mt-0.5">
+                Remove todas as transferências de teste do Supabase, servidor e cache para início da operação real do time.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={isClearing}
+              onClick={handleClearAll}
+              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95 shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isClearing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              <span>{isClearing ? 'Limpando...' : 'Zerar Banco de Dados'}</span>
+            </button>
           </div>
 
           {/* Script de Reparo SQL do Supabase */}

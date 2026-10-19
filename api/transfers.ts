@@ -94,169 +94,24 @@ export async function sendWebPushToAll(payload: any, excludeClientId?: string) {
   savePushSubscriptions(remainingSubs);
 }
 
-// Dados iniciais padrão para demonstração operacional
-const DEFAULT_SEED = [
-  {
-    id: 'seed-1',
-    solicitationCode: 'SOL-2401',
-    material: 'MDWTF08B1',
-    serial: '541760002ZGB4133400502',
-    centro: 'B124',
-    depositoOrigem: 'B148',
-    depositoDestino: 'B110',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    prioridadeFifo: 1,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-001',
-    observacoes: 'Urgente para expedição da tarde',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-2',
-    solicitationCode: 'SOL-2401',
-    material: 'MDWTF08B1',
-    serial: '541760002ZGB4133400533',
-    centro: 'B124',
-    depositoOrigem: 'B148',
-    depositoDestino: 'B110',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    prioridadeFifo: 2,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-001',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-3',
-    solicitationCode: 'SOL-2402',
-    material: 'TSM62',
-    serial: '541711001X9B6233500679',
-    centro: 'B124',
-    depositoOrigem: 'B148',
-    depositoDestino: 'B111',
-    status: 'em_analise',
-    criadoEm: new Date(Date.now() - 85 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    atualizadoPor: 'Carlos (Time Midea SAP)',
-    prioridadeFifo: 3,
-    slaStatus: 'atencao',
-    batchId: 'BATCH-002',
-    observacoes: 'Validando saldo físico x contábil no SAP MMBE',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-4',
-    solicitationCode: 'SOL-2403',
-    material: 'PP5MS1',
-    serial: 'PS142600024',
-    centro: 'B124',
-    depositoOrigem: 'B110',
-    depositoDestino: 'B111',
-    status: 'concluido',
-    criadoEm: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    atualizadoPor: 'Ana Paula (Time Midea SAP)',
-    sapDocNumber: '4900188921',
-    prioridadeFifo: 4,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-003',
-    observacoes: 'Movimentação 311 efetuada no SAP. Liberado no WMS.',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-5',
-    solicitationCode: 'SOL-2404',
-    material: '38TAVCB18M5',
-    serial: 'S3226B22695419',
-    centro: 'B123',
-    depositoOrigem: 'B110',
-    depositoDestino: 'B111',
-    status: 'divergencia',
-    criadoEm: new Date(Date.now() - 210 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    atualizadoPor: 'Carlos (Time Midea SAP)',
-    prioridadeFifo: 5,
-    slaStatus: 'estourado',
-    batchId: 'BATCH-004',
-    observacoes: 'Divergência: Serial não encontrado em estoque no depósito B110 do Centro B123.',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-6',
-    solicitationCode: 'SOL-2405',
-    material: 'QCL108BB',
-    serial: 'S1326B21294802',
-    centro: 'B179',
-    depositoOrigem: 'B111',
-    depositoDestino: 'B413',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    prioridadeFifo: 6,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-005',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-7',
-    solicitationCode: 'SOL-2406',
-    material: 'QCL108BB',
-    serial: 'S1326B21294807',
-    centro: 'B158',
-    depositoOrigem: 'B111',
-    depositoDestino: 'B114',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    prioridadeFifo: 7,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-006',
-    originatorClientId: 'initial_seed',
-  },
-  {
-    id: 'seed-8',
-    solicitationCode: 'SOL-2406',
-    material: 'QCL108BB',
-    serial: 'S1326B21294814',
-    centro: 'B158',
-    depositoOrigem: 'B111',
-    depositoDestino: 'B114',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    prioridadeFifo: 8,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-006',
-    originatorClientId: 'initial_seed',
-  },
-];
+// Sem dados de teste: inicialização limpa pronta para produção
+const DEFAULT_SEED: any[] = [];
 
-// Carregar memória persistida do disco ou usar seed
+// Carregar memória persistida do disco ou inicializar vazia
 function loadPersistentStore(): any[] {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (e) {
     console.warn('Erro ao carregar transfers_data.json:', e);
   }
-  savePersistentStore(DEFAULT_SEED);
-  return DEFAULT_SEED;
+  savePersistentStore([]);
+  return [];
 }
 
 function savePersistentStore(items: any[]) {
@@ -480,7 +335,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           .select('*')
           .order('criado_em', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const mapped = data.map((d: any, index: number) => ({
             id: String(d.id),
             solicitationCode: d.solicitation_code || `SOL-${index + 1}`,
@@ -514,9 +369,9 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       }
     }
 
-    if (!memoryStore || memoryStore.length === 0) {
-      memoryStore = DEFAULT_SEED;
-      savePersistentStore(DEFAULT_SEED);
+    if (!Array.isArray(memoryStore)) {
+      memoryStore = [];
+      savePersistentStore([]);
     }
 
     res.setHeader('Content-Type', 'application/json');
@@ -525,12 +380,38 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 7. POST /api/transfers: Atualizar itens ou gravar novas solicitações
+  // 7. DELETE /api/transfers ou /api/transfers/clear: Limpeza e reinicialização completa do zero
+  if (req.method === 'DELETE' || (rawUrl.includes('/clear') && req.method === 'POST')) {
+    memoryStore = [];
+    lastModified = Date.now();
+    savePersistentStore([]);
+
+    broadcastSSE({
+      type: 'TRANSFER_UPDATE',
+      items: [],
+      timestamp: lastModified,
+    });
+
+    if (supabase) {
+      try {
+        await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
+      } catch (e) {
+        console.warn('Erro ao limpar Supabase via backend DELETE:', e);
+      }
+    }
+
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: true, message: 'Todos os registros foram zerados.', items: [], lastModified }));
+    return;
+  }
+
+  // 8. POST /api/transfers: Atualizar itens ou gravar novas solicitações
   if (req.method === 'POST') {
     const processBody = async (body: any) => {
       try {
         const parsed = typeof body === 'string' ? JSON.parse(body || '{}') : body;
-        const items = parsed.items || (Array.isArray(parsed) ? parsed : null);
+        const items = parsed.items !== undefined ? parsed.items : (Array.isArray(parsed) ? parsed : null);
         const originatorClientId = parsed.clientId || parsed.originatorClientId;
 
         if (!items || !Array.isArray(items)) {
@@ -552,9 +433,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           timestamp: lastModified,
         });
 
-        // 2. DISPARA PUSH MANAGER (Web Push API) PARA TODOS OS COMPUTADORES
-        // Garante que mesmo com o navegador em segundo plano ou tela minimizada,
-        // o Service Worker recebe a mensagem, exibe a notificação nativa por 5s e toca a gota d'água
+        // 2. DISPARA PUSH MANAGER (Web Push API) PARA TODOS OS COMPUTADORES SE HOUVER PENDENTES
         const pendentes = items.filter((i: any) => i.status === 'pendente');
         if (pendentes.length > 0) {
           const first = pendentes[0];
@@ -580,33 +459,12 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
         if (supabase) {
           try {
-            const payload = items.map((i: any) => ({
-              id: String(i.id),
-              solicitation_code: i.solicitationCode || null,
-              material: i.material,
-              serial: i.serial,
-              centro: i.centro,
-              deposito_origem: i.depositoOrigem,
-              deposito_destino: i.depositoDestino,
-              status: i.status,
-              criado_em: i.criadoEm,
-              criado_por: i.criadoPor,
-              atualizado_em: i.atualizadoEm || new Date().toISOString(),
-              atualizado_por: i.atualizadoPor || null,
-              sap_doc_number: i.sapDocNumber || null,
-              observacoes: i.observacoes || null,
-              batch_id: i.batchId || null,
-              label_photo_url: i.labelPhotoUrl || null,
-              originator_client_id: i.originatorClientId || null,
-            }));
-
-            let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
-
-            if (error && (error.code === '42703' || error.message?.includes('column'))) {
-              console.warn('Backend: colunas estendidas ausentes no Supabase, tentando com campos base...');
-              const corePayload = items.map((i: any) => ({
+            if (items.length === 0) {
+              await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
+            } else {
+              const payload = items.map((i: any) => ({
                 id: String(i.id),
-                solicitation_code: i.solicitationCode || `SOL-${i.id}`,
+                solicitation_code: i.solicitationCode || null,
                 material: i.material,
                 serial: i.serial,
                 centro: i.centro,
@@ -616,10 +474,35 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
                 criado_em: i.criadoEm,
                 criado_por: i.criadoPor,
                 atualizado_em: i.atualizadoEm || new Date().toISOString(),
+                atualizado_por: i.atualizadoPor || null,
                 sap_doc_number: i.sapDocNumber || null,
                 observacoes: i.observacoes || null,
+                batch_id: i.batchId || null,
+                label_photo_url: i.labelPhotoUrl || null,
+                originator_client_id: i.originatorClientId || null,
               }));
-              await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
+
+              let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+
+              if (error && (error.code === '42703' || error.message?.includes('column'))) {
+                console.warn('Backend: colunas estendidas ausentes no Supabase, tentando com campos base...');
+                const corePayload = items.map((i: any) => ({
+                  id: String(i.id),
+                  solicitation_code: i.solicitationCode || `SOL-${i.id}`,
+                  material: i.material,
+                  serial: i.serial,
+                  centro: i.centro,
+                  deposito_origem: i.depositoOrigem,
+                  deposito_destino: i.depositoDestino,
+                  status: i.status,
+                  criado_em: i.criadoEm,
+                  criado_por: i.criadoPor,
+                  atualizado_em: i.atualizadoEm || new Date().toISOString(),
+                  sap_doc_number: i.sapDocNumber || null,
+                  observacoes: i.observacoes || null,
+                }));
+                await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
+              }
             }
           } catch (e) {
             console.warn('Erro ao atualizar Supabase no POST:', e);

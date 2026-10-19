@@ -7,145 +7,8 @@ const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Dados iniciais fornecidos pelo usuário no prompt
-export const INITIAL_SEED: TransferItem[] = [
-  {
-    id: 'seed-1',
-    solicitationCode: 'SOL-2401',
-    material: 'MDWTF08B1',
-    serial: '541760002ZGB4133400502',
-    centro: 'B124',
-    depositoOrigem: 'B148',
-    depositoDestino: 'B110',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    prioridadeFifo: 1,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-001',
-    observacoes: 'Urgente para expedição da tarde',
-  },
-  {
-    id: 'seed-2',
-    solicitationCode: 'SOL-2401',
-    material: 'MDWTF08B1',
-    serial: '541760002ZGB4133400533',
-    centro: 'B124',
-    depositoOrigem: 'B148',
-    depositoDestino: 'B110',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    prioridadeFifo: 2,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-001',
-  },
-  {
-    id: 'seed-3',
-    solicitationCode: 'SOL-2402',
-    material: 'TSM62',
-    serial: '541711001X9B6233500679',
-    centro: 'B124',
-    depositoOrigem: 'B148',
-    depositoDestino: 'B111',
-    status: 'em_analise',
-    criadoEm: new Date(Date.now() - 85 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    atualizadoPor: 'Carlos (Time Midea SAP)',
-    prioridadeFifo: 3,
-    slaStatus: 'atencao',
-    batchId: 'BATCH-002',
-    observacoes: 'Validando saldo físico x contábil no SAP MMBE',
-  },
-  {
-    id: 'seed-4',
-    solicitationCode: 'SOL-2403',
-    material: 'PP5MS1',
-    serial: 'PS142600024',
-    centro: 'B124',
-    depositoOrigem: 'B110',
-    depositoDestino: 'B111',
-    status: 'concluido',
-    criadoEm: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    atualizadoPor: 'Ana Paula (Time Midea SAP)',
-    sapDocNumber: '4900188921',
-    prioridadeFifo: 4,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-003',
-    observacoes: 'Movimentação 311 efetuada no SAP. Liberado no WMS.',
-  },
-  {
-    id: 'seed-5',
-    solicitationCode: 'SOL-2404',
-    material: '38TAVCB18M5',
-    serial: 'S3226B22695419',
-    centro: 'B123',
-    depositoOrigem: 'B110',
-    depositoDestino: 'B111',
-    status: 'divergencia',
-    criadoEm: new Date(Date.now() - 210 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    atualizadoPor: 'Carlos (Time Midea SAP)',
-    prioridadeFifo: 5,
-    slaStatus: 'estourado',
-    batchId: 'BATCH-004',
-    observacoes: 'Divergência: Serial não encontrado em estoque no depósito B110 do Centro B123. Verificar se está bloqueado ou em trânsito.',
-  },
-  {
-    id: 'seed-6',
-    solicitationCode: 'SOL-2405',
-    material: 'QCL108BB',
-    serial: 'S1326B21294802',
-    centro: 'B179',
-    depositoOrigem: 'B111',
-    depositoDestino: 'B413',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    prioridadeFifo: 6,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-005',
-  },
-  {
-    id: 'seed-7',
-    solicitationCode: 'SOL-2406',
-    material: 'QCL108BB',
-    serial: 'S1326B21294807',
-    centro: 'B158',
-    depositoOrigem: 'B111',
-    depositoDestino: 'B114',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    prioridadeFifo: 7,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-006',
-  },
-  {
-    id: 'seed-8',
-    solicitationCode: 'SOL-2406',
-    material: 'QCL108BB',
-    serial: 'S1326B21294814',
-    centro: 'B158',
-    depositoOrigem: 'B111',
-    depositoDestino: 'B114',
-    status: 'pendente',
-    criadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    criadoPor: 'Time Buiatte (Sênior WMS)',
-    atualizadoEm: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    prioridadeFifo: 8,
-    slaStatus: 'no_prazo',
-    batchId: 'BATCH-006',
-  },
-];
+// Inicialização limpa e pronta para uso em produção
+export const INITIAL_SEED: TransferItem[] = [];
 
 export function mapRowToTransferItem(d: any, index = 0): TransferItem {
   const criadoEm = d.criado_em || d.criadoEm || new Date().toISOString();
@@ -230,7 +93,7 @@ export async function fetchTransferItems(): Promise<{
         .select('*')
         .order('criado_em', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         const mapped: TransferItem[] = data.map((d: any, index: number) => mapRowToTransferItem(d, index));
         const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
         const resolved = applyPendingLocalUpdates(active);
@@ -240,9 +103,6 @@ export async function fetchTransferItems(): Promise<{
         }
 
         return { items: resolved, source: 'supabase', purgedCount, isConnected: true };
-      } else if (!error && data && data.length === 0) {
-        await saveTransferItems(INITIAL_SEED);
-        return { items: INITIAL_SEED, source: 'supabase', isConnected: true };
       }
     } catch (err) {
       console.warn('Tentando rota backend após exceção no Supabase:', err);
@@ -263,7 +123,7 @@ export async function fetchTransferItems(): Promise<{
 
       if (res.ok) {
         const json = await res.json();
-        if (json && Array.isArray(json.items) && json.items.length > 0) {
+        if (json && Array.isArray(json.items)) {
           const mapped: TransferItem[] = json.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
           const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
           const resolved = applyPendingLocalUpdates(active);
@@ -279,32 +139,34 @@ export async function fetchTransferItems(): Promise<{
   // 3. Fallback LocalStorage (garante que o app nunca quebre nem trave em tela branca)
   if (typeof window !== 'undefined') {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       try {
         const parsed: TransferItem[] = JSON.parse(raw);
-        const { active, purgedCount } = purgeOldMonthlyRecords(parsed);
+        if (Array.isArray(parsed)) {
+          const { active, purgedCount } = purgeOldMonthlyRecords(parsed);
 
-        const updated = active.map((item, idx) => ({
-          ...item,
-          prioridadeFifo: idx + 1,
-          slaStatus: calculateSLA(item.criadoEm, item.status).slaStatus,
-        }));
+          const updated = active.map((item, idx) => ({
+            ...item,
+            prioridadeFifo: idx + 1,
+            slaStatus: calculateSLA(item.criadoEm, item.status).slaStatus,
+          }));
 
-        const resolved = applyPendingLocalUpdates(updated);
+          const resolved = applyPendingLocalUpdates(updated);
 
-        if (purgedCount > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+          if (purgedCount > 0) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+          }
+
+          return { items: resolved, source: 'local', purgedCount, isConnected: false };
         }
-
-        return { items: resolved, source: 'local', purgedCount, isConnected: false };
       } catch (e) {
         console.error('Falha ao ler dados do localStorage:', e);
       }
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SEED));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
   }
 
-  return { items: INITIAL_SEED, source: 'local', isConnected: false };
+  return { items: [], source: 'local', isConnected: false };
 }
 
 // Rastreamento de modificações locais recentes com período de carência de 15 segundos
@@ -463,34 +325,13 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
   const supabase = getSupabase();
   if (supabase) {
     try {
-      const payload = items.map((i) => ({
-        id: String(i.id),
-        solicitation_code: i.solicitationCode || null,
-        material: i.material,
-        serial: i.serial,
-        centro: i.centro,
-        deposito_origem: i.depositoOrigem,
-        deposito_destino: i.depositoDestino,
-        status: i.status,
-        criado_em: i.criadoEm,
-        criado_por: i.criadoPor,
-        atualizado_em: i.atualizadoEm,
-        atualizado_por: i.atualizadoPor || null,
-        sap_doc_number: i.sapDocNumber || null,
-        observacoes: i.observacoes || null,
-        batch_id: i.batchId || null,
-        label_photo_url: i.labelPhotoUrl || null,
-        originator_client_id: i.originatorClientId || null,
-      }));
-
-      let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
-
-      // Se falhar por colunas ausentes no schema existente do Supabase (código 42703)
-      if (error && (error.code === '42703' || error.message?.includes('column'))) {
-        console.warn('Supabase: detectada ausência de colunas opcionais. Executando upsert resiliente com campos base...');
-        const corePayload = items.map((i) => ({
+      if (items.length === 0) {
+        const { error } = await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
+        if (!error) savedSuccessfully = true;
+      } else {
+        const payload = items.map((i) => ({
           id: String(i.id),
-          solicitation_code: i.solicitationCode || `SOL-${i.id}`,
+          solicitation_code: i.solicitationCode || null,
           material: i.material,
           serial: i.serial,
           centro: i.centro,
@@ -500,17 +341,43 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
           criado_em: i.criadoEm,
           criado_por: i.criadoPor,
           atualizado_em: i.atualizadoEm,
+          atualizado_por: i.atualizadoPor || null,
           sap_doc_number: i.sapDocNumber || null,
           observacoes: i.observacoes || null,
+          batch_id: i.batchId || null,
+          label_photo_url: i.labelPhotoUrl || null,
+          originator_client_id: i.originatorClientId || null,
         }));
-        const retryRes = await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
-        error = retryRes.error;
-      }
 
-      if (!error) {
-        savedSuccessfully = true;
-      } else {
-        console.error('Aviso: Supabase upsert error:', error.message);
+        let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
+
+        // Se falhar por colunas ausentes no schema existente do Supabase (código 42703)
+        if (error && (error.code === '42703' || error.message?.includes('column'))) {
+          console.warn('Supabase: detectada ausência de colunas opcionais. Executando upsert resiliente com campos base...');
+          const corePayload = items.map((i) => ({
+            id: String(i.id),
+            solicitation_code: i.solicitationCode || `SOL-${i.id}`,
+            material: i.material,
+            serial: i.serial,
+            centro: i.centro,
+            deposito_origem: i.depositoOrigem,
+            deposito_destino: i.depositoDestino,
+            status: i.status,
+            criado_em: i.criadoEm,
+            criado_por: i.criadoPor,
+            atualizado_em: i.atualizadoEm,
+            sap_doc_number: i.sapDocNumber || null,
+            observacoes: i.observacoes || null,
+          }));
+          const retryRes = await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
+          error = retryRes.error;
+        }
+
+        if (!error) {
+          savedSuccessfully = true;
+        } else {
+          console.error('Aviso: Supabase upsert error:', error.message);
+        }
       }
     } catch (err) {
       console.warn('Falha na requisição para o Supabase:', err);
@@ -548,6 +415,63 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
   }
 
   return savedSuccessfully;
+}
+
+/**
+ * Limpar e zerar todos os registros de transferências para início limpo da operação oficial
+ */
+export async function clearAllTransferRecords(): Promise<boolean> {
+  let anySuccess = false;
+
+  // 1. Limpa o cache local
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+      localStorage.removeItem(ARCHIVE_KEY);
+      anySuccess = true;
+    } catch (e) {}
+  }
+
+  // 2. Limpa o banco de dados Supabase na nuvem
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('transfer_requests')
+        .delete()
+        .neq('id', 'placeholder_none');
+      if (!error) anySuccess = true;
+    } catch (e) {
+      console.warn('Erro ao limpar Supabase:', e);
+    }
+  }
+
+  // 3. Notifica o backend Vercel e as outras abas/computadores
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) anySuccess = true;
+    } catch (e) {
+      // Backend offline
+    }
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({
+          type: 'DATA_CLEARED',
+          originatorSessionId: CURRENT_SESSION_ID,
+          timestamp: Date.now(),
+        });
+        bc.close();
+      }
+    } catch (e) {}
+  }
+
+  return anySuccess;
 }
 
 // Identificador único persistente deste navegador/computador
@@ -831,7 +755,7 @@ export function computeKPIs(items: TransferItem[]): KPIStats {
 
   const taxaSlaNoPrazo = totalItens > 0 ? Math.round((noPrazoCount / totalItens) * 100) : 100;
   const tempoMedioAtendimentoMin =
-    concluidosComTempo > 0 ? Math.round(totalMinutosAtendimento / concluidosComTempo) : 38;
+    concluidosComTempo > 0 ? Math.round(totalMinutosAtendimento / concluidosComTempo) : 0;
 
   return {
     totalItens,

@@ -509,6 +509,8 @@ export default function App() {
           }
           onUpdateStatusSingle={handleUpdateStatusSingle}
           onAttachLabelPhoto={handleAttachLabelPhoto}
+          onOpenNewModal={() => setIsNewModalOpen(true)}
+          onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
         />
       </main>
 
@@ -583,6 +585,13 @@ export default function App() {
           isOpen={isDiagnosticOpen}
           onClose={() => setIsDiagnosticOpen(false)}
           isCloudConnected={isCloudConnected}
+          onRecordsCleared={() => {
+            setItems([]);
+            showSuccessNotice(
+              'Banco de Dados Zerado!',
+              'Todos os registros foram limpos com sucesso. O sistema está pronto para a operação oficial.'
+            );
+          }}
         />
       )}
 

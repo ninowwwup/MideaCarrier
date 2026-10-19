@@ -33,6 +33,8 @@ interface TransferTableProps {
   onUpdateStatusSingle: (id: string, newStatus: TransferStatus) => void;
   onBatchUpdateStatus?: (ids: string[], newStatus: TransferStatus) => void;
   onAttachLabelPhoto?: (itemId: string, photoUrl: string) => void;
+  onOpenNewModal?: () => void;
+  onOpenBatchPaste?: () => void;
 }
 
 export type ColumnKey =
@@ -74,6 +76,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   onUpdateStatusSingle,
   onBatchUpdateStatus,
   onAttachLabelPhoto,
+  onOpenNewModal,
+  onOpenBatchPaste,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -832,14 +836,48 @@ export const TransferTable: React.FC<TransferTableProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-500">
-                    <div className="flex flex-col items-center justify-center">
-                      <Filter className="w-8 h-8 text-slate-300 mb-2" />
-                      <p className="text-sm font-semibold text-slate-700">Nenhuma solicitação encontrada</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Tente alterar os termos de busca ou filtros selecionados.
-                      </p>
-                    </div>
+                  <td colSpan={11} className="py-14 text-center text-slate-500">
+                    {items.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center max-w-md mx-auto p-4">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#002664] to-[#249ED5] text-white flex items-center justify-center shadow-lg mb-3">
+                          <Sparkles className="w-7 h-7 text-cyan-200" />
+                        </div>
+                        <h4 className="text-base font-bold text-slate-800">
+                          Sistema Pronto para Operação Oficial!
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                          Nenhum registro de teste ativo. As novas solicitações de transferência criadas pelo Time Buiatte aparecerão aqui em tempo real com prioridade FIFO, SLA e conferência SAP.
+                        </p>
+                        <div className="flex items-center gap-2.5 mt-4">
+                          {onOpenNewModal && (
+                            <button
+                              type="button"
+                              onClick={onOpenNewModal}
+                              className="px-4 py-2 rounded-xl bg-[#002664] hover:bg-[#003380] text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                            >
+                              + Nova Solicitação (N)
+                            </button>
+                          )}
+                          {onOpenBatchPaste && (
+                            <button
+                              type="button"
+                              onClick={onOpenBatchPaste}
+                              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all border border-slate-300 active:scale-95 cursor-pointer"
+                            >
+                              Colar do Excel (V)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center">
+                        <Filter className="w-8 h-8 text-slate-300 mb-2" />
+                        <p className="text-sm font-semibold text-slate-700">Nenhuma solicitação encontrada</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Tente alterar os termos de busca ou filtros selecionados.
+                        </p>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
