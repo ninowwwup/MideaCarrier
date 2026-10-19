@@ -69,91 +69,94 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="bg-white/85 backdrop-blur-xl border-b border-white/40 sticky top-0 z-30 shadow-md">
+    <header className="bg-white/10 backdrop-blur-2xl border-b border-white/20 sticky top-0 z-30 shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all">
       {/* Top Navbar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-3 gap-3">
           {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-[#002363] via-[#002664] to-[#249ED5] flex items-center justify-center text-white shadow-md ring-2 ring-white/60 transition-transform active:scale-95 cursor-pointer">
-              <Boxes className="w-6 h-6 text-white" />
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-white/20 border border-white/35 backdrop-blur-md flex items-center justify-center text-white shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+              <Boxes className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] bg-clip-text text-transparent">
+                <span className="font-extrabold text-xl sm:text-2xl tracking-tight text-white drop-shadow-sm">
                   MIGOU
                 </span>
-                <span className="text-[10px] font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#002664] text-white shadow-2xs">
+                <span className="text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 backdrop-blur-md shadow-xs">
                   SAP MIGO
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-white/80 font-normal hidden sm:block">
                 Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea
               </p>
             </div>
           </div>
 
-          {/* Perspective Selector (Desktop) - Apenas Ícones com Tooltips */}
-          <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs gap-0.5">
+          {/* Perspective Selector (Desktop) - Estilo Segmented Control Figma */}
+          <div className="hidden lg:flex items-center bg-black/20 backdrop-blur-xl p-1 rounded-2xl border border-white/20 shadow-inner gap-1">
             <button
               type="button"
               onClick={() => onSelectRole('ambos')}
-              className={`p-2 rounded-lg text-xs transition-all active:scale-95 ${
+              className={`px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${
                 currentRole === 'ambos'
-                  ? 'bg-white text-[#002664] shadow-xs font-bold border border-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                  : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
               }`}
               title="Espelho Geral: Visualizar todas as solicitações de todos os centros"
               aria-label="Espelho Geral"
             >
-              <Layers className="w-4 h-4 text-[#249ED5]" />
+              <Layers className={`w-3.5 h-3.5 ${currentRole === 'ambos' ? 'text-blue-600' : 'text-white/80'}`} />
+              <span>Espelho Geral</span>
             </button>
             <button
               type="button"
               onClick={() => onSelectRole('buiatte')}
-              className={`relative p-2 rounded-lg text-xs transition-all active:scale-95 ${
+              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${
                 currentRole === 'buiatte'
-                  ? 'bg-[#249ED5] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                  : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
               }`}
               title="Visão Time Buiatte (WMS Sênior - Solicitações e Divergências)"
               aria-label="Time Buiatte"
             >
-              <Users className="w-4 h-4" />
+              <Users className={`w-3.5 h-3.5 ${currentRole === 'buiatte' ? 'text-blue-600' : 'text-white/80'}`} />
+              <span>Time Buiatte</span>
               {totalErrors > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse ml-0.5" />
               )}
             </button>
             <button
               type="button"
               onClick={() => onSelectRole('midea')}
-              className={`relative p-2 rounded-lg text-xs transition-all active:scale-95 ${
+              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${
                 currentRole === 'midea'
-                  ? 'bg-[#002664] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                  : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
               }`}
               title="Visão Time Midea (SAP MIGO - Fila FIFO e Atendimento)"
               aria-label="Time Midea"
             >
-              <Sparkles className="w-4 h-4 text-[#C2DEEB]" />
+              <Sparkles className={`w-3.5 h-3.5 ${currentRole === 'midea' ? 'text-blue-600' : 'text-white/80'}`} />
+              <span>Time Midea</span>
               {totalPending > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs">
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs ml-0.5">
                   {totalPending}
                 </span>
               )}
             </button>
           </div>
 
-          {/* Quick Tools & Indicators - Todos os Botões Apenas Ícones */}
+          {/* Quick Tools & Indicators - Botões Dinâmicos, Leves e Suaves (Figma Style) */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Status Indicativo Silencioso / Diagnóstico Supabase & Nuvem */}
             <button
               type="button"
               onClick={onOpenDatabaseDiagnostic}
-              className={`p-2 rounded-xl text-xs font-bold border shadow-2xs select-none flex items-center justify-center transition-all active:scale-95 hover:ring-2 hover:ring-[#249ED5]/50 ${
+              className={`p-2.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 ${
                 isCloudConnected
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                  : 'bg-blue-50 text-[#002664] border-[#249ED5]/40 hover:bg-blue-100'
+                  ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
+                  : 'bg-white/15 text-white border-white/25 hover:bg-white/25'
               }`}
               title={
                 isCloudConnected
@@ -162,36 +165,36 @@ export const Header: React.FC<HeaderProps> = ({
               }
               aria-label="Diagnóstico do Banco de Dados e Supabase"
             >
-              <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
+              <Radio className="w-4 h-4 text-emerald-300 animate-pulse" />
             </button>
 
             {/* PWA Install Button (Apenas Ícone) */}
             <PWAInstallButton />
 
             {/* Som Toggle & Teste de Gota d'Água (Apenas Ícones) */}
-            <div className="flex items-center gap-0.5 bg-white/70 rounded-xl p-0.5 border border-slate-200">
+            <div className="flex items-center gap-0.5 bg-white/15 backdrop-blur-md rounded-xl p-0.5 border border-white/25 shadow-xs">
               <button
                 type="button"
                 onClick={onToggleSound}
-                className={`p-2 rounded-lg border transition-all active:scale-90 ${
+                className={`p-2 rounded-lg transition-all duration-200 active:scale-90 ${
                   isSoundEnabled
-                    ? 'bg-blue-50 text-[#002664] border-blue-200 hover:bg-blue-100 shadow-2xs'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                    ? 'bg-white/25 text-white shadow-2xs'
+                    : 'text-white/50 hover:text-white'
                 }`}
                 title={isSoundEnabled ? 'Som de alerta ativado (Clique para mutar)' : 'Som de alerta desativado (Clique para ativar)'}
                 aria-label="Alternar som de alerta"
               >
-                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-[#249ED5]" /> : <VolumeX className="w-4 h-4" />}
+                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-cyan-200" /> : <VolumeX className="w-4 h-4" />}
               </button>
               
               <button
                 type="button"
                 onClick={onTestAlertSound}
-                className="p-2 rounded-lg text-[#002664] hover:bg-blue-50 transition-all active:scale-95"
+                className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-all duration-200 active:scale-90"
                 title="Testar som suave de gota d'água"
                 aria-label="Testar som suave de gota d'água"
               >
-                <Droplets className="w-4 h-4 text-[#249ED5]" />
+                <Droplets className="w-4 h-4 text-cyan-200" />
               </button>
             </div>
 
@@ -200,21 +203,21 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onTestPush}
-                className="p-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition-all active:scale-95 shadow-2xs"
+                className="p-2.5 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/30 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs"
                 title="Push Manager Ativo! Clique para testar notificação nativa"
                 aria-label="Testar Notificação Push"
               >
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <ShieldCheck className="w-4 h-4 text-emerald-300" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={onEnablePushManager}
-                className="p-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md transition-all active:scale-95 animate-pulse"
+                className="p-2.5 rounded-xl text-xs font-semibold text-white bg-amber-500/30 hover:bg-amber-500/40 border border-amber-300/50 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs animate-pulse"
                 title="Ativar Service Worker Push Manager para receber notificações em segundo plano"
                 aria-label="Ativar Push Manager"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="w-4 h-4 text-amber-200" />
               </button>
             )}
 
@@ -222,13 +225,13 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenLatestAlert}
-              className="relative p-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-all active:scale-90 shadow-2xs"
+              className="relative p-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs"
               title="Ver alertas em tempo real estilo Outlook"
               aria-label="Ver alertas estilo Outlook"
             >
-              <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-600' : 'text-slate-600'}`} />
+              <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-300' : 'text-white/80'}`} />
               {latestAlertCount > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-600 text-white shadow-xs">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500 text-white shadow-xs">
                   {latestAlertCount}
                 </span>
               )}
@@ -238,18 +241,18 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onExportCSV}
-              className="p-2 rounded-xl text-emerald-800 bg-emerald-50/90 border border-emerald-300 hover:bg-emerald-100 transition-all active:scale-95 shadow-2xs group"
+              className="p-2.5 rounded-xl text-white bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs group"
               title="Baixar base completa em formato Excel / CSV para indicadores"
               aria-label="Baixar planilha Excel"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+              <FileSpreadsheet className="w-4 h-4 text-emerald-300 group-hover:scale-110 transition-transform duration-200" />
             </button>
 
             {/* Menu Mobile Toggle */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100"
+              className="lg:hidden p-2.5 rounded-xl border border-white/25 bg-white/15 text-white hover:bg-white/25 transition-all duration-200"
               title="Menu de navegação"
               aria-label="Menu"
             >
@@ -260,8 +263,8 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Expanded Menu */}
         {mobileMenuOpen && (
-          <div className="lg:hidden py-3 border-t border-slate-200 space-y-3 animate-in fade-in duration-150">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">
+          <div className="lg:hidden py-3 border-t border-white/15 space-y-3 animate-in fade-in duration-150">
+            <div className="text-xs font-semibold text-white/70 uppercase tracking-wider px-1">
               Alternar Modo de Visualização
             </div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -271,10 +274,10 @@ export const Header: React.FC<HeaderProps> = ({
                   onSelectRole('ambos');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2 text-xs rounded-lg font-bold border transition-colors ${
+                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${
                   currentRole === 'ambos'
-                    ? 'bg-blue-50 text-[#002664] border-[#249ED5]'
-                    : 'bg-white text-slate-700 border-slate-200'
+                    ? 'bg-white text-slate-900 border-white shadow-xs'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
                 }`}
               >
                 Espelho Geral
@@ -285,10 +288,10 @@ export const Header: React.FC<HeaderProps> = ({
                   onSelectRole('buiatte');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2 text-xs rounded-lg font-bold border transition-colors ${
+                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${
                   currentRole === 'buiatte'
-                    ? 'bg-[#249ED5] text-white border-transparent'
-                    : 'bg-white text-slate-700 border-slate-200'
+                    ? 'bg-white text-[#00609C] border-white shadow-xs'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
                 }`}
               >
                 Time Buiatte
@@ -299,10 +302,10 @@ export const Header: React.FC<HeaderProps> = ({
                   onSelectRole('midea');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2 text-xs rounded-lg font-bold border transition-colors ${
+                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${
                   currentRole === 'midea'
-                    ? 'bg-[#002664] text-white border-transparent'
-                    : 'bg-white text-slate-700 border-slate-200'
+                    ? 'bg-white text-[#002664] border-white shadow-xs'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
                 }`}
               >
                 Time Midea
@@ -315,9 +318,9 @@ export const Header: React.FC<HeaderProps> = ({
                 onExportCSV();
                 setMobileMenuOpen(false);
               }}
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg"
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
               <span>Exportar Base em Excel (CSV)</span>
             </button>
 
@@ -328,9 +331,9 @@ export const Header: React.FC<HeaderProps> = ({
                   onOpenDatabaseDiagnostic();
                   setMobileMenuOpen(false);
                 }}
-                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-[#002664] bg-blue-50 border border-blue-200 rounded-lg"
+                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
               >
-                <Radio className="w-4 h-4 text-[#249ED5]" />
+                <Radio className="w-4 h-4 text-emerald-400" />
                 <span>Diagnóstico do Banco & Supabase</span>
               </button>
             )}
@@ -338,31 +341,31 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* HERO ACTION BAR: Paleta Imperial Blue (#002664 & #002363) com Blue Bell (#249ED5) */}
-      <div className="bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white px-4 sm:px-6 lg:px-8 py-3 shadow-inner">
+      {/* HERO ACTION BAR: Translucent Glass Integrado ao Gradiente */}
+      <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-4 sm:px-6 lg:px-8 py-2.5">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Info & Auto-limpeza status */}
-          <div className="flex items-center gap-2.5 text-xs text-white/95 text-center sm:text-left">
-            <span className="p-1 rounded-md bg-white/15 hidden sm:inline-block">
+          <div className="flex items-center gap-2.5 text-xs text-white/90 text-center sm:text-left font-medium">
+            <span className="p-1 rounded-lg bg-white/15 border border-white/25 backdrop-blur-sm hidden sm:inline-block">
               <CalendarCheck2 className="w-4 h-4 text-[#C2DEEB]" />
             </span>
             <span>
-              <strong>Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com histórico mensal leve de 30 dias.
+              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com histórico de 30 dias.
             </span>
           </div>
 
-          {/* BOTÕES PRINCIPAIS MAIORES COM EFEITO DE TECLA */}
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          {/* BOTÕES DINÂMICOS, LEVES E SUAVES (ESTILO FIGMA) */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
             {/* BOTÃO COLAR TABELA */}
             <button
               type="button"
               onClick={onOpenBatchPaste}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-white/20 hover:bg-white/30 border border-white/40 backdrop-blur-sm transition-all duration-150 active:translate-y-0.5 active:scale-95 shadow-md hover:shadow-lg group"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-white bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group"
               title="Colar tabela do Excel ou mensagem do WhatsApp diretamente (Atalho: V)"
             >
-              <FileSpreadsheet className="w-4 h-4 text-[#C2DEEB] group-hover:scale-110 transition-transform" />
-              <span>COLAR TABELA</span>
-              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-black/25 text-white rounded border border-white/20">
+              <FileSpreadsheet className="w-4 h-4 text-[#C2DEEB] group-hover:scale-110 transition-transform duration-200" />
+              <span className="tracking-wide">COLAR TABELA</span>
+              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/20 text-white rounded border border-white/30">
                 V
               </kbd>
             </button>
@@ -371,12 +374,12 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenNewModal}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold text-[#002363] bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-amber-300 border-2 border-yellow-200 transition-all duration-150 active:translate-y-0.5 active:scale-95 shadow-lg hover:shadow-amber-400/25 group"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 bg-white hover:bg-white/95 border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_25px_rgba(255,255,255,0.35)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group"
               title="Nova Solicitação com múltiplos seriais (Atalho: N)"
             >
-              <PlusCircle className="w-5 h-5 text-[#002363] group-hover:rotate-90 transition-transform duration-200" />
-              <span>NOVA SOLICITAÇÃO</span>
-              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-black/15 text-slate-900 rounded border border-black/20">
+              <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 group-hover:rotate-90 transition-transform duration-300" />
+              <span className="tracking-wide">NOVA SOLICITAÇÃO</span>
+              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-700 rounded border border-slate-300">
                 N
               </kbd>
             </button>

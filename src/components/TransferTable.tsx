@@ -262,9 +262,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
   return (
     <>
-      <div className="bg-white/95 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-[0_20px_60px_rgba(2,10,24,0.45)] overflow-hidden transition-all ring-1 ring-white/30">
+      <div className="bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-[0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden transition-all ring-1 ring-white/40">
         {/* Search & Filter Toolbar com Glassmorphism */}
-        <div className="p-3.5 sm:p-4 border-b border-slate-200/80 bg-slate-50/70 backdrop-blur-md space-y-3">
+        <div className="p-3.5 sm:p-4 border-b border-slate-200/60 bg-white/60 backdrop-blur-md space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             {/* Campo de Busca Rápida com Efeito de Tecla [Ctrl+K] */}
             <div className="relative flex-1 max-w-md">
@@ -275,7 +275,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 placeholder="Buscar por Material, Serial, Centro, Doc SAP ou Depósito..."
                 value={filters.busca}
                 onChange={(e) => onFilterChange({ ...filters, busca: e.target.value })}
-                className="w-full pl-9 pr-14 py-2 text-xs bg-white/90 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA] focus:border-transparent placeholder:text-slate-400 shadow-2xs"
+                className="w-full pl-9 pr-14 py-2 text-xs bg-white/80 focus:bg-white text-slate-800 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#249ED5]/50 focus:border-transparent placeholder:text-slate-400 shadow-2xs transition-all duration-200"
               />
               <div className="absolute right-2 top-2 flex items-center gap-1">
                 {filters.busca ? (
@@ -294,13 +294,13 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               </div>
             </div>
 
-            {/* Filtros Rápidos & Botão Estilo AppSheet */}
+            {/* Filtros Rápidos Estilo Figma */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Status Filter */}
               <select
                 value={filters.status}
                 onChange={(e) => onFilterChange({ ...filters, status: e.target.value as any })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/90 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
+                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
               >
                 <option value="todos">Status: Todos</option>
                 <option value="pendente">Pendente (FIFO)</option>
@@ -313,7 +313,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <select
                 value={filters.centro}
                 onChange={(e) => onFilterChange({ ...filters, centro: e.target.value })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/90 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
+                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
               >
                 <option value="todos">Centro: Todos</option>
                 {allCentros.map((c) => (
@@ -327,7 +327,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <select
                 value={filters.depositoOrigem}
                 onChange={(e) => onFilterChange({ ...filters, depositoOrigem: e.target.value })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/90 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
+                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
               >
                 <option value="todos">Dep. Origem: Todos</option>
                 {allDepsOrigem.map((d) => (
@@ -341,7 +341,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <select
                 value={filters.depositoDestino}
                 onChange={(e) => onFilterChange({ ...filters, depositoDestino: e.target.value })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/90 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-[#0083CA] shadow-2xs"
+                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
               >
                 <option value="todos">Dep. Destino: Todos</option>
                 {allDepsDestino.map((d) => (
@@ -371,7 +371,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       apenasDivergencias: false,
                     })
                   }
-                  className="px-2 py-1 text-xs text-rose-600 hover:text-rose-800 font-medium active:scale-95"
+                  className="px-2.5 py-1 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg font-medium transition-all duration-200 active:scale-95"
                 >
                   Limpar
                 </button>
@@ -379,14 +379,14 @@ export const TransferTable: React.FC<TransferTableProps> = ({
             </div>
           </div>
 
-          {/* Selected Rows Batch Action Bar */}
+          {/* Selected Rows Batch Action Bar - Botões Dinâmicos, Leves e Suaves */}
           {selectedIds.size > 0 && (
-            <div className="flex flex-wrap items-center justify-between p-2.5 bg-blue-50/95 border border-blue-200 rounded-xl animate-in fade-in duration-150 gap-2 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between p-2.5 bg-blue-50/90 border border-blue-200/80 rounded-2xl animate-in fade-in duration-150 gap-2 shadow-sm">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#0083CA] text-white">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#00609C] text-white shadow-xs">
                   {selectedIds.size} selecionado(s)
                 </span>
-                <span className="text-xs text-slate-600 hidden sm:inline">
+                <span className="text-xs text-slate-600 hidden sm:inline font-medium">
                   Ações em lote para o SAP:
                 </span>
               </div>
@@ -395,25 +395,25 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 <button
                   type="button"
                   onClick={handleCopySelectedTable}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-blue-300 text-[#00609C] hover:bg-blue-100 transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-2xs"
                 >
-                  <Terminal className="w-3.5 h-3.5" />
+                  <Terminal className="w-3.5 h-3.5 text-blue-600" />
                   <span>Copiar TAB</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleCopySelectedSerials}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-blue-300 text-[#00609C] hover:bg-blue-100 transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-2xs"
                 >
-                  <Layers className="w-3.5 h-3.5" />
+                  <Layers className="w-3.5 h-3.5 text-blue-600" />
                   <span>Copiar Seriais</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => onOpenSAPModal(selectedItemsList)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-black text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
                   <span>Assistente SAP</span>
@@ -422,7 +422,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenResolutionModal(selectedItemsList, 'concluir')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs"
                   title="Concluir itens selecionados no SAP"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -432,7 +432,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 <button
                   type="button"
                   onClick={() => onBatchUpdateStatus?.(selectedItemsList.map(i => i.id), 'em_analise')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs"
                   title="Alterar status dos itens selecionados para Em Análise"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -442,7 +442,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenResolutionModal(selectedItemsList, 'divergencia')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-all active:scale-95 active:translate-y-0.5 shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs"
                   title="Registrar divergência nos itens selecionados"
                 >
                   <AlertOctagon className="w-3.5 h-3.5" />

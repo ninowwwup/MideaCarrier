@@ -503,12 +503,22 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_120%_90%_at_50%_-15%,#0f356e_0%,#09234b_35%,#051530_70%,#020a18_100%)] flex flex-col text-slate-800 relative overflow-hidden font-sans selection:bg-[#249ED5] selection:text-white">
-      {/* Elementos Mesh Ambientais e Grid Glow de Alta Fidelidade */}
-      <div className="absolute inset-0 bg-[radial-gradient(#C2DEEB_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.04] pointer-events-none" />
-      <div className="absolute top-[-8rem] left-[-6rem] w-[42rem] h-[42rem] rounded-full bg-[#00609C]/35 blur-[140px] pointer-events-none" />
-      <div className="absolute top-[28%] right-[-8rem] w-[45rem] h-[45rem] rounded-full bg-[#249ED5]/25 blur-[150px] pointer-events-none" />
-      <div className="absolute bottom-[-8rem] left-[20%] w-[50rem] h-[50rem] rounded-full bg-[#002664]/40 blur-[170px] pointer-events-none" />
+    <div className="min-h-screen figma-aurora-bg flex flex-col text-slate-800 relative overflow-hidden font-sans selection:bg-[#249ED5] selection:text-white">
+      {/* Mesh Orbs Ambientais para Reprodução Fiel do Gradiente da Foto */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        {/* Canto Superior Esquerdo: Pêssego / Coral Aquecido */}
+        <div className="absolute top-[-10%] left-[-8%] w-[48vw] h-[48vw] max-w-[650px] max-h-[650px] rounded-full bg-[#e48a60]/55 blur-[120px]" />
+        {/* Topo Direito / Meio Superior: Lavanda / Lilás / Roxo */}
+        <div className="absolute top-[-8%] right-[-10%] w-[52vw] h-[52vw] max-w-[700px] max-h-[700px] rounded-full bg-[#a86ee2]/50 blur-[130px]" />
+        {/* Canto Inferior Direito: Amarelo-Lima Pastel / Menta Luminoso */}
+        <div className="absolute bottom-[-10%] right-[-8%] w-[50vw] h-[50vw] max-w-[680px] max-h-[680px] rounded-full bg-[#f4f7a0]/48 blur-[120px]" />
+        {/* Meio Esquerdo: Ultramarine & Azul Escuro */}
+        <div className="absolute top-[35%] left-[-5%] w-[42vw] h-[42vw] max-w-[550px] max-h-[550px] rounded-full bg-[#12368c]/60 blur-[140px]" />
+        {/* Centro: Azul Cobalto Elétrico */}
+        <div className="absolute top-[40%] left-[30%] w-[45vw] h-[45vw] max-w-[600px] max-h-[600px] rounded-full bg-[#2563eb]/35 blur-[150px]" />
+        {/* Textura sutil de micro-grid estilo Figma */}
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:32px_32px] opacity-[0.035]" />
+      </div>
 
       {/* Header com Paleta Midea e Glassmorphism */}
       <Header
@@ -560,14 +570,14 @@ export default function App() {
       </main>
 
       {/* Rodapé Corporativo com Estilo Glassmorphism */}
-      <footer className="bg-[#002363]/90 backdrop-blur-md text-white border-t border-white/10 py-4 text-xs relative z-10">
+      <footer className="bg-slate-950/25 backdrop-blur-xl text-white border-t border-white/15 py-4 text-xs relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-[#C2DEEB] tracking-wide">MIGOU</span>
             <span>•</span>
             <span className="text-white/80">Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea</span>
           </div>
-          <div className="text-[#C2DEEB]/80 text-[11px]">
+          <div className="text-white/70 text-[11px]">
             Sincronização em tempo real (In-time) protegida por FIFO, SLA e comprovação de label.
           </div>
         </div>

@@ -17,7 +17,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={install}
-        className="p-2 rounded-xl text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition-all shadow-2xs active:scale-95"
+        className="p-2.5 rounded-xl text-emerald-200 bg-emerald-500/20 border border-emerald-400/40 hover:bg-emerald-500/30 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs"
         title="Instalar aplicativo MIGOU (PWA)"
         aria-label="Instalar aplicativo MIGOU"
       >
@@ -33,7 +33,7 @@ export const PWAInstallButton: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowIOSGuide(true)}
-          className="p-2 rounded-xl text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition-all shadow-2xs active:scale-95"
+          className="p-2.5 rounded-xl text-emerald-200 bg-emerald-500/20 border border-emerald-400/40 hover:bg-emerald-500/30 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs"
           title="Instalar aplicativo no iPhone ou iPad (PWA)"
           aria-label="Instalar no iOS"
         >
