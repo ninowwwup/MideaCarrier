@@ -606,6 +606,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
               console.warn('Backend: colunas estendidas ausentes no Supabase, tentando com campos base...');
               const corePayload = items.map((i: any) => ({
                 id: String(i.id),
+                solicitation_code: i.solicitationCode || `SOL-${i.id}`,
                 material: i.material,
                 serial: i.serial,
                 centro: i.centro,

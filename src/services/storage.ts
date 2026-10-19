@@ -489,6 +489,7 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
         console.warn('Supabase: detectada ausência de colunas opcionais. Executando upsert resiliente com campos base...');
         const corePayload = items.map((i) => ({
           id: String(i.id),
+          solicitation_code: i.solicitationCode || `SOL-${i.id}`,
           material: i.material,
           serial: i.serial,
           centro: i.centro,
@@ -871,7 +872,9 @@ create table if not exists public.transfer_requests (
   atualizado_por text,
   sap_doc_number text,
   observacoes text,
-  batch_id text
+  batch_id text,
+  label_photo_url text,
+  originator_client_id text
 );
 
 -- Habilitar SUPABASE REALTIME para propagação instantânea entre computadores (estilo AppSheet)

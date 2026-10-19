@@ -20,6 +20,9 @@ import {
 import { 
   ResolutionModal 
 } from './components/ResolutionModal';
+import {
+  DatabaseDiagnosticModal
+} from './components/DatabaseDiagnosticModal';
 import { 
   OutlookToastAlert,
   AlertNotification 
@@ -35,6 +38,7 @@ import {
 import { 
   fetchTransferItems, 
   saveTransferItems, 
+  updateSpecificTransferItems,
   createRequestsFromMultiSerial, 
   computeKPIs, 
   subscribeToRealtimeTransfers,
@@ -77,6 +81,7 @@ export default function App() {
   // Modais Operacionais
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
   const [sapModalItems, setSapModalItems] = useState<TransferItem[] | null>(null);
   const [resolutionData, setResolutionData] = useState<{
     items: TransferItem[];
@@ -343,9 +348,9 @@ export default function App() {
   const kpis = useMemo(() => computeKPIs(items), [items]);
 
   // Salvar alterações e sincronizar com Supabase na nuvem
-  const handleUpdateItems = async (newItems: TransferItem[]) => {
+  const handleUpdateItems = async (newItems: TransferItem[]): Promise<boolean> => {
     setItems(newItems);
-    await saveTransferItems(newItems);
+    return await saveTransferItems(newItems);
   };
 
   // Criar nova solicitação com múltiplos seriais
@@ -353,65 +358,79 @@ export default function App() {
     const created = createRequestsFromMultiSerial(input, items.length);
     registerLocallyRequestedItems(created);
     const nextList = [...created, ...items];
-    await handleUpdateItems(nextList);
+    const isSaved = await handleUpdateItems(nextList);
 
-    // O pop-up e som NÃO aparecem na tela de quem solicita, apenas na de quem recebe!
-    showSuccessNotice(
-      'Solicitação enviada com sucesso!',
-      `${created.length} serial(is) de ${input.material} sincronizado(s) em tempo real com o Time SAP.`
-    );
+    if (isSaved) {
+      showSuccessNotice(
+        'Solicitação salva no Supabase!',
+        `${created.length} serial(is) de ${input.material} sincronizado(s) em tempo real com o Time SAP.`
+      );
+    } else {
+      showSuccessNotice(
+        'Salvo em cache local (Aviso Supabase)',
+        `${created.length} serial(is) salvo(s) localmente. A sincronização tentará novamente em segundo plano.`
+      );
+    }
   };
 
   // Importar em lote (Colar Tabela)
   const handleImportBatch = async (batchItems: TransferItem[]) => {
     registerLocallyRequestedItems(batchItems);
     const nextList = [...batchItems, ...items];
-    await handleUpdateItems(nextList);
+    const isSaved = await handleUpdateItems(nextList);
 
-    // O pop-up e som NÃO aparecem na tela de quem solicita, apenas na de quem recebe!
     if (batchItems.length > 0) {
-      showSuccessNotice(
-        'Lote importado com sucesso!',
-        `${batchItems.length} seriais sincronizados em tempo real com o Time SAP.`
-      );
+      if (isSaved) {
+        showSuccessNotice(
+          'Lote salvo no Supabase!',
+          `${batchItems.length} seriais sincronizados em tempo real com o Time SAP.`
+        );
+      } else {
+        showSuccessNotice(
+          'Salvo em cache local (Aviso Supabase)',
+          `${batchItems.length} seriais salvos localmente. Sincronização pendente com a nuvem.`
+        );
+      }
     }
   };
 
-  // Alterar status individual rápido
+  // Alterar status individual rápido (Comando direto e cirúrgico de UPDATE)
   const handleUpdateStatusSingle = async (id: string, newStatus: TransferStatus) => {
     const now = new Date().toISOString();
-    const updated = items.map((i) =>
-      i.id === id
-        ? {
-            ...i,
-            status: newStatus,
-            atualizadoEm: now,
-            atualizadoPor: 'Time Midea (SAP)',
-          }
-        : i
-    );
-    await handleUpdateItems(updated);
+    const targetItem = items.find((i) => i.id === id);
+    if (!targetItem) return;
+
+    const updatedItem: TransferItem = {
+      ...targetItem,
+      status: newStatus,
+      atualizadoEm: now,
+      atualizadoPor: 'Time Midea (SAP)',
+    };
+    const updated = items.map((i) => (i.id === id ? updatedItem : i));
+    setItems(updated);
+    await updateSpecificTransferItems([updatedItem], updated);
   };
 
   // Anexar foto da etiqueta/label diretamente do item
   const handleAttachLabelPhoto = async (itemId: string, photoUrl: string) => {
-    const updated = items.map((i) =>
-      i.id === itemId
-        ? {
-            ...i,
-            labelPhotoUrl: photoUrl,
-            atualizadoEm: new Date().toISOString(),
-          }
-        : i
-    );
-    await handleUpdateItems(updated);
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    const updatedItem: TransferItem = {
+      ...targetItem,
+      labelPhotoUrl: photoUrl,
+      atualizadoEm: new Date().toISOString(),
+    };
+    const updated = items.map((i) => (i.id === itemId ? updatedItem : i));
+    setItems(updated);
+    await updateSpecificTransferItems([updatedItem], updated);
     showSuccessNotice(
       'Foto da Etiqueta Anexada!',
-      'Comprovação da label salva com sucesso para conferência do Time Midea no SAP.'
+      'Comprovação da label salva com sucesso no Supabase para conferência do Time Midea no SAP.'
     );
   };
 
-  // Resolução de Conclusão ou Divergência
+  // Resolução de Conclusão ou Divergência (Atualização cirúrgica em lote no Supabase)
   const handleResolutionSubmit = async (data: {
     sapDocNumber?: string;
     observacoes: string;
@@ -422,10 +441,11 @@ export default function App() {
     const idsToUpdate = new Set(resolutionData.items.map((i) => i.id));
     const now = new Date().toISOString();
     const isConcluir = resolutionData.mode === 'concluir';
+    const affectedItems: TransferItem[] = [];
 
     const updated = items.map((item) => {
       if (idsToUpdate.has(item.id)) {
-        return {
+        const up: TransferItem = {
           ...item,
           status: (isConcluir ? 'concluido' : 'divergencia') as TransferStatus,
           atualizadoEm: now,
@@ -433,11 +453,14 @@ export default function App() {
           sapDocNumber: isConcluir ? data.sapDocNumber || item.sapDocNumber : item.sapDocNumber,
           observacoes: data.observacoes || item.observacoes,
         };
+        affectedItems.push(up);
+        return up;
       }
       return item;
     });
 
-    await handleUpdateItems(updated);
+    setItems(updated);
+    await updateSpecificTransferItems(affectedItems, updated);
   };
 
   // Exportar para CSV
@@ -507,6 +530,7 @@ export default function App() {
         onTestPush={handleTestPush}
         autoPurgedCount={autoPurgedCount}
         isCloudConnected={isCloudConnected}
+        onOpenDatabaseDiagnostic={() => setIsDiagnosticOpen(true)}
       />
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
@@ -588,6 +612,15 @@ export default function App() {
           mode={resolutionData.mode}
           onClose={() => setResolutionData(null)}
           onSubmit={handleResolutionSubmit}
+        />
+      )}
+
+      {/* Modal de Diagnóstico do Banco de Dados e Supabase */}
+      {isDiagnosticOpen && (
+        <DatabaseDiagnosticModal
+          isOpen={isDiagnosticOpen}
+          onClose={() => setIsDiagnosticOpen(false)}
+          isCloudConnected={isCloudConnected}
         />
       )}
 

@@ -14,8 +14,18 @@
  */
 
 // 1. Variáveis de ambiente fornecidas pela Vercel / Vite
-const ENV_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-const ENV_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+const ENV_URL = 
+  (import.meta as any).env?.VITE_SUPABASE_URL ||
+  (import.meta as any).env?.SUPABASE_URL ||
+  (import.meta as any).env?.NEXT_PUBLIC_SUPABASE_URL ||
+  '';
+const ENV_KEY = 
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ||
+  (import.meta as any).env?.SUPABASE_ANON_KEY ||
+  (import.meta as any).env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  (import.meta as any).env?.SUPABASE_PUBLISHABLE_KEY ||
+  '';
 
 // 2. Chaves diretas no repositório (opcional caso prefira embutir direto no código do GitHub):
 // Cole aqui sua URL e Anon Key do seu projeto Supabase se não quiser cadastrar na tela da Vercel.
