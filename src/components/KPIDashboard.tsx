@@ -28,10 +28,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'pendente' ? 'todos' : 'pendente')}
-        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,12,32,0.35)] hover:shadow-[0_16px_36px_rgba(0,38,100,0.45)] ${
           activeStatusFilter === 'pendente'
-            ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/40 shadow-amber-500/10'
-            : 'bg-white/85 border-white/70 hover:border-amber-300 hover:bg-white/95'
+            ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-400/60 shadow-amber-500/20'
+            : 'bg-white/95 border-white/80 hover:border-amber-300 hover:bg-white'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -55,10 +55,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'em_analise' ? 'todos' : 'em_analise')}
-        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,12,32,0.35)] hover:shadow-[0_16px_36px_rgba(0,38,100,0.45)] ${
           activeStatusFilter === 'em_analise'
-            ? 'bg-blue-50/90 border-blue-300 ring-2 ring-blue-400/40 shadow-blue-500/10'
-            : 'bg-white/85 border-white/70 hover:border-blue-300 hover:bg-white/95'
+            ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-400/60 shadow-blue-500/20'
+            : 'bg-white/95 border-white/80 hover:border-blue-300 hover:bg-white'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -81,10 +81,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'concluido' ? 'todos' : 'concluido')}
-        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,12,32,0.35)] hover:shadow-[0_16px_36px_rgba(0,38,100,0.45)] ${
           activeStatusFilter === 'concluido'
-            ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-400/40 shadow-emerald-500/10'
-            : 'bg-white/85 border-white/70 hover:border-emerald-300 hover:bg-white/95'
+            ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-400/60 shadow-emerald-500/20'
+            : 'bg-white/95 border-white/80 hover:border-emerald-300 hover:bg-white'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -107,10 +107,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       <button
         type="button"
         onClick={() => onFilterByStatus(activeStatusFilter === 'divergencia' ? 'todos' : 'divergencia')}
-        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-lg ${
+        className={`text-left p-3.5 rounded-2xl border transition-all text-sm relative overflow-hidden group active:scale-[0.98] active:translate-y-0.5 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,12,32,0.35)] hover:shadow-[0_16px_36px_rgba(0,38,100,0.45)] ${
           activeStatusFilter === 'divergencia'
-            ? 'bg-rose-50/90 border-rose-300 ring-2 ring-rose-400/40 shadow-rose-500/10'
-            : 'bg-white/85 border-white/70 hover:border-rose-300 hover:bg-white/95'
+            ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-400/60 shadow-rose-500/20'
+            : 'bg-white/95 border-white/80 hover:border-rose-300 hover:bg-white'
         }`}
       >
         <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -130,7 +130,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       </button>
 
       {/* 5. SLA Compliance */}
-      <div className="p-3.5 rounded-2xl border border-white/70 bg-white/85 backdrop-blur-xl shadow-lg text-sm">
+      <div className="p-3.5 rounded-2xl border border-white/80 bg-white/95 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,12,32,0.35)] text-sm">
         <div className="flex items-center justify-between text-slate-500 mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
             SLA no Prazo
@@ -157,7 +157,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       </div>
 
       {/* 6. Volume de Seriais & Tempo Médio */}
-      <div className="p-3.5 rounded-2xl border border-white/70 bg-white/85 backdrop-blur-xl shadow-lg text-sm">
+      <div className="p-3.5 rounded-2xl border border-white/80 bg-white/95 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,12,32,0.35)] text-sm">
         <div className="flex items-center justify-between text-slate-500 mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             Volume & Média

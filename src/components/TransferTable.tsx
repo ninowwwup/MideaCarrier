@@ -14,7 +14,6 @@ import {
   Layers, 
   Sparkles, 
   MessageSquare,
-  SlidersHorizontal,
   Camera,
   Image as ImageIcon,
   RotateCcw
@@ -247,13 +246,6 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     });
   };
 
-  const handleResetAllWidths = () => {
-    setColumnWidths(DEFAULT_COLUMN_WIDTHS);
-    try {
-      localStorage.setItem(STORAGE_WIDTHS_KEY, JSON.stringify(DEFAULT_COLUMN_WIDTHS));
-    } catch (e) {}
-  };
-
   const handleDirectAttachPhoto = async (itemId: string, file: File) => {
     if (!file || !onAttachLabelPhoto) return;
     try {
@@ -270,7 +262,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
   return (
     <>
-      <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 shadow-xl overflow-hidden transition-all">
+      <div className="bg-white/95 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-[0_20px_60px_rgba(2,10,24,0.45)] overflow-hidden transition-all ring-1 ring-white/30">
         {/* Search & Filter Toolbar com Glassmorphism */}
         <div className="p-3.5 sm:p-4 border-b border-slate-200/80 bg-slate-50/70 backdrop-blur-md space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -358,17 +350,6 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                   </option>
                 ))}
               </select>
-
-              {/* Botão de Ajuste de Colunas (AppSheet View) */}
-              <button
-                type="button"
-                onClick={handleResetAllWidths}
-                title="Ajustar e redefinir espaçamento responsivo das colunas (estilo AppSheet)"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-white/90 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg shadow-2xs transition-all active:scale-95"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-[#00609C]" />
-                <span className="hidden xl:inline">Colunas AppSheet</span>
-              </button>
 
               {/* Limpar Filtros */}
               {(filters.busca ||

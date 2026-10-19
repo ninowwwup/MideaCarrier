@@ -503,11 +503,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#071630] via-[#0E2A54] to-[#051026] flex flex-col text-slate-800 relative overflow-hidden font-sans selection:bg-[#249ED5] selection:text-white">
-      {/* Elementos Mesh Ambientais de Glassmorfismo Moderno */}
-      <div className="absolute top-[-10rem] left-[-10rem] w-[35rem] h-[35rem] rounded-full bg-[#0083CA]/25 blur-[130px] pointer-events-none" />
-      <div className="absolute top-[25%] right-[-10rem] w-[38rem] h-[38rem] rounded-full bg-[#249ED5]/20 blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-[-10rem] left-[25%] w-[42rem] h-[42rem] rounded-full bg-indigo-600/15 blur-[160px] pointer-events-none" />
+    <div className="min-h-screen bg-[radial-gradient(ellipse_120%_90%_at_50%_-15%,#0f356e_0%,#09234b_35%,#051530_70%,#020a18_100%)] flex flex-col text-slate-800 relative overflow-hidden font-sans selection:bg-[#249ED5] selection:text-white">
+      {/* Elementos Mesh Ambientais e Grid Glow de Alta Fidelidade */}
+      <div className="absolute inset-0 bg-[radial-gradient(#C2DEEB_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.04] pointer-events-none" />
+      <div className="absolute top-[-8rem] left-[-6rem] w-[42rem] h-[42rem] rounded-full bg-[#00609C]/35 blur-[140px] pointer-events-none" />
+      <div className="absolute top-[28%] right-[-8rem] w-[45rem] h-[45rem] rounded-full bg-[#249ED5]/25 blur-[150px] pointer-events-none" />
+      <div className="absolute bottom-[-8rem] left-[20%] w-[50rem] h-[50rem] rounded-full bg-[#002664]/40 blur-[170px] pointer-events-none" />
 
       {/* Header com Paleta Midea e Glassmorphism */}
       <Header
