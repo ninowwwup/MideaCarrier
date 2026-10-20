@@ -335,10 +335,16 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   if (req.method === 'GET') {
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        const queryPromise = supabase
           .from('transfer_requests')
           .select('*')
           .order('criado_em', { ascending: false });
+
+        const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout ao consultar Supabase (4.5s)')), 4500)
+        );
+
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
         if (!error && Array.isArray(data)) {
           const mapped = data.map((d: any, index: number) => ({
