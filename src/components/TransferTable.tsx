@@ -511,7 +511,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         onChange={(e) => {
                           const newStatus = e.target.value as TransferStatus;
                           if (newStatus === 'concluido' || newStatus === 'divergencia') {
-                            onOpenResolutionModal([item], newStatus);
+                            onOpenResolutionModal([item], newStatus === 'concluido' ? 'concluir' : 'divergencia');
                           } else {
                             onUpdateStatusSingle(item.id, newStatus);
                           }
@@ -994,7 +994,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                           onChange={(e) => {
                             const newStatus = e.target.value as TransferStatus;
                             if (newStatus === 'concluido' || newStatus === 'divergencia') {
-                              onOpenResolutionModal([item], newStatus);
+                              onOpenResolutionModal([item], newStatus === 'concluido' ? 'concluir' : 'divergencia');
                             } else {
                               onUpdateStatusSingle(item.id, newStatus);
                             }

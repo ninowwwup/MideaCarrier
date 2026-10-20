@@ -34,6 +34,7 @@ import {
 import { 
   fetchTransferItems, 
   saveTransferItems, 
+  insertTransferItems,
   updateSpecificTransferItems,
   createRequestsFromMultiSerial, 
   computeKPIs, 
@@ -309,12 +310,12 @@ export default function App() {
     return await saveTransferItems(newItems);
   };
 
-  // Criar nova solicitação com múltiplos seriais
+  // Criar nova solicitação com múltiplos seriais (Insere apenas os novos itens)
   const handleCreateRequest = async (input: NewTransferInput) => {
     const created = createRequestsFromMultiSerial(input, items.length);
     registerLocallyRequestedItems(created);
-    const nextList = [...created, ...items];
-    const isSaved = await handleUpdateItems(nextList);
+    setItems((prev) => [...created, ...prev]);
+    const isSaved = await insertTransferItems(created);
 
     if (isSaved) {
       showSuccessNotice(
@@ -329,11 +330,11 @@ export default function App() {
     }
   };
 
-  // Importar em lote (Colar Tabela)
+  // Importar em lote (Colar Tabela Excel/WhatsApp) (Insere apenas os novos itens)
   const handleImportBatch = async (batchItems: TransferItem[]) => {
     registerLocallyRequestedItems(batchItems);
-    const nextList = [...batchItems, ...items];
-    const isSaved = await handleUpdateItems(nextList);
+    setItems((prev) => [...batchItems, ...prev]);
+    const isSaved = await insertTransferItems(batchItems);
 
     if (batchItems.length > 0) {
       if (isSaved) {
@@ -508,6 +509,25 @@ export default function App() {
             setResolutionData({ items: selected, mode })
           }
           onUpdateStatusSingle={handleUpdateStatusSingle}
+          onBatchUpdateStatus={async (ids, newStatus) => {
+            const now = new Date().toISOString();
+            const affectedItems: TransferItem[] = [];
+            const updated = items.map((item) => {
+              if (ids.includes(item.id)) {
+                const up: TransferItem = {
+                  ...item,
+                  status: newStatus,
+                  atualizadoEm: now,
+                  atualizadoPor: 'Time Midea (SAP)',
+                };
+                affectedItems.push(up);
+                return up;
+              }
+              return item;
+            });
+            setItems(updated);
+            await updateSpecificTransferItems(affectedItems, updated);
+          }}
           onAttachLabelPhoto={handleAttachLabelPhoto}
           onOpenNewModal={() => setIsNewModalOpen(true)}
           onOpenBatchPaste={() => setIsBatchPasteOpen(true)}

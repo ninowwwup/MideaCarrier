@@ -363,9 +363,19 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           res.statusCode = 200;
           res.end(JSON.stringify({ success: true, source: 'supabase', items: mapped, lastModified }));
           return;
+        } else if (error) {
+          console.warn('Erro retornado pelo Supabase no backend:', error.message);
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'Banco de dados temporariamente inacessível', details: error.message }));
+          return;
         }
       } catch (err) {
-        console.warn('Erro ao consultar Supabase no backend, usando arquivo/memória:', err);
+        console.warn('Exceção ao consultar Supabase no backend:', err);
+        res.statusCode = 503;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: false, error: 'Falha na conexão com Supabase' }));
+        return;
       }
     }
 
@@ -459,9 +469,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
         if (supabase) {
           try {
-            if (items.length === 0) {
-              await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
-            } else {
+            if (items.length > 0) {
               const payload = items.map((i: any) => ({
                 id: String(i.id),
                 solicitation_code: i.solicitationCode || null,

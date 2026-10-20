@@ -3,7 +3,7 @@
  * Reduz imagens de celulares (que costumam ter 4MB a 10MB) para ~60KB a 120KB
  * preservando alta legibilidade dos códigos de barra e textos da etiqueta do produto.
  */
-export function compressImageFile(file: File, maxDimension = 1024, quality = 0.78): Promise<string> {
+export function compressImageFile(file: File, maxDimension = 800, quality = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;

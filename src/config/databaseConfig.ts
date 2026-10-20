@@ -29,8 +29,8 @@ const ENV_KEY =
 
 // 2. Chaves diretas no repositório (opcional caso prefira embutir direto no código do GitHub):
 // Cole aqui sua URL e Anon Key do seu projeto Supabase se não quiser cadastrar na tela da Vercel.
-export const CONFIGURED_SUPABASE_URL = ENV_URL || '';
-export const CONFIGURED_SUPABASE_ANON_KEY = ENV_KEY || '';
+export const CONFIGURED_SUPABASE_URL = ENV_URL || 'https://oxowlylcgunqkvuvtqyv.supabase.co';
+export const CONFIGURED_SUPABASE_ANON_KEY = ENV_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94b3dseWxjZ3VucWt2dXZ0cXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxODI3NjgsImV4cCI6MjEwNzc1ODc2OH0.08UtAFS9JkSoqmo7qUKZWXE73kbdbWol8ce_JiDL_P4';
 
 export function getEffectiveSupabaseCredentials(): { url: string; anonKey: string } {
   // 1. Variáveis de ambiente da Vercel / Vite
