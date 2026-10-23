@@ -16,9 +16,12 @@ import {
   CalendarCheck2,
   Droplets,
   Bell,
-  ShieldCheck
+  ShieldCheck,
+  Truck,
+  LogOut
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
+import { AuthUser } from '../types/auth';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
@@ -42,6 +45,8 @@ interface HeaderProps {
   autoPurgedCount?: number;
   isCloudConnected: boolean;
   onOpenDatabaseDiagnostic?: () => void;
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -65,6 +70,8 @@ export const Header: React.FC<HeaderProps> = ({
   autoPurgedCount = 0,
   isCloudConnected,
   onOpenDatabaseDiagnostic,
+  currentUser,
+  onLogout,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -140,7 +147,7 @@ export const Header: React.FC<HeaderProps> = ({
               <Sparkles className={`w-3.5 h-3.5 ${currentRole === 'midea' ? 'text-blue-600' : 'text-white/80'}`} />
               <span>Time Midea</span>
               {totalPending > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs ml-0.5">
+                 <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs ml-0.5">
                   {totalPending}
                 </span>
               )}
@@ -149,24 +156,72 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Tools & Indicators - Botões Dinâmicos, Leves e Suaves (Figma Style) */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Status Indicativo Silencioso / Diagnóstico Supabase & Nuvem */}
-            <button
-              type="button"
-              onClick={onOpenDatabaseDiagnostic}
-              className={`p-2.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 ${
-                isCloudConnected
-                  ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
-                  : 'bg-white/15 text-white border-white/25 hover:bg-white/25'
-              }`}
-              title={
-                isCloudConnected
-                  ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Script SQL do Supabase)'
-                  : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico e Script SQL do Supabase)'
-              }
-              aria-label="Diagnóstico do Banco de Dados e Supabase"
-            >
-              <Radio className="w-4 h-4 text-emerald-300 animate-pulse" />
-            </button>
+            {/* User Session Badge & Logout */}
+            {currentUser && (
+              <div className="flex items-center gap-2 bg-black/25 backdrop-blur-xl px-2.5 py-1.5 rounded-2xl border border-white/20 text-xs shadow-inner">
+                <div
+                  className={`w-6 h-6 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${
+                    currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
+                  }`}
+                  title={`${currentUser.displayName} (${currentUser.username})`}
+                >
+                  {currentUser.role === 'midea' ? (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  ) : (
+                    <Truck className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                <div className="text-left leading-none hidden sm:block">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white text-[12px]">{currentUser.username}</span>
+                    <span
+                      className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full ${
+                        currentUser.role === 'midea'
+                          ? 'bg-cyan-400 text-slate-950'
+                          : 'bg-emerald-400 text-slate-950'
+                      }`}
+                    >
+                      {currentUser.role === 'midea' ? 'Admin' : 'Prod'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-white/70 font-normal mt-0.5">
+                    {currentUser.role === 'midea' ? 'Time Midea (SAP)' : 'Time Buiatte (WMS)'}
+                  </div>
+                </div>
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="ml-0.5 p-1.5 rounded-xl bg-white/10 hover:bg-rose-500/80 text-white/80 hover:text-white transition-all duration-200 active:scale-90 cursor-pointer"
+                    title="Sair / Trocar Usuário"
+                    aria-label="Sair do usuário"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Status Indicativo Silencioso / Diagnóstico Supabase & Nuvem (Apenas Admin Midea) */}
+            {currentUser?.role !== 'buiatte' && onOpenDatabaseDiagnostic && (
+              <button
+                type="button"
+                onClick={onOpenDatabaseDiagnostic}
+                className={`p-2.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 ${
+                  isCloudConnected
+                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
+                    : 'bg-white/15 text-white border-white/25 hover:bg-white/25'
+                }`}
+                title={
+                  isCloudConnected
+                    ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Script SQL do Supabase)'
+                    : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico e Script SQL do Supabase)'
+                }
+                aria-label="Diagnóstico do Banco de Dados e Supabase"
+              >
+                <Radio className="w-4 h-4 text-emerald-300 animate-pulse" />
+              </button>
+            )}
 
             {/* PWA Install Button (Apenas Ícone) */}
             <PWAInstallButton />
@@ -249,6 +304,46 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Mobile Expanded Menu */}
         {mobileMenuOpen && (
           <div className="lg:hidden py-3 border-t border-white/15 space-y-3 animate-in fade-in duration-150">
+            {currentUser && (
+              <div className="p-3 rounded-2xl bg-black/30 border border-white/20 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${
+                      currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
+                    }`}
+                  >
+                    {currentUser.role === 'midea' ? (
+                      <ShieldCheck className="w-4 h-4" />
+                    ) : (
+                      <Truck className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <span>{currentUser.displayName}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/20 text-cyan-200 uppercase font-black">
+                        {currentUser.username}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-white/70">{currentUser.subtitle}</div>
+                  </div>
+                </div>
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-rose-500/80 text-white text-xs font-bold flex items-center gap-1 hover:bg-rose-600 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sair</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="text-xs font-semibold text-white/70 uppercase tracking-wider px-1">
               Alternar Modo de Visualização
             </div>

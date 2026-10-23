@@ -375,20 +375,34 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           res.end(JSON.stringify({ success: true, source: 'supabase', items: mapped, lastModified }));
           return;
         } else if (error) {
-          console.warn('Erro retornado pelo Supabase no backend:', error.message);
-          res.statusCode = 503;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ success: false, error: 'Banco de dados temporariamente inacessível', details: error.message }));
-          return;
+          console.warn('Aviso: Supabase indisponível no backend, consultando cloud store...', error.message);
         }
       } catch (err) {
-        console.warn('Exceção ao consultar Supabase no backend:', err);
-        res.statusCode = 503;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ success: false, error: 'Falha na conexão com Supabase' }));
-        return;
+        console.warn('Aviso: Falha de conexão com Supabase no backend, consultando cloud store...', err);
       }
     }
+
+    // 6.1 Fallback para Shared Cloud Store
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const cloudRes = await fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (cloudRes.ok) {
+        const cloudData = await cloudRes.json();
+        if (Array.isArray(cloudData?.data?.items)) {
+          memoryStore = cloudData.data.items;
+          savePersistentStore(memoryStore);
+          res.setHeader('Content-Type', 'application/json');
+          res.statusCode = 200;
+          res.end(JSON.stringify({ success: true, source: 'cloud_sync', items: memoryStore, lastModified }));
+          return;
+        }
+      }
+    } catch (cloudErr) {}
 
     if (!Array.isArray(memoryStore)) {
       memoryStore = [];
@@ -406,6 +420,13 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     memoryStore = [];
     lastModified = Date.now();
     savePersistentStore([]);
+
+    // Sincroniza Shared Cloud Store
+    fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'midea_carrier_transfer_hub_production', data: { items: [], lastUpdated: Date.now() } }),
+    }).catch(() => {});
 
     broadcastSSE({
       type: 'TRANSFER_UPDATE',
@@ -445,6 +466,13 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         memoryStore = items;
         lastModified = Date.now();
         savePersistentStore(items);
+
+        // Sincroniza Shared Cloud Store
+        fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'midea_carrier_transfer_hub_production', data: { items, lastUpdated: lastModified } }),
+        }).catch(() => {});
 
         // 1. Notifica instantaneamente todos os outros computadores conectados via SSE
         broadcastSSE({

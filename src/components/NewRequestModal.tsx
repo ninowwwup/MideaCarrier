@@ -20,6 +20,7 @@ interface NewRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: NewTransferInput) => void;
+  defaultSolicitante?: string;
 }
 
 const FREQUENT_CENTROS = ['B124', 'B123', 'B179', 'B158'];
@@ -29,6 +30,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  defaultSolicitante = 'Time Buiatte (Prod)',
 }) => {
   const [material, setMaterial] = useState('');
   const [rawSerials, setRawSerials] = useState('');
@@ -36,7 +38,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [depositoOrigem, setDepositoOrigem] = useState('B148');
   const [depositoDestino, setDepositoDestino] = useState('B110');
   const [observacoes, setObservacoes] = useState('');
-  const [solicitante, setSolicitante] = useState('Time Buiatte (Sênior WMS)');
+  const [solicitante, setSolicitante] = useState(defaultSolicitante);
   const [labelPhotoUrl, setLabelPhotoUrl] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
 

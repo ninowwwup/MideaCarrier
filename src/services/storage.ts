@@ -87,9 +87,74 @@ export function getLocalCachedItems(): TransferItem[] {
   }
 }
 
+export const SHARED_CLOUD_STORE_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9';
+
+// Circuit breaker para proteger o Supabase de sobrecarga e timeouts contínuos
+let supabaseCircuitOpenUntil = 0;
+
+export function markSupabaseFailure() {
+  // Pausa chamadas ao Supabase por 25 segundos para evitar travamento da interface e loop de erros
+  supabaseCircuitOpenUntil = Date.now() + 25000;
+}
+
+export function isSupabaseCircuitOpen(): boolean {
+  return Date.now() < supabaseCircuitOpenUntil;
+}
+
+export async function fetchFromSharedCloudStore(): Promise<TransferItem[] | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(SHARED_CLOUD_STORE_URL, {
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const json = await res.json();
+      const items = json?.data?.items;
+      if (Array.isArray(items)) {
+        return items.map((d: any, idx: number) => mapRowToTransferItem(d, idx));
+      }
+    }
+  } catch (e) {
+    // Falha silenciosa no cloud store fallback
+  }
+  return null;
+}
+
+export async function saveToSharedCloudStore(items: TransferItem[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(SHARED_CLOUD_STORE_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'midea_carrier_transfer_hub_production',
+        data: {
+          items,
+          lastUpdated: Date.now(),
+          count: items.length,
+        },
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
- * Consulta de itens com fallback inteligente (Supabase -> Backend Vercel /api/transfers -> Cache Local)
- * Proteção total: NUNCA apaga dados locais se a rede ou banco falharem temporariamente.
+ * Consulta de itens com fallback multinível ultra-resiliente:
+ * 1. Supabase (Com timeout rápido de 3.5s e circuit-breaker inteligente)
+ * 2. Shared Cloud Store global (Persistência real-time garantida entre diferentes PCs)
+ * 3. Backend Vercel /api/transfers
+ * 4. Cache Local
  */
 export async function fetchTransferItems(): Promise<{
   items: TransferItem[];
@@ -99,18 +164,17 @@ export async function fetchTransferItems(): Promise<{
 }> {
   const localCached = getLocalCachedItems();
 
-  // 1. Supabase (Se configurado diretamente)
+  // 1. Supabase (Apenas se configurado e fora de período de bloqueio do circuit breaker)
   const supabase = getSupabase();
-  if (supabase) {
+  if (supabase && !isSupabaseCircuitOpen()) {
     try {
-      // Timeout de 7 segundos para evitar travar se o Supabase estiver congestionado
       const queryPromise = supabase
         .from('transfer_requests')
         .select('*')
         .order('criado_em', { ascending: false });
 
       const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'Query Timeout (7s)' } }), 7000)
+        setTimeout(() => resolve({ data: null, error: { message: 'Query Timeout (3.5s)' } }), 3500)
       );
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
@@ -120,27 +184,44 @@ export async function fetchTransferItems(): Promise<{
         const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
         const resolved = applyPendingLocalUpdates(active);
 
-        // Se o banco retornou itens (ou está intencionalmente zerado e local também vazio), grava no cache
         if (typeof window !== 'undefined') {
           if (resolved.length > 0 || localCached.length === 0) {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
           }
         }
 
+        // Replica em background no Shared Cloud Store para manter a nuvem espelhada
+        saveToSharedCloudStore(resolved).catch(() => {});
+
         return { items: resolved, source: 'supabase', purgedCount, isConnected: true };
       } else if (error) {
-        console.warn('Aviso: Supabase query retornou erro:', error.message);
+        markSupabaseFailure();
+        console.warn('Aviso: Supabase em cooldown após erro/timeout:', error.message);
       }
     } catch (err) {
-      console.warn('Tentando rota backend após exceção no Supabase:', err);
+      markSupabaseFailure();
+      console.warn('Tentando rota em nuvem após exceção no Supabase:', err);
     }
   }
 
-  // 2. Rota Backend Serverless Vercel (/api/transfers)
+  // 2. Shared Cloud Store Global (In-Time entre computadores Midea e Buiatte)
+  const cloudItems = await fetchFromSharedCloudStore();
+  if (cloudItems !== null) {
+    if (cloudItems.length > 0 || localCached.length === 0) {
+      const { active, purgedCount } = purgeOldMonthlyRecords(cloudItems);
+      const resolved = applyPendingLocalUpdates(active);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+      }
+      return { items: resolved, source: 'backend', purgedCount, isConnected: true };
+    }
+  }
+
+  // 3. Rota Backend Serverless Vercel (/api/transfers)
   if (typeof window !== 'undefined') {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const res = await fetch('/api/transfers', {
         headers: { 'Accept': 'application/json' },
@@ -151,10 +232,7 @@ export async function fetchTransferItems(): Promise<{
       if (res.ok) {
         const json = await res.json();
         if (json && Array.isArray(json.items)) {
-          // PROTEÇÃO CRÍTICA: Se a rota backend retornou array vazio mas o cache local possui dados,
-          // NUNCA apagar o cache local com a resposta vazia da lambda da Vercel!
           if (json.items.length === 0 && localCached.length > 0) {
-            console.warn('Aviso: Backend retornou lista vazia mas cache local possui dados. Preservando tela e cache.');
             const { active, purgedCount } = purgeOldMonthlyRecords(localCached);
             const resolved = applyPendingLocalUpdates(active);
             return { items: resolved, source: 'local', purgedCount, isConnected: false };
@@ -172,7 +250,7 @@ export async function fetchTransferItems(): Promise<{
     }
   }
 
-  // 3. Fallback LocalStorage (garante que os dados NUNCA sumam da tela)
+  // 4. Fallback LocalStorage (garante que os dados NUNCA sumam da tela)
   if (localCached.length > 0) {
     const { active, purgedCount } = purgeOldMonthlyRecords(localCached);
     const updated = active.map((item, idx) => ({
@@ -242,12 +320,15 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
   if (!newItems || newItems.length === 0) return true;
 
   // 1. Atualiza cache local imediatamente
+  let merged: TransferItem[] = newItems;
   if (typeof window !== 'undefined') {
     try {
       const current = getLocalCachedItems();
       const existingIds = new Set(newItems.map((n) => n.id));
-      const merged = [...newItems, ...current.filter((c) => !existingIds.has(c.id))];
+      merged = [...newItems, ...current.filter((c) => !existingIds.has(c.id))];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      // Replica no Shared Cloud Store instantaneamente para o outro PC receber
+      saveToSharedCloudStore(merged).catch(() => {});
     } catch (e) {}
   }
 
@@ -356,6 +437,8 @@ export async function updateSpecificTransferItems(
       return current.map((c) => affMap.get(c.id) || c);
     })();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentList));
+    // Replica status atualizado no Shared Cloud Store
+    saveToSharedCloudStore(currentList).catch(() => {});
   }
 
   let anySuccess = false;
@@ -433,6 +516,8 @@ export async function saveTransferItems(items: TransferItem[]): Promise<boolean>
   // Salva no cache local de imediato
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    // Sincroniza com Shared Cloud Store imediatamente
+    saveToSharedCloudStore(items).catch(() => {});
   }
 
   let savedSuccessfully = false;
@@ -543,6 +628,8 @@ export async function clearAllTransferRecords(): Promise<boolean> {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
       localStorage.removeItem(ARCHIVE_KEY);
+      // Zera o Shared Cloud Store na nuvem
+      saveToSharedCloudStore([]).catch(() => {});
       anySuccess = true;
     } catch (e) {}
   }
@@ -794,14 +881,14 @@ export function subscribeToRealtimeTransfers(
     }
   }
 
-  // 3. Heartbeat de segurança (Polling calmo a cada 25 segundos)
-  // Substitui o worker agressivo de 2.5s que causava auto-DDoS no Supabase
-  const HEARTBEAT_INTERVAL_MS = 25000;
+  // 3. Heartbeat de sincronização em tempo real (Polling resiliente a cada 10 segundos)
+  // Utiliza o Shared Cloud Store quando o Supabase estiver em cooldown
+  const HEARTBEAT_INTERVAL_MS = 10000;
   const heartbeatTimer = setInterval(() => {
     if (!isSyncing && Date.now() - lastSyncTime >= HEARTBEAT_INTERVAL_MS) {
       safeSync(false);
     }
-  }, 5000);
+  }, 3500);
 
   // Reconcilia automaticamente ao alternar abas ou focar a janela
   const handleVisibilityChange = () => {

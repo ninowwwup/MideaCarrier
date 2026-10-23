@@ -17,6 +17,7 @@ interface BatchPasteModalProps {
   onClose: () => void;
   onImportItems: (items: TransferItem[]) => void;
   currentCount: number;
+  defaultSolicitante?: string;
 }
 
 export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
@@ -24,9 +25,10 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
   onClose,
   onImportItems,
   currentCount,
+  defaultSolicitante = 'Time Buiatte (Prod)',
 }) => {
   const [pastedText, setPastedText] = useState('');
-  const [solicitante, setSolicitante] = useState('Time Buiatte (Sênior WMS)');
+  const [solicitante, setSolicitante] = useState(defaultSolicitante);
 
   const parsedRows = useMemo(() => {
     return parsePastedTable(pastedText);

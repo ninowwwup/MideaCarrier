@@ -23,6 +23,7 @@ import {
 import {
   DatabaseDiagnosticModal
 } from './components/DatabaseDiagnosticModal';
+import { LoginModal } from './components/LoginModal';
 import { Check, X } from 'lucide-react';
 import { 
   TransferItem, 
@@ -31,6 +32,8 @@ import {
   FilterOptions, 
   NewTransferInput 
 } from './types/transfer';
+import { AuthUser } from './types/auth';
+import { getStoredUser, clearStoredUser } from './services/authService';
 import { 
   fetchTransferItems, 
   saveTransferItems, 
@@ -64,8 +67,14 @@ import { getSupabaseConfig } from './services/supabaseClient';
 const BASE_PAGE_TITLE = 'MIGOU - Gestão de Transferências SAP';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser());
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => !getStoredUser());
+
   const [items, setItems] = useState<TransferItem[]>([]);
-  const [currentRole, setCurrentRole] = useState<TeamRole>('ambos');
+  const [currentRole, setCurrentRole] = useState<TeamRole>(() => {
+    const stored = getStoredUser();
+    return stored ? stored.role : 'ambos';
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
   const [isPushSubscribed, setIsPushSubscribed] = useState<boolean>(false);
@@ -105,6 +114,26 @@ export default function App() {
     setTimeout(() => {
       setSuccessNotice((curr) => (curr?.title === title ? null : curr));
     }, 4500);
+  };
+
+  const handleLoginSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    setIsLoginModalOpen(false);
+    setCurrentRole(user.role);
+    showSuccessNotice(
+      `Bem-vindo, ${user.displayName}!`,
+      user.role === 'midea'
+        ? 'Acesso Administrador: Central SAP MIGO, resolução com Doc SAP, diagnósticos e relatórios liberados.'
+        : 'Acesso Produção: Criação de solicitações (individual e lote), seriais, fotos de etiquetas e WMS liberados.'
+    );
+  };
+
+  const handleLogout = () => {
+    clearStoredUser();
+    setCurrentUser(null);
+    setIsLoginModalOpen(true);
+    setCurrentRole('ambos');
+    showSuccessNotice('Sessão Finalizada', 'Você saiu com sucesso. Faça login novamente com sua credencial.');
   };
 
   // Status de permissão de notificação nativa para alertas em segundo plano
@@ -486,6 +515,8 @@ export default function App() {
         autoPurgedCount={autoPurgedCount}
         isCloudConnected={isCloudConnected}
         onOpenDatabaseDiagnostic={() => setIsDiagnosticOpen(true)}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
@@ -512,13 +543,14 @@ export default function App() {
           onBatchUpdateStatus={async (ids, newStatus) => {
             const now = new Date().toISOString();
             const affectedItems: TransferItem[] = [];
+            const updater = currentUser?.teamName || (currentUser?.role === 'buiatte' ? 'Time Buiatte (Prod)' : 'Time Midea (SAP)');
             const updated = items.map((item) => {
               if (ids.includes(item.id)) {
                 const up: TransferItem = {
                   ...item,
                   status: newStatus,
                   atualizadoEm: now,
-                  atualizadoPor: 'Time Midea (SAP)',
+                  atualizadoPor: updater,
                 };
                 affectedItems.push(up);
                 return up;
@@ -564,11 +596,18 @@ export default function App() {
         </button>
       )}
 
+      {/* Modal de Autenticação / Login Obrigatório */}
+      <LoginModal
+        isOpen={!currentUser || isLoginModalOpen}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
       {/* Modal de Nova Solicitação (com Múltiplos Seriais) */}
       <NewRequestModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
         onSubmit={handleCreateRequest}
+        defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
       />
 
       {/* Modal de Importação em Lote (Colar Tabela Excel/WhatsApp) */}
@@ -577,6 +616,7 @@ export default function App() {
         onClose={() => setIsBatchPasteOpen(false)}
         onImportItems={handleImportBatch}
         currentCount={items.length}
+        defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
       />
 
       {/* Modal de Assistente e Cópia para o SAP */}
