@@ -24,6 +24,7 @@ import {
   DatabaseDiagnosticModal
 } from './components/DatabaseDiagnosticModal';
 import { LoginModal } from './components/LoginModal';
+import { SoundSelectorModal } from './components/SoundSelectorModal';
 import { Check, X } from 'lucide-react';
 import { 
   TransferItem, 
@@ -53,7 +54,10 @@ import {
   unlockAudioNow,
   isAudioReady,
   requestNotificationPermission, 
-  sendDesktopNotification 
+  sendDesktopNotification,
+  AlertSoundType,
+  getSavedAlertSound,
+  ALERT_SOUND_OPTIONS
 } from './utils/audioAlert';
 import { 
   subscribeToPushNotifications,
@@ -87,6 +91,8 @@ export default function App() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
+  const [isSoundSelectorOpen, setIsSoundSelectorOpen] = useState(false);
+  const [currentAlertSound, setCurrentAlertSound] = useState<AlertSoundType>(() => getSavedAlertSound());
   const [sapModalItems, setSapModalItems] = useState<TransferItem[] | null>(null);
   const [resolutionData, setResolutionData] = useState<{
     items: TransferItem[];
@@ -213,15 +219,25 @@ export default function App() {
   const handleTestAlertSound = async () => {
     await unlockAudioNow();
     setIsAudioActive(true);
+    const soundOpt = ALERT_SOUND_OPTIONS.find((s) => s.id === currentAlertSound) || ALERT_SOUND_OPTIONS[0];
     showSuccessNotice(
-      'Som de Gota d’Água Testado!',
-      'Alerta sonoro ativo e obrigatório para todas as novas solicitações.'
+      `Som Testado (${soundOpt.shortName})!`,
+      `Alerta sonoro ativo e configurado com o som "${soundOpt.name}".`
     );
   };
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setDesktopNotifPermission(Notification.permission);
+    }
+
+    const handleSoundChange = (e: any) => {
+      if (e?.detail?.sound) {
+        setCurrentAlertSound(e.detail.sound);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('migou_sound_changed', handleSoundChange);
     }
 
     getExistingPushSubscription().then((sub) => {
@@ -239,7 +255,12 @@ export default function App() {
       }
     });
 
-    return () => unsubscribeSW();
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('migou_sound_changed', handleSoundChange);
+      }
+      unsubscribeSW();
+    };
   }, [flashTitleNotification]);
 
   // Atalhos Globais de Teclado (Efeito de Teclas [N], [V], [/], [Esc])
@@ -507,6 +528,8 @@ export default function App() {
         isSoundEnabled={true}
         onToggleSound={handleTestAlertSound}
         onTestAlertSound={handleTestAlertSound}
+        currentAlertSound={currentAlertSound}
+        onOpenSoundSelector={() => setIsSoundSelectorOpen(true)}
         desktopNotifPermission={desktopNotifPermission}
         onRequestDesktopPermission={handleRequestDesktopPermission}
         isPushSubscribed={isPushSubscribed}
@@ -654,6 +677,20 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Modal de Escolha do Som de Alerta */}
+      <SoundSelectorModal
+        isOpen={isSoundSelectorOpen}
+        onClose={() => setIsSoundSelectorOpen(false)}
+        onSoundSelected={(sound) => {
+          setCurrentAlertSound(sound);
+          const opt = ALERT_SOUND_OPTIONS.find((o) => o.id === sound);
+          showSuccessNotice(
+            `Som de Alerta: ${opt?.shortName || sound}`,
+            `O som "${opt?.name}" foi salvo e tocará para novas solicitações.`
+          );
+        }}
+      />
 
       {/* Notificação Toast de Sucesso/Feedback do Sistema */}
       {successNotice && (

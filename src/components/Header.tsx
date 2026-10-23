@@ -23,6 +23,7 @@ import {
 import { TeamRole } from '../types/transfer';
 import { AuthUser } from '../types/auth';
 import { PWAInstallButton } from './PWAInstallButton';
+import { AlertSoundType, ALERT_SOUND_OPTIONS, getSavedAlertSound } from '../utils/audioAlert';
 
 interface HeaderProps {
   currentRole: TeamRole;
@@ -37,6 +38,8 @@ interface HeaderProps {
   isSoundEnabled: boolean;
   onToggleSound: () => void;
   onTestAlertSound: () => void;
+  currentAlertSound?: AlertSoundType;
+  onOpenSoundSelector?: () => void;
   desktopNotifPermission: string;
   onRequestDesktopPermission: () => void;
   isPushSubscribed: boolean;
@@ -62,6 +65,8 @@ export const Header: React.FC<HeaderProps> = ({
   isSoundEnabled,
   onToggleSound,
   onTestAlertSound,
+  currentAlertSound,
+  onOpenSoundSelector,
   desktopNotifPermission,
   onRequestDesktopPermission,
   isPushSubscribed,
@@ -74,6 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const activeSound = ALERT_SOUND_OPTIONS.find((s) => s.id === (currentAlertSound || getSavedAlertSound())) || ALERT_SOUND_OPTIONS[0];
 
   return (
     <header className="bg-white/10 backdrop-blur-2xl border-b border-white/20 sticky top-0 z-30 shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all">
@@ -226,16 +232,18 @@ export const Header: React.FC<HeaderProps> = ({
             {/* PWA Install Button (Apenas Ícone) */}
             <PWAInstallButton />
 
-            {/* Alerta Sonoro de Gota d'Água Ativo (Obrigatório) - Teste Imediato */}
+            {/* Alerta Sonoro Personalizável (Gota d'Água, Sapo, Bolhas, Gato, Rebound) */}
             <button
               type="button"
-              onClick={onTestAlertSound}
-              className="p-2.5 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs flex items-center gap-1.5"
-              title="Alerta Sonoro de Gota d'Água Ativo (Obrigatório) • Clique para testar o som"
-              aria-label="Alerta Sonoro de Gota d'Água Ativo - Clique para testar"
+              onClick={onOpenSoundSelector || onTestAlertSound}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs flex items-center gap-1.5 cursor-pointer"
+              title={`Som de Alerta Ativo: ${activeSound.name} • Clique para alterar o som ou ouvir amostras`}
+              aria-label={`Som de Alerta Ativo: ${activeSound.name}`}
             >
-              <Droplets className="w-4 h-4 text-cyan-200 animate-pulse" />
-              <span className="hidden sm:inline text-[11px] text-cyan-100 font-medium">Som Ativo</span>
+              <span className="text-sm shrink-0">{activeSound.icon}</span>
+              <span className="hidden sm:inline text-[11px] text-cyan-100 font-medium truncate max-w-[85px]">
+                {activeSound.shortName}
+              </span>
             </button>
 
             {/* Controle do Push Manager (Service Worker) - Apenas Ícone */}
@@ -407,13 +415,17 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => {
-                onTestAlertSound();
+                if (onOpenSoundSelector) {
+                  onOpenSoundSelector();
+                } else {
+                  onTestAlertSound();
+                }
                 setMobileMenuOpen(false);
               }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200 cursor-pointer"
             >
-              <Droplets className="w-4 h-4 text-cyan-200 animate-pulse" />
-              <span>Testar Som de Gota d'Água (Ativo)</span>
+              <span className="text-sm">{activeSound.icon}</span>
+              <span>Personalizar Som de Alerta ({activeSound.shortName})</span>
             </button>
 
             {onOpenDatabaseDiagnostic && (
@@ -442,7 +454,7 @@ export const Header: React.FC<HeaderProps> = ({
               <CalendarCheck2 className="w-4 h-4 text-[#C2DEEB]" />
             </span>
             <span>
-              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com histórico de 30 dias.
+              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com auto-limpeza a cada 4 dias.
             </span>
           </div>
 

@@ -347,7 +347,26 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
         if (!error && Array.isArray(data)) {
-          const mapped = data.map((d: any, index: number) => ({
+          const now = Date.now();
+          const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+          const fourDaysAgoIso = new Date(now - FOUR_DAYS_MS).toISOString();
+
+          // Auto-limpeza periódica a cada 4 dias no Supabase para economizar cota gratuita
+          Promise.resolve(
+            supabase
+              .from('transfer_requests')
+              .delete()
+              .in('status', ['concluido', 'divergencia'])
+              .lt('criado_em', fourDaysAgoIso)
+          ).catch(() => {});
+
+          const filteredData = data.filter((d: any) => {
+            const age = now - new Date(d.criado_em || now).getTime();
+            const isResolved = d.status === 'concluido' || d.status === 'divergencia';
+            return !(age > FOUR_DAYS_MS && isResolved);
+          });
+
+          const mapped = filteredData.map((d: any, index: number) => ({
             id: String(d.id),
             solicitationCode: d.solicitation_code || `SOL-${index + 1}`,
             material: d.material,

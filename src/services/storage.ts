@@ -5,7 +5,7 @@ import { playAlertChime } from '../utils/audioAlert';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
 
 // Inicialização limpa e pronta para uso em produção
 export const INITIAL_SEED: TransferItem[] = [];
@@ -38,10 +38,11 @@ export function mapRowToTransferItem(d: any, index = 0): TransferItem {
 }
 
 /**
- * Auto-limpeza mensal: Mantém o banco leve preservando apenas o histórico dos últimos 30 dias.
- * Solicitações pendentes ou em análise são sempre preservadas para evitar qualquer perda operacional.
+ * Auto-limpeza contínua a cada 4 dias: Mantém o banco Supabase leve e dentro do limite gratuito.
+ * Exclui do banco apenas registros já concluídos ou com divergência criados há mais de 4 dias.
+ * Solicitações pendentes ou em análise são SEMPRE preservadas para evitar qualquer perda operacional.
  */
-export function purgeOldMonthlyRecords(items: TransferItem[]): {
+export function purgeOldRecords(items: TransferItem[]): {
   active: TransferItem[];
   purgedCount: number;
 } {
@@ -51,7 +52,7 @@ export function purgeOldMonthlyRecords(items: TransferItem[]): {
 
   for (const item of items) {
     const itemAge = now - new Date(item.criadoEm).getTime();
-    const isOld = itemAge > THIRTY_DAYS_MS;
+    const isOld = itemAge > FOUR_DAYS_MS;
     const isResolved = item.status === 'concluido' || item.status === 'divergencia';
 
     if (isOld && isResolved) {
@@ -70,10 +71,31 @@ export function purgeOldMonthlyRecords(items: TransferItem[]): {
     } catch (e) {
       console.warn('Erro ao salvar no arquivo histórico:', e);
     }
+
+    // EXCLUI DEFINITIVAMENTE DO BANCO SUPABASE PARA PRESERVAR A COTA GRATUITA
+    const supabase = getSupabase();
+    if (supabase) {
+      const idsToDelete = toArchive.map((i) => String(i.id));
+      Promise.resolve(
+        supabase
+          .from('transfer_requests')
+          .delete()
+          .in('id', idsToDelete)
+      )
+        .then((res: any) => {
+          if (!res?.error) {
+            console.log(`✓ Auto-limpeza Supabase: ${idsToDelete.length} registro(s) antigos (>4 dias) excluídos.`);
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   return { active, purgedCount: toArchive.length };
 }
+
+// Retrocompatibilidade
+export const purgeOldMonthlyRecords = purgeOldRecords;
 
 export function getLocalCachedItems(): TransferItem[] {
   if (typeof window === 'undefined') return [];
@@ -192,6 +214,16 @@ export async function fetchTransferItems(): Promise<{
 
         // Replica em background no Shared Cloud Store para manter a nuvem espelhada
         saveToSharedCloudStore(resolved).catch(() => {});
+
+        // Auto-limpeza contínua no Supabase: exclui registros resolvidos com mais de 4 dias
+        const fourDaysAgoIso = new Date(Date.now() - FOUR_DAYS_MS).toISOString();
+        Promise.resolve(
+          supabase
+            .from('transfer_requests')
+            .delete()
+            .in('status', ['concluido', 'divergencia'])
+            .lt('criado_em', fourDaysAgoIso)
+        ).catch(() => {});
 
         return { items: resolved, source: 'supabase', purgedCount, isConnected: true };
       } else if (error) {

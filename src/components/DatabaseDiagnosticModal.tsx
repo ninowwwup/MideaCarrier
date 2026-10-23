@@ -62,6 +62,12 @@ ALTER TABLE public.transfer_requests DISABLE ROW LEVEL SECURITY;
 
 -- 4. HABILITAR Realtime para sincronização simultânea instantânea entre computadores
 ALTER PUBLICATION supabase_realtime ADD TABLE public.transfer_requests;
+
+-- 5. AUTO-LIMPEZA A CADA 4 DIAS (Preserva plano gratuito e não estoura cota do Supabase)
+-- Mantém pendentes e em análise intactos; purga apenas concluídos e divergências antigos (> 4 dias)
+DELETE FROM public.transfer_requests 
+WHERE status IN ('concluido', 'divergencia') 
+  AND criado_em < NOW() - INTERVAL '4 days';
 `;
 
 export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = ({

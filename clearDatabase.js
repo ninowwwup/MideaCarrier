@@ -32,7 +32,22 @@ async function resetAll() {
     console.error('Erro ao limpar Supabase:', err);
   }
 
-  console.log('\nBanco de dados e arquivos locais 100% zerados!');
+  // 3. Limpar Shared Cloud Store
+  try {
+    const cloudRes = await fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        name: 'midea_carrier_transfer_hub_production', 
+        data: { items: [], lastUpdated: Date.now() } 
+      }),
+    });
+    console.log('✓ Shared Cloud Store zerado com status:', cloudRes.status);
+  } catch (e) {
+    console.warn('Aviso ao limpar Shared Cloud Store:', e);
+  }
+
+  console.log('\nBanco de dados Supabase, Shared Cloud e arquivos locais 100% zerados!');
 }
 
 resetAll();
