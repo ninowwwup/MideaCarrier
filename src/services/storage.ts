@@ -5,7 +5,7 @@ import { playAlertChime } from '../utils/audioAlert';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
-const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000; // Auto-limpeza a cada 2 dias (48 horas)
 
 // Inicialização limpa e pronta para uso em produção
 export const INITIAL_SEED: TransferItem[] = [];
@@ -38,8 +38,8 @@ export function mapRowToTransferItem(d: any, index = 0): TransferItem {
 }
 
 /**
- * Auto-limpeza contínua a cada 4 dias: Mantém o banco Supabase leve e dentro do limite gratuito.
- * Exclui do banco apenas registros já concluídos ou com divergência criados há mais de 4 dias.
+ * Auto-limpeza contínua a cada 2 dias: Mantém o banco Supabase leve e dentro do limite gratuito.
+ * Exclui do banco apenas registros já concluídos ou com divergência criados há mais de 2 dias (48 horas).
  * Solicitações pendentes ou em análise são SEMPRE preservadas para evitar qualquer perda operacional.
  */
 export function purgeOldRecords(items: TransferItem[]): {
@@ -52,7 +52,7 @@ export function purgeOldRecords(items: TransferItem[]): {
 
   for (const item of items) {
     const itemAge = now - new Date(item.criadoEm).getTime();
-    const isOld = itemAge > FOUR_DAYS_MS;
+    const isOld = itemAge > TWO_DAYS_MS;
     const isResolved = item.status === 'concluido' || item.status === 'divergencia';
 
     if (isOld && isResolved) {
@@ -84,7 +84,7 @@ export function purgeOldRecords(items: TransferItem[]): {
       )
         .then((res: any) => {
           if (!res?.error) {
-            console.log(`✓ Auto-limpeza Supabase: ${idsToDelete.length} registro(s) antigos (>4 dias) excluídos.`);
+            console.log(`✓ Auto-limpeza Supabase: ${idsToDelete.length} registro(s) antigos (>2 dias) excluídos.`);
           }
         })
         .catch(() => {});
@@ -215,14 +215,14 @@ export async function fetchTransferItems(): Promise<{
         // Replica em background no Shared Cloud Store para manter a nuvem espelhada
         saveToSharedCloudStore(resolved).catch(() => {});
 
-        // Auto-limpeza contínua no Supabase: exclui registros resolvidos com mais de 4 dias
-        const fourDaysAgoIso = new Date(Date.now() - FOUR_DAYS_MS).toISOString();
+        // Auto-limpeza contínua no Supabase: exclui registros resolvidos com mais de 2 dias (48 horas)
+        const twoDaysAgoIso = new Date(Date.now() - TWO_DAYS_MS).toISOString();
         Promise.resolve(
           supabase
             .from('transfer_requests')
             .delete()
             .in('status', ['concluido', 'divergencia'])
-            .lt('criado_em', fourDaysAgoIso)
+            .lt('criado_em', twoDaysAgoIso)
         ).catch(() => {});
 
         return { items: resolved, source: 'supabase', purgedCount, isConnected: true };
@@ -530,6 +530,77 @@ export async function updateSpecificTransferItems(
         bc.postMessage({
           type: 'STATUS_UPDATED',
           items: affectedItems,
+          originatorSessionId: CURRENT_SESSION_ID,
+          timestamp: Date.now(),
+        });
+        bc.close();
+      }
+    } catch (e) {}
+  }
+
+  return anySuccess;
+}
+
+/**
+ * Excluir itens específicos selecionados (para correção de digitação ou cancelamento operacional)
+ * Propaga a exclusão cirúrgica para o Supabase, Shared Cloud Store, Backend e abas locais.
+ */
+export async function deleteSpecificTransferItems(
+  idsToDelete: string[],
+  updatedRemainingItems: TransferItem[]
+): Promise<boolean> {
+  if (!idsToDelete || idsToDelete.length === 0) return true;
+
+  // 1. Atualizar cache local imediatamente
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedRemainingItems));
+      saveToSharedCloudStore(updatedRemainingItems).catch(() => {});
+    } catch (e) {}
+  }
+
+  // 2. Remove da lista de rastreamento de IDs conhecidos
+  idsToDelete.forEach((id) => globalKnownItemIds.delete(id));
+
+  let anySuccess = false;
+
+  // 3. Excluir diretamente do Supabase
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('transfer_requests')
+        .delete()
+        .in('id', idsToDelete);
+      if (!error) {
+        anySuccess = true;
+      } else {
+        console.warn('Aviso: Erro ao excluir itens do Supabase:', error.message);
+      }
+    } catch (err) {
+      console.warn('Exceção ao excluir itens no Supabase:', err);
+    }
+  }
+
+  // 4. Excluir via Backend /api/transfers
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToDelete, clientId: BROWSER_CLIENT_ID }),
+      });
+      if (res.ok) anySuccess = true;
+    } catch (e) {}
+
+    // 5. Notificar abas no mesmo computador
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({
+          type: 'ITEMS_DELETED',
+          ids: idsToDelete,
+          remainingItems: updatedRemainingItems,
           originatorSessionId: CURRENT_SESSION_ID,
           timestamp: Date.now(),
         });
@@ -947,6 +1018,10 @@ export function subscribeToRealtimeTransfers(
       bc = new BroadcastChannel('migou_sync_realtime');
       bc.onmessage = (ev) => {
         if (ev?.data?.originatorSessionId && ev.data.originatorSessionId === CURRENT_SESSION_ID) {
+          return;
+        }
+        if (ev?.data?.type === 'ITEMS_DELETED' && Array.isArray(ev.data.remainingItems)) {
+          notifyChange(ev.data.remainingItems, 'polling');
           return;
         }
         if (ev?.data?.type === 'NEW_PENDING_TRANSFERS') {

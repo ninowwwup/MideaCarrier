@@ -32,6 +32,12 @@ export const SoundSelectorModal: React.FC<SoundSelectorModalProps> = ({
   const [selectedSound, setSelectedSound] = useState<AlertSoundType>(getSavedAlertSound());
   const [playingId, setPlayingId] = useState<AlertSoundType | null>(null);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedSound(getSavedAlertSound());
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handlePreview = (soundId: AlertSoundType, e?: React.MouseEvent) => {

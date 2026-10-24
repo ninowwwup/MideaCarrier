@@ -16,12 +16,24 @@ import {
   MessageSquare,
   Camera,
   Image as ImageIcon,
-  RotateCcw
+  RotateCcw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Trash2
 } from 'lucide-react';
 import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/transfer';
 import { formatForSAPTable, formatSerialsForSAP } from '../utils/sapFormatter';
 import { LabelPhotoModal } from './LabelPhotoModal';
 import { compressImageFile } from '../utils/imageCompressor';
+
+export type SortField = 'fifo' | 'material' | 'serial' | 'centro' | 'rota' | 'status' | 'docSap';
+export type SortDirection = 'asc' | 'desc';
+
+export interface SortConfig {
+  field: SortField;
+  direction: SortDirection;
+}
 
 interface TransferTableProps {
   items: TransferItem[];
@@ -35,6 +47,7 @@ interface TransferTableProps {
   onAttachLabelPhoto?: (itemId: string, photoUrl: string) => void;
   onOpenNewModal?: () => void;
   onOpenBatchPaste?: () => void;
+  onDeleteSelected?: (ids: string[]) => void | Promise<void>;
 }
 
 export type ColumnKey =
@@ -78,12 +91,21 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   onAttachLabelPhoto,
   onOpenNewModal,
   onOpenBatchPaste,
+  onDeleteSelected,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedBatchNotice, setCopiedBatchNotice] = useState(false);
   const [viewingPhotoItem, setViewingPhotoItem] = useState<TransferItem | null>(null);
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
+
+  // Estado de Ordenação e Agrupamento Interativo (por Material, Centro, Depósitos, FIFO, etc.)
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'fifo', direction: 'asc' });
+
+  // Estados de Exclusão de Linhas Selecionadas
+  const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
+  const [itemToDeleteSingle, setItemToDeleteSingle] = useState<TransferItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Colunas redimensionáveis estilo AppSheet
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => {
@@ -108,9 +130,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   const allDepsOrigem = useMemo(() => Array.from(new Set(items.map((i) => i.depositoOrigem))).sort(), [items]);
   const allDepsDestino = useMemo(() => Array.from(new Set(items.map((i) => i.depositoDestino))).sort(), [items]);
 
-  // Itens filtrados
+  // Função para alternar ordenação ao clicar no cabeçalho
+  const handleSort = (field: SortField) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        if (prev.direction === 'asc') {
+          return { field, direction: 'desc' };
+        } else {
+          // Volta à ordem cronológica FIFO padrão
+          return { field: 'fifo', direction: 'asc' };
+        }
+      }
+      return { field, direction: 'asc' };
+    });
+  };
+
+  // Itens filtrados, agrupados e ordenados
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    const list = items.filter((item) => {
       // Busca geral
       if (filters.busca.trim()) {
         const query = filters.busca.toLowerCase();
@@ -153,7 +190,53 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
       return true;
     });
-  }, [items, filters]);
+
+    // Ordenação e Agrupamento
+    return [...list].sort((a, b) => {
+      const dir = sortConfig.direction === 'asc' ? 1 : -1;
+
+      switch (sortConfig.field) {
+        case 'material': {
+          const cmp = a.material.localeCompare(b.material, 'pt-BR', { numeric: true, sensitivity: 'base' });
+          if (cmp !== 0) return cmp * dir;
+          return a.prioridadeFifo - b.prioridadeFifo;
+        }
+        case 'centro': {
+          const cmp = a.centro.localeCompare(b.centro, 'pt-BR', { numeric: true });
+          if (cmp !== 0) return cmp * dir;
+          return a.prioridadeFifo - b.prioridadeFifo;
+        }
+        case 'rota': {
+          const routeA = `${a.depositoOrigem}➔${a.depositoDestino}`;
+          const routeB = `${b.depositoOrigem}➔${b.depositoDestino}`;
+          const cmp = routeA.localeCompare(routeB, 'pt-BR', { numeric: true });
+          if (cmp !== 0) return cmp * dir;
+          return a.prioridadeFifo - b.prioridadeFifo;
+        }
+        case 'serial': {
+          const cmp = a.serial.localeCompare(b.serial, 'pt-BR', { numeric: true });
+          if (cmp !== 0) return cmp * dir;
+          return a.prioridadeFifo - b.prioridadeFifo;
+        }
+        case 'status': {
+          const cmp = a.status.localeCompare(b.status, 'pt-BR');
+          if (cmp !== 0) return cmp * dir;
+          return a.prioridadeFifo - b.prioridadeFifo;
+        }
+        case 'docSap': {
+          const docA = a.sapDocNumber || '';
+          const docB = b.sapDocNumber || '';
+          const cmp = docA.localeCompare(docB, 'pt-BR', { numeric: true });
+          if (cmp !== 0) return cmp * dir;
+          return a.prioridadeFifo - b.prioridadeFifo;
+        }
+        case 'fifo':
+        default: {
+          return (a.prioridadeFifo - b.prioridadeFifo) * dir;
+        }
+      }
+    });
+  }, [items, filters, sortConfig]);
 
   // Checkbox master
   const isAllSelected = filteredItems.length > 0 && selectedIds.size === filteredItems.length;
@@ -355,6 +438,32 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 ))}
               </select>
 
+              {/* Indicador de Ordenação Ativa e Botão Resetar */}
+              {sortConfig.field !== 'fifo' && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-100/80 border border-blue-200 text-[#002664] text-xs font-semibold animate-in fade-in">
+                  <span className="text-[11px] text-blue-700 hidden sm:inline">Agrupado por:</span>
+                  <span className="font-bold uppercase tracking-tight">
+                    {sortConfig.field === 'material' ? 'Material' :
+                     sortConfig.field === 'centro' ? 'Centro' :
+                     sortConfig.field === 'rota' ? 'Rota Depósitos' :
+                     sortConfig.field === 'serial' ? 'Serial' :
+                     sortConfig.field === 'status' ? 'Status' :
+                     sortConfig.field === 'docSap' ? 'Doc SAP' : sortConfig.field}
+                  </span>
+                  <span className="text-[10px] bg-white px-1.5 py-0.5 rounded shadow-2xs font-mono">
+                    {sortConfig.direction === 'asc' ? 'A ➔ Z' : 'Z ➔ A'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSortConfig({ field: 'fifo', direction: 'asc' })}
+                    className="p-1 rounded-md hover:bg-blue-200 text-blue-900 transition-colors cursor-pointer"
+                    title="Voltar à ordem cronológica FIFO padrão"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
               {/* Limpar Filtros */}
               {(filters.busca ||
                 filters.status !== 'todos' ||
@@ -452,6 +561,18 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                   <AlertOctagon className="w-3.5 h-3.5" />
                   <span>Divergência</span>
                 </button>
+
+                {onDeleteSelected && (
+                  <button
+                    type="button"
+                    onClick={() => setIsBatchDeleteModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs cursor-pointer"
+                    title="Excluir linhas selecionadas caso alguém tenha digitado incorretamente"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir ({selectedItemsList.length})</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -654,6 +775,18 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         Divergência
                       </button>
                     )}
+
+                    {onDeleteSelected && (
+                      <button
+                        type="button"
+                        onClick={() => setItemToDeleteSingle(item)}
+                        className="py-1 px-2 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg active:scale-95 flex items-center justify-center gap-1"
+                        title="Excluir este lançamento"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Excluir</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -691,9 +824,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 2. FIFO */}
                 <th
                   style={{ width: columnWidths.fifo, minWidth: columnWidths.fifo }}
-                  className="py-2.5 px-1.5 text-center relative select-none"
+                  className={`py-2.5 px-1.5 text-center relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'fifo' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('fifo')}
+                  title="Ordenar por Prioridade FIFO (Clique para alternar ordem)"
                 >
-                  <span>FIFO</span>
+                  <div className="flex items-center justify-center gap-1">
+                    <span>FIFO</span>
+                    {sortConfig.field === 'fifo' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-2.5 h-2.5 text-[#00609C] stroke-[3]" />
+                      ) : (
+                        <ArrowDown className="w-2.5 h-2.5 text-[#00609C] stroke-[3]" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'fifo')}
                     onDoubleClick={() => handleResetSingleCol('fifo')}
@@ -705,9 +853,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 3. Material */}
                 <th
                   style={{ width: columnWidths.material, minWidth: columnWidths.material }}
-                  className="py-2.5 px-2 relative select-none"
+                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'material' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('material')}
+                  title="Ordenar e Agrupar por Materiais iguais (Clique para alternar A-Z / Z-A)"
                 >
-                  <span className="truncate">Material</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate">Material</span>
+                    {sortConfig.field === 'material' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 hover:opacity-100 shrink-0" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'material')}
                     onDoubleClick={() => handleResetSingleCol('material')}
@@ -719,9 +882,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 4. Serial */}
                 <th
                   style={{ width: columnWidths.serial, minWidth: columnWidths.serial }}
-                  className="py-2.5 px-2 relative select-none"
+                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'serial' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('serial')}
+                  title="Ordenar por Serial (Clique para alternar A-Z / Z-A)"
                 >
-                  <span className="truncate">Serial</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate">Serial</span>
+                    {sortConfig.field === 'serial' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 hover:opacity-100 shrink-0" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'serial')}
                     onDoubleClick={() => handleResetSingleCol('serial')}
@@ -733,9 +911,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 5. Centro */}
                 <th
                   style={{ width: columnWidths.centro, minWidth: columnWidths.centro }}
-                  className="py-2.5 px-1.5 text-center relative select-none"
+                  className={`py-2.5 px-1.5 text-center relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'centro' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('centro')}
+                  title="Ordenar e Agrupar por Centros iguais (Clique para alternar)"
                 >
-                  <span>Centro</span>
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Centro</span>
+                    {sortConfig.field === 'centro' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-2.5 h-2.5 text-[#00609C] stroke-[3] shrink-0" />
+                      ) : (
+                        <ArrowDown className="w-2.5 h-2.5 text-[#00609C] stroke-[3] shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 hover:opacity-100 shrink-0" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'centro')}
                     onDoubleClick={() => handleResetSingleCol('centro')}
@@ -747,9 +940,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 6. Rota Origem ➔ Destino */}
                 <th
                   style={{ width: columnWidths.rota, minWidth: columnWidths.rota }}
-                  className="py-2.5 px-2 relative select-none"
+                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'rota' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('rota')}
+                  title="Ordenar e Agrupar por Depósitos de Origem e Destino iguais"
                 >
-                  <span className="truncate">Origem ➔ Destino</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate">Origem ➔ Destino</span>
+                    {sortConfig.field === 'rota' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 hover:opacity-100 shrink-0" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'rota')}
                     onDoubleClick={() => handleResetSingleCol('rota')}
@@ -761,9 +969,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 7. Status */}
                 <th
                   style={{ width: columnWidths.status, minWidth: columnWidths.status }}
-                  className="py-2.5 px-2 relative select-none"
+                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'status' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('status')}
+                  title="Ordenar e Agrupar por Status (Pendente, Concluído, etc.)"
                 >
-                  <span>Status</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span>Status</span>
+                    {sortConfig.field === 'status' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 hover:opacity-100 shrink-0" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'status')}
                     onDoubleClick={() => handleResetSingleCol('status')}
@@ -792,9 +1015,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 {/* 9. Doc SAP / Obs */}
                 <th
                   style={{ width: columnWidths.docSap, minWidth: columnWidths.docSap }}
-                  className="py-2.5 px-2 relative select-none"
+                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                    sortConfig.field === 'docSap' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
+                  }`}
+                  onClick={() => handleSort('docSap')}
+                  title="Ordenar por Documento SAP / Observações"
                 >
-                  <span className="truncate">Doc SAP / Obs</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate">Doc SAP / Obs</span>
+                    {sortConfig.field === 'docSap' ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 hover:opacity-100 shrink-0" />
+                    )}
+                  </div>
                   <div
                     onMouseDown={(e) => handleStartResize(e, 'docSap')}
                     onDoubleClick={() => handleResetSingleCol('docSap')}
@@ -1176,6 +1414,18 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               <Clock className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          {/* Excluir Linha Individual (Caso de erro de digitação) */}
+                          {onDeleteSelected && (
+                            <button
+                              type="button"
+                              onClick={() => setItemToDeleteSingle(item)}
+                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all active:scale-90"
+                              title="Excluir este lançamento (Erro de digitação)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1206,6 +1456,169 @@ export const TransferTable: React.FC<TransferTableProps> = ({
         item={viewingPhotoItem}
         onClose={() => setViewingPhotoItem(null)}
       />
+
+      {/* Modal de Confirmação de Exclusão em Lote */}
+      {isBatchDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-5 bg-gradient-to-r from-rose-600 to-rose-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Excluir Solicitações?</h3>
+                  <p className="text-xs text-rose-100">
+                    {selectedItemsList.length} registro(s) selecionado(s)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBatchDeleteModalOpen(false)}
+                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 flex items-start gap-2.5">
+                <AlertOctagon className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Ação permanente:</span> Os itens selecionados serão removidos do banco de dados (Supabase) e de todos os computadores sincronizados. Use esta função para limpar seriais ou materiais digitados por engano.
+                </div>
+              </div>
+
+              {/* Lista Resumo dos Itens a serem excluídos */}
+              <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-2xl divide-y divide-slate-100 bg-slate-50/50 p-1">
+                {selectedItemsList.slice(0, 10).map((it) => (
+                  <div key={it.id} className="p-2 text-xs flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-800 truncate">{it.material}</div>
+                      <div className="text-[11px] text-slate-500 font-mono truncate">{it.serial}</div>
+                    </div>
+                    <div className="text-right text-[11px] text-slate-600 shrink-0">
+                      <div>Centro {it.centro}</div>
+                      <div className="text-[10px] text-slate-400">{it.depositoOrigem} ➔ {it.depositoDestino}</div>
+                    </div>
+                  </div>
+                ))}
+                {selectedItemsList.length > 10 && (
+                  <div className="p-2 text-center text-xs text-slate-500 font-medium">
+                    + {selectedItemsList.length - 10} outro(s) item(ns)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ações */}
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsBatchDeleteModalOpen(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  try {
+                    setIsDeleting(true);
+                    if (onDeleteSelected) {
+                      await onDeleteSelected(Array.from(selectedIds));
+                    }
+                    setSelectedIds(new Set());
+                    setIsBatchDeleteModalOpen(false);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Excluindo...' : `Confirmar Exclusão (${selectedItemsList.length})`}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão Individual */}
+      {itemToDeleteSingle && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 bg-gradient-to-r from-rose-600 to-rose-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                  <Trash2 className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base">Excluir Solicitação?</h3>
+                  <p className="text-[11px] text-rose-100">Correção de lançamento incorreto</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setItemToDeleteSingle(null)}
+                className="p-1 rounded-lg text-white/80 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-slate-600">
+                Deseja realmente excluir este lançamento do sistema?
+              </p>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-1">
+                <div><span className="font-semibold text-slate-500">Material:</span> <strong className="text-slate-800">{itemToDeleteSingle.material}</strong></div>
+                <div><span className="font-semibold text-slate-500">Serial:</span> <span className="font-mono text-slate-800">{itemToDeleteSingle.serial}</span></div>
+                <div><span className="font-semibold text-slate-500">Rota:</span> Centro {itemToDeleteSingle.centro} ({itemToDeleteSingle.depositoOrigem} ➔ {itemToDeleteSingle.depositoDestino})</div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setItemToDeleteSingle(null)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  try {
+                    setIsDeleting(true);
+                    if (onDeleteSelected) {
+                      await onDeleteSelected([itemToDeleteSingle.id]);
+                    }
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(itemToDeleteSingle.id);
+                      return next;
+                    });
+                    setItemToDeleteSingle(null);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all flex items-center gap-1 active:scale-95 shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Excluindo...' : 'Excluir'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

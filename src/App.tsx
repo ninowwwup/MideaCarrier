@@ -40,6 +40,7 @@ import {
   saveTransferItems, 
   insertTransferItems,
   updateSpecificTransferItems,
+  deleteSpecificTransferItems,
   createRequestsFromMultiSerial, 
   computeKPIs, 
   subscribeToRealtimeTransfers,
@@ -437,6 +438,18 @@ export default function App() {
     );
   };
 
+  // Excluir linhas selecionadas (para limpeza rápida de erros de digitação)
+  const handleDeleteSelected = async (ids: string[]) => {
+    const idSet = new Set(ids);
+    const remaining = items.filter((item) => !idSet.has(item.id));
+    setItems(remaining);
+    await deleteSpecificTransferItems(ids, remaining);
+    showSuccessNotice(
+      'Solicitação(ões) Excluída(s)!',
+      `${ids.length} linha(s) removida(s) com sucesso para limpeza de lançamentos incorretos.`
+    );
+  };
+
   // Resolução de Conclusão ou Divergência (Atualização cirúrgica em lote no Supabase)
   const handleResolutionSubmit = async (data: {
     sapDocNumber?: string;
@@ -586,6 +599,7 @@ export default function App() {
           onAttachLabelPhoto={handleAttachLabelPhoto}
           onOpenNewModal={() => setIsNewModalOpen(true)}
           onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
+          onDeleteSelected={handleDeleteSelected}
         />
       </main>
 

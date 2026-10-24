@@ -454,7 +454,7 @@ export const Header: React.FC<HeaderProps> = ({
               <CalendarCheck2 className="w-4 h-4 text-[#C2DEEB]" />
             </span>
             <span>
-              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com auto-limpeza a cada 4 dias.
+              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com auto-limpeza a cada 2 dias.
             </span>
           </div>
 

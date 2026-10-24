@@ -348,22 +348,22 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
         if (!error && Array.isArray(data)) {
           const now = Date.now();
-          const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
-          const fourDaysAgoIso = new Date(now - FOUR_DAYS_MS).toISOString();
+          const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+          const twoDaysAgoIso = new Date(now - TWO_DAYS_MS).toISOString();
 
-          // Auto-limpeza periódica a cada 4 dias no Supabase para economizar cota gratuita
+          // Auto-limpeza periódica a cada 2 dias no Supabase para economizar cota gratuita
           Promise.resolve(
             supabase
               .from('transfer_requests')
               .delete()
               .in('status', ['concluido', 'divergencia'])
-              .lt('criado_em', fourDaysAgoIso)
+              .lt('criado_em', twoDaysAgoIso)
           ).catch(() => {});
 
           const filteredData = data.filter((d: any) => {
             const age = now - new Date(d.criado_em || now).getTime();
             const isResolved = d.status === 'concluido' || d.status === 'divergencia';
-            return !(age > FOUR_DAYS_MS && isResolved);
+            return !(age > TWO_DAYS_MS && isResolved);
           });
 
           const mapped = filteredData.map((d: any, index: number) => ({
@@ -434,36 +434,90 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 7. DELETE /api/transfers ou /api/transfers/clear: Limpeza e reinicialização completa do zero
+  // 7. DELETE /api/transfers ou /api/transfers/clear: Excluir itens selecionados ou zerar
   if (req.method === 'DELETE' || (rawUrl.includes('/clear') && req.method === 'POST')) {
-    memoryStore = [];
-    lastModified = Date.now();
-    savePersistentStore([]);
-
-    // Sincroniza Shared Cloud Store
-    fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'midea_carrier_transfer_hub_production', data: { items: [], lastUpdated: Date.now() } }),
-    }).catch(() => {});
-
-    broadcastSSE({
-      type: 'TRANSFER_UPDATE',
-      items: [],
-      timestamp: lastModified,
-    });
-
-    if (supabase) {
+    const processDelete = async (body?: any) => {
+      let idsToDelete: string[] | null = null;
       try {
-        await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
-      } catch (e) {
-        console.warn('Erro ao limpar Supabase via backend DELETE:', e);
+        const parsed = typeof body === 'string' ? JSON.parse(body || '{}') : (body || {});
+        if (Array.isArray(parsed.ids) && parsed.ids.length > 0) {
+          idsToDelete = parsed.ids.map(String);
+        }
+      } catch (e) {}
+
+      // Se for exclusão de itens específicos selecionados
+      if (idsToDelete && idsToDelete.length > 0) {
+        const idSet = new Set(idsToDelete);
+        memoryStore = memoryStore.filter((i: any) => !idSet.has(String(i.id)));
+        lastModified = Date.now();
+        savePersistentStore(memoryStore);
+
+        // Sincroniza Shared Cloud Store
+        fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'midea_carrier_transfer_hub_production', data: { items: memoryStore, lastUpdated: lastModified } }),
+        }).catch(() => {});
+
+        broadcastSSE({
+          type: 'TRANSFER_UPDATE',
+          items: memoryStore,
+          timestamp: lastModified,
+        });
+
+        if (supabase) {
+          try {
+            await supabase.from('transfer_requests').delete().in('id', idsToDelete);
+          } catch (e) {
+            console.warn('Erro ao excluir itens do Supabase via backend DELETE:', e);
+          }
+        }
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: true, message: `${idsToDelete.length} item(ns) excluído(s).`, items: memoryStore, lastModified }));
+        return;
       }
+
+      // Se não houver IDs específicos (ou rota /clear): Zera todos os registros
+      memoryStore = [];
+      lastModified = Date.now();
+      savePersistentStore([]);
+
+      // Sincroniza Shared Cloud Store
+      fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'midea_carrier_transfer_hub_production', data: { items: [], lastUpdated: Date.now() } }),
+      }).catch(() => {});
+
+      broadcastSSE({
+        type: 'TRANSFER_UPDATE',
+        items: [],
+        timestamp: lastModified,
+      });
+
+      if (supabase) {
+        try {
+          await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
+        } catch (e) {
+          console.warn('Erro ao limpar Supabase via backend DELETE:', e);
+        }
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, message: 'Todos os registros foram zerados.', items: [], lastModified }));
+    };
+
+    if (req.body) {
+      processDelete(req.body);
+      return;
     }
 
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: true, message: 'Todos os registros foram zerados.', items: [], lastModified }));
+    let b = '';
+    req.on('data', (c) => (b += c));
+    req.on('end', () => processDelete(b));
     return;
   }
 

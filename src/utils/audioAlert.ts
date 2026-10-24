@@ -96,92 +96,15 @@ export const SOUND_FILE_MAP: Record<AlertSoundType, string> = {
 
 let sharedAudioCtx: AudioContext | null = null;
 let isAudioUnlocked = false;
-const preloadedAudios: Partial<Record<AlertSoundType, HTMLAudioElement>> = {};
 
-// Inicializa todos os arquivos de áudio pré-carregados
-if (typeof window !== 'undefined') {
-  (Object.keys(SOUND_FILE_MAP) as AlertSoundType[]).forEach((type) => {
-    try {
-      const audio = new Audio(SOUND_FILE_MAP[type]);
-      audio.preload = 'auto';
-      audio.volume = 1.0;
-      preloadedAudios[type] = audio;
-    } catch (e) {}
-  });
-}
-
-/**
- * Desbloqueia o contexto de áudio em qualquer interação inicial do usuário
- */
-export function initAudioOnUserInteraction() {
-  if (typeof window === 'undefined') return;
-
-  const unlock = () => {
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioContextClass && !sharedAudioCtx) {
-        sharedAudioCtx = new AudioContextClass();
-      }
-
-      if (sharedAudioCtx) {
-        if (sharedAudioCtx.state === 'suspended') {
-          sharedAudioCtx.resume().then(() => {
-            isAudioUnlocked = true;
-            window.dispatchEvent(new CustomEvent('migou_audio_ready'));
-          }).catch(() => {});
-        } else if (sharedAudioCtx.state === 'running') {
-          isAudioUnlocked = true;
-          window.dispatchEvent(new CustomEvent('migou_audio_ready'));
-        }
-
-        // Toca buffer silencioso de 1 sample para autorizar o áudio no Chrome/Safari em segundo plano
-        try {
-          const silentBuf = sharedAudioCtx.createBuffer(1, 1, 22050);
-          const src = sharedAudioCtx.createBufferSource();
-          src.buffer = silentBuf;
-          src.connect(sharedAudioCtx.destination);
-          src.start(0);
-        } catch (e) {}
-      }
-
-      // Pré-autoriza todos os elementos HTML5 Audio
-      (Object.keys(preloadedAudios) as AlertSoundType[]).forEach((type) => {
-        const audio = preloadedAudios[type];
-        if (audio) {
-          try {
-            audio.volume = 0.001;
-            const p = audio.play();
-            if (p) {
-              p.then(() => {
-                audio.pause();
-                audio.currentTime = 0;
-                audio.volume = 1.0;
-              }).catch(() => {});
-            }
-          } catch (e) {}
-        }
-      });
-    } catch (e) {}
-  };
-
-  const events = ['click', 'pointerdown', 'mousedown', 'keydown', 'touchstart'];
-  events.forEach((evt) => {
-    window.addEventListener(evt, unlock, { once: false, passive: true });
-  });
-}
-
-// Inicializa os ouvintes globais
-initAudioOnUserInteraction();
-
-export function isAudioReady(): boolean {
-  if (typeof window === 'undefined') return false;
-  return isAudioUnlocked || (sharedAudioCtx !== null && sharedAudioCtx.state === 'running');
-}
+// Cache de AudioBuffers decodificados para latência zero e 100% de estabilidade
+const audioBufferCache: Partial<Record<AlertSoundType, AudioBuffer>> = {};
+const pendingBufferFetches: Partial<Record<AlertSoundType, Promise<AudioBuffer | null>>> = {};
 
 /**
  * Obtém ou inicializa o contexto de áudio compartilhado
  */
-function getAudioContext(): AudioContext | null {
+export function getAudioContext(): AudioContext | null {
   try {
     const AudioContextClass = typeof window !== 'undefined'
       ? (window.AudioContext || (window as any).webkitAudioContext)
@@ -201,6 +124,86 @@ function getAudioContext(): AudioContext | null {
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * Carrega e decodifica o arquivo de áudio WAV para memória Web Audio (AudioBuffer)
+ */
+async function loadAudioBuffer(soundType: AlertSoundType): Promise<AudioBuffer | null> {
+  if (audioBufferCache[soundType]) return audioBufferCache[soundType]!;
+  if (pendingBufferFetches[soundType]) return pendingBufferFetches[soundType]!;
+
+  const ctx = getAudioContext();
+  if (!ctx || typeof window === 'undefined') return null;
+
+  const fetchPromise = (async () => {
+    try {
+      const url = SOUND_FILE_MAP[soundType] || SOUND_FILE_MAP.water_drop;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const arrayBuf = await res.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(arrayBuf);
+      audioBufferCache[soundType] = decoded;
+      return decoded;
+    } catch (e) {
+      return null;
+    } finally {
+      delete pendingBufferFetches[soundType];
+    }
+  })();
+
+  pendingBufferFetches[soundType] = fetchPromise;
+  return fetchPromise;
+}
+
+// Pré-carrega todos os arquivos WAV em segundo plano
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    (Object.keys(SOUND_FILE_MAP) as AlertSoundType[]).forEach((type) => {
+      loadAudioBuffer(type).catch(() => {});
+    });
+  }, 300);
+}
+
+/**
+ * Desbloqueia o contexto de áudio em qualquer interação inicial do usuário
+ */
+export function initAudioOnUserInteraction() {
+  if (typeof window === 'undefined') return;
+
+  const unlock = () => {
+    try {
+      const ctx = getAudioContext();
+      if (ctx) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            isAudioUnlocked = true;
+            window.dispatchEvent(new CustomEvent('migou_audio_ready'));
+            // Pré-carrega os sons com o contexto liberado
+            (Object.keys(SOUND_FILE_MAP) as AlertSoundType[]).forEach((type) => {
+              loadAudioBuffer(type).catch(() => {});
+            });
+          }).catch(() => {});
+        } else if (ctx.state === 'running') {
+          isAudioUnlocked = true;
+          window.dispatchEvent(new CustomEvent('migou_audio_ready'));
+        }
+      }
+    } catch (e) {}
+  };
+
+  const events = ['click', 'pointerdown', 'mousedown', 'keydown', 'touchstart'];
+  events.forEach((evt) => {
+    window.addEventListener(evt, unlock, { passive: true });
+  });
+}
+
+// Inicializa os ouvintes globais
+initAudioOnUserInteraction();
+
+export function isAudioReady(): boolean {
+  if (typeof window === 'undefined') return false;
+  return isAudioUnlocked || (sharedAudioCtx !== null && sharedAudioCtx.state === 'running');
 }
 
 // ============================================================================
@@ -462,19 +465,46 @@ export function synthesizeProceduralSound(soundType: AlertSoundType) {
 }
 
 /**
- * Toca um som específico por tipo (executa o arquivo WAV oficial e usa síntese procedural como fallback)
+ * Toca um som específico por tipo (executa o AudioBuffer em memória, com fallback para arquivo WAV e síntese procedural)
  */
-export function playSoundByType(soundType: AlertSoundType) {
-  // 1. Toca o arquivo de áudio WAV correspondente
+export async function playSoundByType(soundType: AlertSoundType) {
+  // 1. Tentar tocar via Web Audio API com AudioBuffer decodificado (Latência 0ms, imune a erros de HTML5 Audio)
+  const ctx = getAudioContext();
+  if (ctx) {
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+        isAudioUnlocked = true;
+      } catch (e) {}
+    }
+
+    if (ctx.state === 'running') {
+      let buffer = audioBufferCache[soundType];
+      if (!buffer) {
+        buffer = await loadAudioBuffer(soundType);
+      }
+
+      if (buffer) {
+        try {
+          const source = ctx.createBufferSource();
+          const gainNode = ctx.createGain();
+          gainNode.gain.setValueAtTime(0.95, ctx.currentTime);
+          source.buffer = buffer;
+          source.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          source.start(0);
+          return;
+        } catch (e) {
+          console.warn('Erro ao reproduzir AudioBuffer:', e);
+        }
+      }
+    }
+  }
+
+  // 2. Fallback via HTML5 Audio element independente
   if (typeof window !== 'undefined') {
     try {
-      let audio = preloadedAudios[soundType];
-      if (!audio) {
-        audio = new Audio(SOUND_FILE_MAP[soundType] || '/audio/water_drop.wav');
-        audio.preload = 'auto';
-        preloadedAudios[soundType] = audio;
-      }
-      audio.currentTime = 0;
+      const audio = new Audio(SOUND_FILE_MAP[soundType] || SOUND_FILE_MAP.water_drop);
       audio.volume = 1.0;
       const playPromise = audio.play();
       if (playPromise !== undefined) {
@@ -489,14 +519,21 @@ export function playSoundByType(soundType: AlertSoundType) {
     }
   }
 
-  // Fallback caso áudio HTML5 não esteja disponível
+  // 3. Fallback procedural sintético
   synthesizeProceduralSound(soundType);
 }
 
+let lastAlertChimeTime = 0;
+
 /**
- * Toca o som de alerta configurado atualmente pelo usuário
+ * Toca o som de alerta configurado atualmente pelo usuário (com debounce contra disparos repetidos)
  */
 export function playAlertChime() {
+  const now = Date.now();
+  if (now - lastAlertChimeTime < 400) {
+    return; // Evita repetições cacofônicas quando chegam múltiplos eventos de sincronização simultâneos
+  }
+  lastAlertChimeTime = now;
   const currentSound = getSavedAlertSound();
   playSoundByType(currentSound);
 }
@@ -514,19 +551,20 @@ export async function unlockAudioNow(specificSound?: AlertSoundType): Promise<bo
     isAudioUnlocked = true;
     window.dispatchEvent(new CustomEvent('migou_audio_ready'));
 
-    playSoundByType(soundToPlay);
+    await playSoundByType(soundToPlay);
     return true;
   } catch (e) {
     try {
-      const audio = preloadedAudios[soundToPlay] || new Audio(SOUND_FILE_MAP[soundToPlay]);
-      audio.currentTime = 0;
+      const audio = new Audio(SOUND_FILE_MAP[soundToPlay]);
       audio.volume = 1.0;
       await audio.play();
       isAudioUnlocked = true;
       window.dispatchEvent(new CustomEvent('migou_audio_ready'));
       return true;
-    } catch (err) {}
-    return false;
+    } catch (err) {
+      synthesizeProceduralSound(soundToPlay);
+      return true;
+    }
   }
 }
 
