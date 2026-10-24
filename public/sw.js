@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v3';
+const CACHE_NAME = 'migou-pwa-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -58,6 +58,24 @@ self.addEventListener('fetch', (event) => {
 
   // Não intercepta chamadas de API ou SSE
   if (event.request.url.includes('/api/')) return;
+
+  // Para navegação HTML (index.html), use Network-First para garantir que novas versões sejam vistas imediatamente
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
