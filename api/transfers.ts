@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 
 const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -184,27 +183,59 @@ export function broadcastSSE(data: any) {
   }
 }
 
-const DEFAULT_SUPABASE_URL = 'https://oxowlylcgunqkvuvtqyv.supabase.co';
-const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94b3dseWxjZ3VucWt2dXZ0cXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxODI3NjgsImV4cCI6MjEwNzc1ODc2OH0.08UtAFS9JkSoqmo7qUKZWXE73kbdbWol8ce_JiDL_P4';
+function getGoogleSheetsServerUrl(req?: IncomingMessage): string {
+  const headerUrl = req?.headers?.['x-google-sheets-url'];
+  if (typeof headerUrl === 'string' && headerUrl.trim()) {
+    return headerUrl.trim();
+  }
+  return (
+    process.env.VITE_GOOGLE_SHEETS_URL ||
+    process.env.GOOGLE_SHEETS_URL ||
+    ''
+  ).trim();
+}
 
-function getSupabaseServerClient() {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_KEY;
-  if (!url || !key) return null;
+async function fetchFromGoogleSheets(url: string) {
+  if (!url) return null;
+  const separator = url.includes('?') ? '&' : '?';
+  const target = `${url}${separator}action=read&_t=${Date.now()}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6500);
   try {
-    return createClient(url.trim(), key.trim(), {
-      auth: { persistSession: false },
-    });
-  } catch (e) {
-    console.error('Falha ao instanciar Supabase no servidor:', e);
+    const res = await fetch(target, { signal: controller.signal, redirect: 'follow' });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json && json.success && Array.isArray(json.items)) {
+      return json.items;
+    }
     return null;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    return null;
+  }
+}
+
+async function sendToGoogleSheets(url: string, payload: any) {
+  if (!url) return false;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('Erro ao sincronizar com Google Sheets:', e);
+    return false;
   }
 }
 
 export default async function handler(req: IncomingMessage & { body?: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Google-Sheets-Url');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 200;
@@ -329,75 +360,23 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  const supabase = getSupabaseServerClient();
+  const sheetsUrl = getGoogleSheetsServerUrl(req);
 
   // 6. GET /api/transfers: Obter itens mais recentes compartilhados entre todos os navegadores
   if (req.method === 'GET') {
-    if (supabase) {
+    if (sheetsUrl) {
       try {
-        const queryPromise = supabase
-          .from('transfer_requests')
-          .select('*')
-          .order('criado_em', { ascending: false });
-
-        const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout ao consultar Supabase (4.5s)')), 4500)
-        );
-
-        const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
-
-        if (!error && Array.isArray(data)) {
-          const now = Date.now();
-          const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-          const twoDaysAgoIso = new Date(now - TWO_DAYS_MS).toISOString();
-
-          // Auto-limpeza periódica a cada 2 dias no Supabase para economizar cota gratuita
-          Promise.resolve(
-            supabase
-              .from('transfer_requests')
-              .delete()
-              .in('status', ['concluido', 'divergencia'])
-              .lt('criado_em', twoDaysAgoIso)
-          ).catch(() => {});
-
-          const filteredData = data.filter((d: any) => {
-            const age = now - new Date(d.criado_em || now).getTime();
-            const isResolved = d.status === 'concluido' || d.status === 'divergencia';
-            return !(age > TWO_DAYS_MS && isResolved);
-          });
-
-          const mapped = filteredData.map((d: any, index: number) => ({
-            id: String(d.id),
-            solicitationCode: d.solicitation_code || `SOL-${index + 1}`,
-            material: d.material,
-            serial: d.serial,
-            centro: d.centro,
-            depositoOrigem: d.deposito_origem,
-            depositoDestino: d.deposito_destino,
-            status: d.status,
-            criadoEm: d.criado_em,
-            criadoPor: d.criado_por || 'Time Buiatte (Sênior WMS)',
-            atualizadoEm: d.atualizado_em || d.criado_em,
-            atualizadoPor: d.atualizado_por,
-            sapDocNumber: d.sap_doc_number,
-            observacoes: d.observacoes,
-            prioridadeFifo: index + 1,
-            batchId: d.batch_id,
-            labelPhotoUrl: d.label_photo_url || d.labelPhotoUrl,
-            originatorClientId: d.originator_client_id || d.originatorClientId,
-          }));
-
-          memoryStore = mapped;
-          savePersistentStore(mapped);
+        const sheetItems = await fetchFromGoogleSheets(sheetsUrl);
+        if (sheetItems && Array.isArray(sheetItems)) {
+          memoryStore = sheetItems;
+          savePersistentStore(sheetItems);
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;
-          res.end(JSON.stringify({ success: true, source: 'supabase', items: mapped, lastModified }));
+          res.end(JSON.stringify({ success: true, source: 'google_sheets', items: sheetItems, lastModified }));
           return;
-        } else if (error) {
-          console.warn('Aviso: Supabase indisponível no backend, consultando cloud store...', error.message);
         }
       } catch (err) {
-        console.warn('Aviso: Falha de conexão com Supabase no backend, consultando cloud store...', err);
+        console.warn('Aviso: Falha ao consultar Google Sheets no backend, usando memória/cache...', err);
       }
     }
 
@@ -469,12 +448,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           timestamp: lastModified,
         });
 
-        if (supabase) {
-          try {
-            await supabase.from('transfer_requests').delete().in('id', idsToDelete);
-          } catch (e) {
-            console.warn('Erro ao excluir itens do Supabase via backend DELETE:', e);
-          }
+        if (sheetsUrl) {
+          sendToGoogleSheets(sheetsUrl, { action: 'delete', ids: idsToDelete }).catch(() => {});
         }
 
         res.statusCode = 200;
@@ -501,12 +476,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         timestamp: lastModified,
       });
 
-      if (supabase) {
-        try {
-          await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
-        } catch (e) {
-          console.warn('Erro ao limpar Supabase via backend DELETE:', e);
-        }
+      if (sheetsUrl) {
+        sendToGoogleSheets(sheetsUrl, { action: 'clear' }).catch(() => {});
       }
 
       res.statusCode = 200;
@@ -649,55 +620,11 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           ).catch((e) => console.warn('Erro ao disparar Web Push:', e));
         }
 
-        // 3. Tenta salvar no Supabase em segundo plano caso o projeto esteja acessível
-        if (supabase) {
-          try {
-            if (items.length > 0) {
-              const payload = items.map((i: any) => ({
-                id: String(i.id),
-                solicitation_code: i.solicitationCode || null,
-                material: i.material,
-                serial: i.serial,
-                centro: i.centro,
-                deposito_origem: i.depositoOrigem,
-                deposito_destino: i.depositoDestino,
-                status: i.status,
-                criado_em: i.criadoEm,
-                criado_por: i.criadoPor,
-                atualizado_em: i.atualizadoEm || new Date().toISOString(),
-                atualizado_por: i.atualizadoPor || null,
-                sap_doc_number: i.sapDocNumber || null,
-                observacoes: i.observacoes || null,
-                batch_id: i.batchId || null,
-                label_photo_url: i.labelPhotoUrl || null,
-                originator_client_id: i.originatorClientId || null,
-              }));
-
-              let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
-
-              if (error && (error.code === '42703' || error.message?.includes('column'))) {
-                console.warn('Backend: colunas estendidas ausentes no Supabase, tentando com campos base...');
-                const corePayload = items.map((i: any) => ({
-                  id: String(i.id),
-                  solicitation_code: i.solicitationCode || `SOL-${i.id}`,
-                  material: i.material,
-                  serial: i.serial,
-                  centro: i.centro,
-                  deposito_origem: i.depositoOrigem,
-                  deposito_destino: i.depositoDestino,
-                  status: i.status,
-                  criado_em: i.criadoEm,
-                  criado_por: i.criadoPor,
-                  atualizado_em: i.atualizadoEm || new Date().toISOString(),
-                  sap_doc_number: i.sapDocNumber || null,
-                  observacoes: i.observacoes || null,
-                }));
-                await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
-              }
-            }
-          } catch (e) {
-            console.warn('Erro ao atualizar Supabase no POST:', e);
-          }
+        // 3. Grava no Google Sheets em segundo plano caso configurado
+        if (sheetsUrl) {
+          sendToGoogleSheets(sheetsUrl, { action, items, originatorClientId }).catch((e) => {
+            console.warn('Erro ao sincronizar com Google Sheets no POST:', e);
+          });
         }
 
         res.statusCode = 200;

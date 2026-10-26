@@ -1488,7 +1488,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 flex items-start gap-2.5">
                 <AlertOctagon className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">Ação permanente:</span> Os itens selecionados serão removidos do banco de dados (Supabase) e de todos os computadores sincronizados. Use esta função para limpar seriais ou materiais digitados por engano.
+                  <span className="font-bold">Ação permanente:</span> Os itens selecionados serão removidos do banco de dados (Google Planilhas) e de todos os computadores sincronizados. Use esta função para limpar seriais ou materiais digitados por engano.
                 </div>
               </div>
 

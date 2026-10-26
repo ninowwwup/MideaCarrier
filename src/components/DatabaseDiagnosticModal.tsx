@@ -1,28 +1,31 @@
 import React, { useState } from 'react';
 import { 
   X, 
-  Database, 
+  FileSpreadsheet, 
   CheckCircle2, 
   AlertTriangle, 
   Copy, 
   Check, 
   RefreshCw, 
-  ExternalLink,
-  ShieldAlert,
-  Server,
-  Trash2,
-  Key,
-  RotateCcw,
-  Save,
-  ChevronDown,
-  ChevronUp
+  ExternalLink, 
+  ShieldAlert, 
+  Server, 
+  Trash2, 
+  Key, 
+  RotateCcw, 
+  Save, 
+  HelpCircle,
+  Play
 } from 'lucide-react';
 import { 
-  getSupabase, 
-  getSupabaseConfig, 
-  saveStoredSupabaseCredentials, 
-  clearStoredSupabaseCredentials 
-} from '../services/supabaseClient';
+  getGoogleSheetsUrl, 
+  saveGoogleSheetsUrl, 
+  clearGoogleSheetsUrl, 
+  pingGoogleSheets,
+  insertGoogleSheetsItems,
+  updateGoogleSheetsItems,
+  deleteGoogleSheetsItems
+} from '../services/googleSheetsClient';
 import { clearAllTransferRecords } from '../services/storage';
 
 interface DatabaseDiagnosticModalProps {
@@ -32,52 +35,306 @@ interface DatabaseDiagnosticModalProps {
   onRecordsCleared?: () => void;
 }
 
-export const SUPABASE_REPAIR_SQL = `-- ========================================================
--- SCRIPT DE CRIAÇÃO E REPARO DEFINITIVO PARA O SUPABASE (MIGOU)
--- Execute no SQL Editor do seu projeto Supabase:
--- https://supabase.com/dashboard/project/_/sql
--- ========================================================
+export const GOOGLE_APPS_SCRIPT_CODE = `/**
+ * =========================================================================
+ * MIGOU - Midea Transfer Hub
+ * Backend Database Google Apps Script (Web App)
+ * =========================================================================
+ * 
+ * GUIA DE IMPLANTAÇÃO PASSO A PASSO (EM 1 MINUTO):
+ * 1. Abra o Google Drive (https://drive.google.com) com a sua conta Google.
+ * 2. Crie uma nova planilha: Novo > Planilhas Google ("MIGOU - Banco de Transferências").
+ * 3. No menu superior da planilha: Extensões > Apps Script.
+ * 4. Apague todo o conteúdo e cole este arquivo completo.
+ * 5. Clique em "Implantar" (botão azul no canto superior direito) > "Nova implantação".
+ * 6. Na engrenagem ⚙️ selecione "App da Web".
+ * 7. Configure EXATAMENTE assim:
+ *    - Descrição: "MIGOU Backend API"
+ *    - Executar como: "Eu" (seu e-mail Google)
+ *    - Quem pode acessar: "Qualquer pessoa" (MUITO IMPORTANTE!)
+ * 8. Clique em "Implantar", autorize o acesso com sua conta Google.
+ * 9. Copie a "URL do app da web" gerada (termina com "/exec").
+ * 10. Cole no MIGOU no campo "URL do App da Web do Google Apps Script".
+ * =========================================================================
+ */
 
--- 1. Criação da tabela principal transfer_requests
-CREATE TABLE IF NOT EXISTS public.transfer_requests (
-  id TEXT PRIMARY KEY,
-  solicitation_code TEXT,
-  material TEXT NOT NULL,
-  serial TEXT NOT NULL,
-  centro TEXT NOT NULL,
-  deposito_origem TEXT NOT NULL,
-  deposito_destino TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pendente',
-  criado_em TIMESTAMPTZ DEFAULT NOW(),
-  criado_por TEXT DEFAULT 'Time Buiatte (Sênior WMS)',
-  atualizado_em TIMESTAMPTZ DEFAULT NOW(),
-  atualizado_por TEXT,
-  sap_doc_number TEXT,
-  observacoes TEXT,
-  batch_id TEXT,
-  label_photo_url TEXT,
-  originator_client_id TEXT
-);
+const SHEET_NAME = 'Transferencias';
+const HEADERS = [
+  'id',
+  'solicitation_code',
+  'material',
+  'serial',
+  'centro',
+  'deposito_origem',
+  'deposito_destino',
+  'status',
+  'criado_em',
+  'criado_por',
+  'atualizado_em',
+  'atualizado_por',
+  'sap_doc_number',
+  'observacoes',
+  'prioridade_fifo',
+  'sla_status',
+  'batch_id',
+  'label_photo_url',
+  'originator_client_id'
+];
 
--- 2. Garantir que todas as colunas existem (caso a tabela já existisse com menos campos)
-ALTER TABLE public.transfer_requests ADD COLUMN IF NOT EXISTS solicitation_code TEXT;
-ALTER TABLE public.transfer_requests ADD COLUMN IF NOT EXISTS atualizado_por TEXT;
-ALTER TABLE public.transfer_requests ADD COLUMN IF NOT EXISTS batch_id TEXT;
-ALTER TABLE public.transfer_requests ADD COLUMN IF NOT EXISTS label_photo_url TEXT;
-ALTER TABLE public.transfer_requests ADD COLUMN IF NOT EXISTS originator_client_id TEXT;
+function getOrCreateSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+    sheet.appendRow(HEADERS);
+    sheet.setFrozenRows(1);
+    
+    const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+    headerRange.setBackground('#002664');
+    headerRange.setFontColor('#FFFFFF');
+    headerRange.setFontWeight('bold');
+    headerRange.setHorizontalAlignment('center');
+    
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 130);
+    sheet.setColumnWidth(3, 130);
+    sheet.setColumnWidth(4, 210);
+    sheet.setColumnWidth(5, 90);
+    sheet.setColumnWidth(6, 110);
+    sheet.setColumnWidth(7, 110);
+    sheet.setColumnWidth(8, 120);
+    sheet.setColumnWidth(9, 180);
+    sheet.setColumnWidth(10, 160);
+    sheet.setColumnWidth(11, 180);
+    sheet.setColumnWidth(12, 160);
+    sheet.setColumnWidth(13, 130);
+    sheet.setColumnWidth(14, 200);
+  }
+  return sheet;
+}
 
--- 3. DESABILITAR Row Level Security (RLS) ou permitir acesso público anônimo total (CRUD)
--- Isso resolve imediatamente qualquer erro de gravação congelada ou bloqueio de permissão!
-ALTER TABLE public.transfer_requests DISABLE ROW LEVEL SECURITY;
+function doGet(e) {
+  try {
+    const action = (e && e.parameter && e.parameter.action) || 'read';
 
--- 4. HABILITAR Realtime para sincronização simultânea instantânea entre computadores
-ALTER PUBLICATION supabase_realtime ADD TABLE public.transfer_requests;
+    if (action === 'ping') {
+      return jsonResponse({
+        success: true,
+        status: 'online',
+        timestamp: new Date().toISOString(),
+        message: 'Google Apps Script MIGOU operando com sucesso!'
+      });
+    }
 
--- 5. AUTO-LIMPEZA A CADA 2 DIAS (Preserva plano gratuito e não estoura cota do Supabase)
--- Mantém pendentes e em análise intactos; purga apenas concluídos e divergências antigos (> 2 dias)
-DELETE FROM public.transfer_requests 
-WHERE status IN ('concluido', 'divergencia') 
-  AND criado_em < NOW() - INTERVAL '2 days';
+    const sheet = getOrCreateSheet();
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow <= 1) {
+      return jsonResponse({ success: true, items: [], total: 0 });
+    }
+
+    const rawData = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    const items = rawData.map((row, index) => {
+      const obj = {};
+      HEADERS.forEach((header, colIdx) => {
+        let val = row[colIdx];
+        if (val instanceof Date) {
+          val = val.toISOString();
+        }
+        obj[header] = val;
+      });
+
+      return {
+        id: String(obj.id || ''),
+        solicitationCode: String(obj.solicitation_code || \`SOL-\${index + 1}\`),
+        material: String(obj.material || ''),
+        serial: String(obj.serial || ''),
+        centro: String(obj.centro || ''),
+        depositoOrigem: String(obj.deposito_origem || ''),
+        depositoDestino: String(obj.deposito_destino || ''),
+        status: String(obj.status || 'pendente'),
+        criadoEm: String(obj.criado_em || new Date().toISOString()),
+        criadoPor: String(obj.criado_por || 'Time Buiatte (Sênior WMS)'),
+        atualizadoEm: String(obj.atualizado_em || obj.criado_em || new Date().toISOString()),
+        atualizadoPor: obj.atualizado_por ? String(obj.atualizado_por) : undefined,
+        sapDocNumber: obj.sap_doc_number ? String(obj.sap_doc_number) : undefined,
+        observacoes: obj.observacoes ? String(obj.observacoes) : undefined,
+        prioridadeFifo: Number(obj.prioridade_fifo) || (index + 1),
+        slaStatus: obj.sla_status || 'no_prazo',
+        batchId: obj.batch_id ? String(obj.batch_id) : undefined,
+        labelPhotoUrl: obj.label_photo_url ? String(obj.label_photo_url) : undefined,
+        originatorClientId: obj.originator_client_id ? String(obj.originator_client_id) : undefined
+      };
+    });
+
+    return jsonResponse({
+      success: true,
+      items: items,
+      total: items.length,
+      lastModified: Date.now()
+    });
+  } catch (err) {
+    return jsonResponse({ success: false, error: String(err) });
+  }
+}
+
+function doPost(e) {
+  try {
+    let payload = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        payload = JSON.parse(e.postData.contents);
+      } catch (err) {
+        payload = {};
+      }
+    }
+
+    const action = payload.action || 'insert';
+    const sheet = getOrCreateSheet();
+
+    if (action === 'insert') {
+      const incoming = Array.isArray(payload.items) ? payload.items : (payload.item ? [payload.item] : []);
+      if (incoming.length === 0) {
+        return jsonResponse({ success: true, inserted: 0 });
+      }
+
+      const lastRow = sheet.getLastRow();
+      let existingIds = new Set();
+      if (lastRow > 1) {
+        const idColValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        idColValues.forEach(r => existingIds.add(String(r[0])));
+      }
+
+      const rowsToAdd = [];
+      incoming.forEach((item, idx) => {
+        const id = String(item.id || ('tr_' + Date.now() + '_' + idx));
+        if (existingIds.has(id)) {
+          updateRowById(sheet, id, item);
+          return;
+        }
+
+        const row = [
+          id,
+          item.solicitationCode || item.solicitation_code || \`SOL-\${lastRow + rowsToAdd.length}\`,
+          item.material || '',
+          item.serial || '',
+          item.centro || '',
+          item.depositoOrigem || item.deposito_origem || '',
+          item.depositoDestino || item.deposito_destino || '',
+          item.status || 'pendente',
+          item.criadoEm || item.criado_em || new Date().toISOString(),
+          item.criadoPor || item.criado_por || 'Time Buiatte (Sênior WMS)',
+          item.atualizadoEm || item.atualizado_em || new Date().toISOString(),
+          item.atualizadoPor || item.atualizado_por || '',
+          item.sapDocNumber || item.sap_doc_number || '',
+          item.observacoes || '',
+          item.prioridadeFifo || (lastRow + rowsToAdd.length),
+          item.slaStatus || item.sla_status || 'no_prazo',
+          item.batchId || item.batch_id || '',
+          item.labelPhotoUrl || item.label_photo_url || '',
+          item.originatorClientId || item.originator_client_id || ''
+        ];
+        rowsToAdd.push(row);
+      });
+
+      if (rowsToAdd.length > 0) {
+        sheet.getRange(lastRow + 1, 1, rowsToAdd.length, HEADERS.length).setValues(rowsToAdd);
+      }
+
+      return jsonResponse({
+        success: true,
+        inserted: rowsToAdd.length,
+        totalNow: sheet.getLastRow() - 1
+      });
+    }
+
+    if (action === 'update') {
+      const incoming = Array.isArray(payload.items) ? payload.items : (payload.item ? [payload.item] : []);
+      let updatedCount = 0;
+      incoming.forEach(item => {
+        if (item && item.id) {
+          if (updateRowById(sheet, String(item.id), item)) {
+            updatedCount++;
+          }
+        }
+      });
+      return jsonResponse({ success: true, updated: updatedCount });
+    }
+
+    if (action === 'delete') {
+      const idsToDelete = new Set(
+        Array.isArray(payload.ids)
+          ? payload.ids.map(String)
+          : (payload.id ? [String(payload.id)] : [])
+      );
+
+      const lastRow = sheet.getLastRow();
+      let deletedCount = 0;
+      if (lastRow > 1 && idsToDelete.size > 0) {
+        const idColValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (let i = idColValues.length - 1; i >= 0; i--) {
+          const rowId = String(idColValues[i][0]);
+          if (idsToDelete.has(rowId)) {
+            sheet.deleteRow(i + 2);
+            deletedCount++;
+          }
+        }
+      }
+      return jsonResponse({ success: true, deleted: deletedCount });
+    }
+
+    if (action === 'clear') {
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.deleteRows(2, lastRow - 1);
+      }
+      return jsonResponse({ success: true, message: 'Planilha zerada com sucesso!' });
+    }
+
+    return jsonResponse({ success: false, error: 'Ação não reconhecida: ' + action });
+  } catch (err) {
+    return jsonResponse({ success: false, error: String(err) });
+  }
+}
+
+function updateRowById(sheet, id, item) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return false;
+
+  const idColValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < idColValues.length; i++) {
+    if (String(idColValues[i][0]) === String(id)) {
+      const rowIdx = i + 2;
+      const existingRow = sheet.getRange(rowIdx, 1, 1, HEADERS.length).getValues()[0];
+
+      if (item.status !== undefined) existingRow[7] = item.status;
+      if (item.atualizadoEm !== undefined || item.atualizado_em !== undefined) {
+        existingRow[10] = item.atualizadoEm || item.atualizado_em;
+      } else {
+        existingRow[10] = new Date().toISOString();
+      }
+      if (item.atualizadoPor !== undefined || item.atualizado_por !== undefined) {
+        existingRow[11] = item.atualizadoPor || item.atualizado_por;
+      }
+      if (item.sapDocNumber !== undefined || item.sap_doc_number !== undefined) {
+        existingRow[12] = item.sapDocNumber || item.sap_doc_number;
+      }
+      if (item.observacoes !== undefined) existingRow[13] = item.observacoes;
+      if (item.labelPhotoUrl !== undefined || item.label_photo_url !== undefined) {
+        existingRow[17] = item.labelPhotoUrl || item.label_photo_url;
+      }
+
+      sheet.getRange(rowIdx, 1, 1, HEADERS.length).setValues([existingRow]);
+      return true;
+    }
+  }
+  return false;
+}
+
+function jsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 `;
 
 export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = ({
@@ -86,7 +343,7 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
   isCloudConnected,
   onRecordsCleared,
 }) => {
-  const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [testing, setTesting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -95,33 +352,41 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
     details?: string;
   }>({ status: 'idle', message: '' });
 
-  const [customUrl, setCustomUrl] = useState(() => {
-    return typeof window !== 'undefined' ? (localStorage.getItem('midea_transfer_supabase_url') || '') : '';
+  const [inputUrl, setInputUrl] = useState(() => {
+    return typeof window !== 'undefined' ? (getGoogleSheetsUrl() || '') : '';
   });
-  const [customKey, setCustomKey] = useState(() => {
-    return typeof window !== 'undefined' ? (localStorage.getItem('midea_transfer_supabase_anon_key') || '') : '';
-  });
-  const [showCustomConfig, setShowCustomConfig] = useState(false);
-  const [hasCustomCredentials, setHasCustomCredentials] = useState(() => {
-    return typeof window !== 'undefined' ? Boolean(localStorage.getItem('midea_transfer_supabase_url')) : false;
-  });
+
+  const hasCustomUrl = Boolean(
+    typeof window !== 'undefined' && localStorage.getItem('midea_transfer_google_sheets_url')
+  );
 
   if (!isOpen) return null;
 
-  const { url, anonKey } = getSupabaseConfig();
-  const isDirectConfigured = Boolean(url && anonKey);
+  const currentActiveUrl = getGoogleSheetsUrl();
+  const isConfigured = Boolean(currentActiveUrl);
 
-  const handleSaveCredentials = () => {
-    if (!customUrl.trim() || !customKey.trim()) {
-      alert('Por favor, informe a URL e a Anon Key do Supabase.');
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 3000);
+  };
+
+  const handleSaveUrl = () => {
+    const clean = inputUrl.trim();
+    if (!clean) {
+      alert('Por favor, informe a URL do App da Web do Google Apps Script.');
       return;
     }
-    saveStoredSupabaseCredentials(customUrl.trim(), customKey.trim());
-    setHasCustomCredentials(true);
+    if (!clean.startsWith('https://script.google.com/')) {
+      alert('A URL deve começar com https://script.google.com/macros/s/.../exec');
+      return;
+    }
+
+    saveGoogleSheetsUrl(clean);
     setTestResult({
       status: 'success',
-      message: 'Novas credenciais salvas com sucesso!',
-      details: 'O navegador está conectado ao novo projeto Supabase. Recarregando a página...'
+      message: 'URL do Google Planilhas salva com sucesso!',
+      details: 'O sistema conectará a esta planilha em todas as próximas requisições. Recarregando...'
     });
     setTimeout(() => {
       window.location.reload();
@@ -129,29 +394,21 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
   };
 
   const handleRestoreDefault = () => {
-    clearStoredSupabaseCredentials();
-    setCustomUrl('');
-    setCustomKey('');
-    setHasCustomCredentials(false);
+    clearGoogleSheetsUrl();
+    setInputUrl('');
     setTestResult({
       status: 'warning',
-      message: 'Credenciais personalizadas removidas!',
-      details: 'Restaurado para as credenciais padrão do repositório/Vercel. Recarregando...'
+      message: 'URL personalizada removida!',
+      details: 'Restaurado para as configurações padrão do repositório. Recarregando...'
     });
     setTimeout(() => {
       window.location.reload();
     }, 1200);
   };
 
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(SUPABASE_REPAIR_SQL);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 3000);
-  };
-
   const handleClearAll = async () => {
     const confirmed = window.confirm(
-      'Tem certeza que deseja limpar TODOS os registros de transferências?\\n\\nEsta ação apagará os dados de teste do Supabase, do servidor e do cache local para que a equipe possa iniciar a operação oficial do zero.'
+      'Tem certeza que deseja limpar TODOS os registros de transferências?\\n\\nEsta ação apagará os dados da Planilha Google, do servidor e do cache local para que a equipe possa iniciar a operação oficial do zero.'
     );
     if (!confirmed) return;
 
@@ -164,7 +421,7 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
       setTestResult({
         status: 'success',
         message: 'Todos os registros foram zerados com sucesso!',
-        details: 'O banco de dados, servidor e cache foram limpos. O sistema está 100% pronto para iniciar do zero.'
+        details: 'A Planilha Google, servidor e cache foram limpos. O sistema está 100% pronto para iniciar do zero.'
       });
     } catch (e: any) {
       setTestResult({
@@ -181,106 +438,74 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
     setTesting(true);
     setTestResult({ status: 'idle', message: '' });
 
-    const supabase = getSupabase();
-    if (!supabase) {
-      // Testar rota de fallback Vercel (/api/transfers)
-      try {
-        const res = await fetch('/api/transfers');
-        if (res.ok) {
-          const json = await res.json();
-          setTestResult({
-            status: 'warning',
-            message: 'Supabase direto não configurado. O app está operando perfeitamente via Backend Serverless Vercel (/api/transfers).',
-            details: `Backend Vercel ativo: ${json.items?.length || 0} transferências armazenadas. Para conectar ao Supabase, configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY na Vercel.`
-          });
-        } else {
-          setTestResult({
-            status: 'error',
-            message: 'Backend Vercel retornou código ' + res.status,
-            details: 'Verifique os logs da função serverless na Vercel.'
-          });
-        }
-      } catch (e: any) {
-        setTestResult({
-          status: 'error',
-          message: 'Falha ao conectar ao backend Vercel e Supabase.',
-          details: String(e?.message || e)
-        });
-      }
+    const targetUrl = (inputUrl || currentActiveUrl).trim();
+    if (!targetUrl) {
+      setTestResult({
+        status: 'warning',
+        message: 'Nenhuma URL do Google Apps Script configurada.',
+        details: 'Cole a URL do App da Web no campo acima ou siga o passo a passo para criar sua planilha.'
+      });
       setTesting(false);
       return;
     }
 
     try {
-      // 1. Testar SELECT (Leitura)
-      const readRes = await supabase.from('transfer_requests').select('id, status').limit(3);
-      if (readRes.error) {
-        const isQuota = readRes.error.message?.includes('exceed_egress_quota') || readRes.error.message?.includes('quota');
-        setTestResult({
-          status: isQuota ? 'warning' : 'error',
-          message: isQuota
-            ? 'Cota Gratuita do Supabase Excedida (exceed_egress_quota)'
-            : `Erro na Leitura do Supabase: [${readRes.error.code}] ${readRes.error.message}`,
-          details: isQuota
-            ? 'O limite mensal de saída de dados gratuito do Supabase foi atingido. O MIGOU ativou automaticamente a contingência via Backend Serverless e Nuvem Compartilhada, garantindo gravação e sincronização ininterrupta. Para restabelecer o Supabase direto, atualize o plano ou configure um novo projeto abaixo.'
-            : 'Provável causa: a tabela transfer_requests ainda não foi criada ou o RLS está bloqueando. Execute o Script SQL abaixo para corrigir em 1 clique.'
-        });
-        setTesting(false);
-        return;
-      }
-
-      // 2. Testar INSERT/UPDATE (Gravação e Atualização de Status)
-      const testId = 'diag_test_' + Date.now().toString(36);
-      const testPayload = {
-        id: testId,
-        material: 'TEST_DIAG',
-        serial: 'SN_TEST',
-        centro: 'B124',
-        deposito_origem: 'B148',
-        deposito_destino: 'B110',
-        status: 'pendente',
-        criado_em: new Date().toISOString(),
-        criado_por: 'Diagnóstico MIGOU',
-        atualizado_em: new Date().toISOString(),
-      };
-
-      const writeRes = await supabase.from('transfer_requests').insert(testPayload);
-      if (writeRes.error) {
+      // 1. Testar Ping
+      const pingRes = await pingGoogleSheets(targetUrl);
+      if (!pingRes.ok) {
         setTestResult({
           status: 'error',
-          message: `Erro na Gravação do Supabase: [${writeRes.error.code}] ${writeRes.error.message}`,
-          details: 'Se o erro for 42501 (RLS violado) ou 42703 (coluna ausente), execute o Script SQL abaixo no Supabase SQL Editor para desbloquear.'
+          message: pingRes.message,
+          details: pingRes.details || 'Verifique se a implantação do App da Web foi feita com acesso permitido para "Qualquer pessoa".'
         });
         setTesting(false);
         return;
       }
 
-      // 3. Testar Update de Status
-      const updateRes = await supabase
-        .from('transfer_requests')
-        .update({ status: 'concluido', atualizado_em: new Date().toISOString() })
-        .eq('id', testId);
+      // 2. Testar INSERT na Planilha Google
+      const testId = 'diag_test_' + Date.now().toString(36);
+      const testItem = {
+        id: testId,
+        solicitationCode: 'TEST-DIAG',
+        material: 'TEST_MAT',
+        serial: 'SN_DIAG_' + Date.now().toString().slice(-4),
+        centro: 'B124',
+        depositoOrigem: 'B148',
+        depositoDestino: 'B110',
+        status: 'pendente' as const,
+        criadoEm: new Date().toISOString(),
+        criadoPor: 'Diagnóstico MIGOU',
+        atualizadoEm: new Date().toISOString(),
+        prioridadeFifo: 9999,
+        slaStatus: 'no_prazo' as const
+      };
 
-      // Limpar registro de teste
-      await supabase.from('transfer_requests').delete().eq('id', testId);
-
-      if (updateRes.error) {
+      const insertOk = await insertGoogleSheetsItems([testItem], targetUrl);
+      if (!insertOk) {
         setTestResult({
           status: 'warning',
-          message: `Gravação funcionou, mas Atualização de Status falhou: [${updateRes.error.code}] ${updateRes.error.message}`,
-          details: 'Execute o Script SQL abaixo para garantir permissão total de UPDATE.'
+          message: 'Ping respondeu, mas a inserção de teste falhou.',
+          details: 'Verifique se a função doPost está devidamente autorizada na implantação do Apps Script.'
         });
-      } else {
-        setTestResult({
-          status: 'success',
-          message: 'Tudo 100% Funcional! Leitura, Gravação e Atualização de Status validadas com sucesso no Supabase.',
-          details: `Conexão direta estabelecida com ${url}. A tabela transfer_requests aceita atualizações em tempo real.`
-        });
+        setTesting(false);
+        return;
       }
+
+      // 3. Testar UPDATE
+      await updateGoogleSheetsItems([{ ...testItem, status: 'concluido' as const }], targetUrl);
+
+      // 4. Limpar registro de teste
+      await deleteGoogleSheetsItems([testId], targetUrl);
+
+      setTestResult({
+        status: 'success',
+        message: 'Conexão 100% Validada com a Planilha Google!',
+        details: `Leitura, Inserção, Atualização de Status e Exclusão testadas com sucesso na sua planilha via Google Apps Script. Pronta para uso pela equipe!`
+      });
     } catch (err: any) {
       setTestResult({
         status: 'error',
-        message: 'Erro inesperado ao consultar Supabase.',
+        message: 'Erro inesperado ao testar conexão com o Google Apps Script.',
         details: String(err?.message || err)
       });
     } finally {
@@ -291,23 +516,24 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        
         {/* Header */}
         <div className="shrink-0 px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-[#002363] via-[#002664] to-[#249ED5] text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-white/10 text-[#C2DEEB]">
-              <Database className="w-5 h-5" />
+            <span className="p-2 rounded-xl bg-white/10 text-emerald-300">
+              <FileSpreadsheet className="w-5 h-5" />
             </span>
             <div>
-              <h3 className="text-sm sm:text-base font-bold">Diagnóstico do Banco de Dados & Supabase</h3>
+              <h3 className="text-sm sm:text-base font-bold">Banco de Dados - Google Planilhas</h3>
               <p className="text-[11px] sm:text-xs text-[#C2DEEB]">
-                Validação de gravação, simultaneidade e script de reparo das tabelas
+                Sincronização perpétua e 100% gratuita via Google Apps Script (sem limites de cota)
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             title="Fechar"
             aria-label="Fechar"
           >
@@ -317,21 +543,22 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
+          
           {/* Status Geral de Conexão */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70">
               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-[#00609C]" />
-                <span>Supabase Direto</span>
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Google Planilhas</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${isDirectConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                <span className={`w-2.5 h-2.5 rounded-full ${isConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
                 <span className="text-xs font-bold text-slate-800">
-                  {isDirectConfigured ? 'Credenciais Configuradas' : 'Não Vinculado Direto'}
+                  {isConfigured ? 'Planilha Vinculada' : 'Aguardando Configuração'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500 mt-1 font-mono truncate" title={url || 'Sem URL'}>
-                {url ? `URL: ${url}` : 'Usando rota segura /api/transfers na Vercel'}
+              <p className="text-[10px] text-slate-500 mt-1 font-mono truncate" title={currentActiveUrl || 'Sem URL'}>
+                {currentActiveUrl ? currentActiveUrl : 'Cole a URL do App da Web abaixo'}
               </p>
             </div>
 
@@ -343,12 +570,66 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${isCloudConnected ? 'bg-emerald-500' : 'bg-blue-500 animate-pulse'}`}></span>
                 <span className="text-xs font-bold text-slate-800">
-                  {isCloudConnected ? 'Nuvem Conectada (Tempo Real)' : 'Backend Serverless Vercel'}
+                  {isCloudConnected ? 'Tempo Real Ativo' : 'Rede Conectada'}
                 </span>
               </div>
               <p className="text-[10px] text-slate-500 mt-1">
-                Sincronismo via SSE, BroadcastChannel e Service Worker.
+                Sincronismo via Google Sheets, SSE e BroadcastChannel.
               </p>
+            </div>
+          </div>
+
+          {/* Configuração da URL da Planilha */}
+          <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700">
+                <Key className="w-4 h-4" />
+              </span>
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>URL do App da Web do Google Apps Script</span>
+                  {hasCustomUrl && (
+                    <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-full font-medium">
+                      Personalizado
+                    </span>
+                  )}
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  URL gerada na implantação da planilha (termina em <code className="text-emerald-700 font-mono">/exec</code>).
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <input
+                type="text"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                className="w-full text-xs px-3 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-slate-800 placeholder-slate-400"
+              />
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {hasCustomUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefault}
+                    className="px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Restaurar Padrão</span>
+                  </button>
+                ) : <div />}
+
+                <button
+                  type="button"
+                  onClick={handleSaveUrl}
+                  className="px-3.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer ml-auto"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Salvar e Conectar</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -357,11 +638,11 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-xs font-bold text-[#002664] flex items-center gap-1.5">
-                  <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin text-[#249ED5]' : 'text-[#002664]'}`} />
-                  <span>Teste Imediato de Gravação e Atualização</span>
+                  <Play className={`w-3.5 h-3.5 ${testing ? 'animate-spin text-[#249ED5]' : 'text-[#002664]'}`} />
+                  <span>Teste Imediato de Conexão com a Planilha</span>
                 </h4>
                 <p className="text-[11px] text-slate-600">
-                  Verifica se o comando de gravar e alterar status responde com sucesso sem travar.
+                  Testa ping, leitura, inserção de linha e atualização de status em tempo real.
                 </p>
               </div>
 
@@ -369,7 +650,7 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
                 type="button"
                 onClick={handleRunDiagnosticTest}
                 disabled={testing}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] transition-all active:scale-95 shadow-2xs shrink-0 flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-[#002664] hover:bg-[#002363] transition-all active:scale-95 shadow-2xs shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {testing ? (
                   <>
@@ -409,90 +690,68 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
             )}
           </div>
 
-          {/* Conexão com Projeto Alternativo do Supabase (Opcional) */}
-          <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5">
-            <div 
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => setShowCustomConfig(!showCustomConfig)}
-            >
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-blue-100 text-[#00609C]">
-                  <Key className="w-4 h-4" />
-                </span>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <span>Vincular Novo Projeto Supabase</span>
-                    {hasCustomCredentials && (
-                      <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-full font-medium">
-                        Personalizado
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Conecte seu próprio projeto Supabase sem precisar recompilar ou alterar variáveis de ambiente.
-                  </p>
-                </div>
+          {/* Código do Google Apps Script (Code.gs) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>Código do Google Apps Script (Code.gs)</span>
+                  <span className="text-[10px] font-normal text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+                    Pronto para Copiar
+                  </span>
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Cole este código no editor de script da sua Planilha Google para transformá-la no banco de dados.
+                </p>
               </div>
+
               <button
                 type="button"
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-                aria-label="Expandir/Recolher"
+                onClick={handleCopyCode}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-2xs flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                  copiedCode
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                }`}
               >
-                {showCustomConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {copiedCode ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Copiar Código</span>
+                  </>
+                )}
               </button>
             </div>
 
-            {showCustomConfig && (
-              <div className="pt-2 border-t border-slate-200 space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Supabase Project URL
-                  </label>
-                  <input
-                    type="text"
-                    value={customUrl}
-                    onChange={(e) => setCustomUrl(e.target.value)}
-                    placeholder="https://exemplo.supabase.co"
-                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00609C] font-mono text-slate-800"
-                  />
-                </div>
+            <pre className="text-[10px] sm:text-[11px] font-mono bg-slate-900 text-slate-100 p-3.5 rounded-xl border border-slate-800 overflow-x-auto max-h-48 leading-relaxed select-all">
+              {GOOGLE_APPS_SCRIPT_CODE}
+            </pre>
+          </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Supabase Anon / Public Key
-                  </label>
-                  <input
-                    type="password"
-                    value={customKey}
-                    onChange={(e) => setCustomKey(e.target.value)}
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00609C] font-mono text-slate-800"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  {hasCustomCredentials ? (
-                    <button
-                      type="button"
-                      onClick={handleRestoreDefault}
-                      className="px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Restaurar Padrão</span>
-                    </button>
-                  ) : <div />}
-
-                  <button
-                    type="button"
-                    onClick={handleSaveCredentials}
-                    className="px-3.5 py-1.5 text-xs bg-[#00609C] hover:bg-[#004e7f] text-white rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer ml-auto"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Salvar e Conectar</span>
-                  </button>
-                </div>
-              </div>
-            )}
+          {/* Guia Rápido de 1 Minuto */}
+          <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-950 space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+              <HelpCircle className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Como implantar em 1 minuto na sua conta Google:</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1 text-[11px] text-emerald-900 leading-relaxed">
+              <li>Acesse o <a href="https://drive.google.com" target="_blank" rel="noreferrer" className="underline font-bold hover:text-emerald-950 inline-flex items-center gap-0.5">Google Drive <ExternalLink className="w-2.5 h-2.5" /></a> e crie uma nova planilha (ex: <em>MIGOU - Banco de Transferências</em>).</li>
+              <li>No menu superior da planilha, clique em <strong>Extensões &gt; Apps Script</strong>.</li>
+              <li>Apague o código existente, <strong>cole o código acima</strong> e clique em <strong>Salvar (ícone disquete)</strong>.</li>
+              <li>Clique no botão azul <strong>Implantar &gt; Nova implantação</strong>.</li>
+              <li>Na engrenagem ⚙️ escolha <strong>App da Web</strong> e configure:
+                <ul className="list-disc list-inside ml-4 text-[10.5px] text-emerald-800">
+                  <li><strong>Executar como:</strong> "Eu" (sua conta Google)</li>
+                  <li><strong>Quem pode acessar:</strong> "Qualquer pessoa" (fundamental para os PCs da fábrica sincronizarem!)</li>
+                </ul>
+              </li>
+              <li>Clique em <strong>Implantar</strong>, autorize o acesso com sua conta Google, copie a <strong>URL do app da web</strong> gerada e cole no campo acima!</li>
+            </ol>
           </div>
 
           {/* Zona de Limpeza de Registros para Iniciar do Zero */}
@@ -503,7 +762,7 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
                 <span>Limpar Registros (Iniciar do Zero)</span>
               </div>
               <p className="text-[11px] text-rose-700 mt-0.5">
-                Remove todas as transferências de teste do Supabase, servidor e cache para início da operação real do time.
+                Remove todas as transferências de teste da Planilha Google, servidor e cache para início da operação real do time.
               </p>
             </div>
             <button
@@ -517,62 +776,6 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
             </button>
           </div>
 
-          {/* Script de Reparo SQL do Supabase */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <span>Script SQL de Reparo do Supabase</span>
-                  <span className="text-[10px] font-normal text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full">
-                    Garante Colunas & Desbloqueia RLS
-                  </span>
-                </label>
-                <p className="text-[11px] text-slate-500">
-                  Se as gravações estiverem congeladas no Supabase, copie este script e cole no SQL Editor do seu projeto Supabase.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCopySql}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-2xs flex items-center gap-1.5 shrink-0 ${
-                  copiedSql
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
-                }`}
-              >
-                {copiedSql ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Copiar SQL</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <pre className="text-[10px] sm:text-[11px] font-mono bg-slate-900 text-slate-100 p-3.5 rounded-xl border border-slate-800 overflow-x-auto max-h-48 leading-relaxed select-all">
-              {SUPABASE_REPAIR_SQL}
-            </pre>
-          </div>
-
-          {/* Dicas de Execução */}
-          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-              <span>O que fazer se o banco estiver congelado?</span>
-            </div>
-            <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-amber-800">
-              <li>Acesse seu painel do Supabase (<a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="underline font-semibold hover:text-amber-950 inline-flex items-center gap-0.5">supabase.com <ExternalLink className="w-2.5 h-2.5" /></a>).</li>
-              <li>Clique na aba <strong>SQL Editor</strong> e crie uma nova query.</li>
-              <li>Cole o código SQL acima e clique em <strong>Run</strong>.</li>
-              <li>Pronto! Todas as colunas, permissões e status estarão liberados imediatamente.</li>
-            </ol>
-          </div>
         </div>
 
         {/* Footer */}
@@ -580,7 +783,7 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+            className="px-5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
           >
             Fechar Diagnóstico
           </button>

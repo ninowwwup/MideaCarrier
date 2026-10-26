@@ -38,6 +38,9 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), apiTransfersPlugin()],
     define: {
+      'import.meta.env.VITE_GOOGLE_SHEETS_URL': JSON.stringify(
+        process.env.VITE_GOOGLE_SHEETS_URL || process.env.GOOGLE_SHEETS_URL || ''
+      ),
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
         process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
       ),

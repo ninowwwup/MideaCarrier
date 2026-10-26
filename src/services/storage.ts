@@ -1,5 +1,13 @@
 import { TransferItem, TransferStatus, NewTransferInput, KPIStats } from '../types/transfer';
-import { getSupabase, CURRENT_CLIENT_ID } from './supabaseClient';
+import { CURRENT_CLIENT_ID } from './supabaseClient';
+import { 
+  getGoogleSheetsUrl, 
+  fetchGoogleSheetsItems, 
+  insertGoogleSheetsItems, 
+  updateGoogleSheetsItems, 
+  deleteGoogleSheetsItems, 
+  clearGoogleSheets 
+} from './googleSheetsClient';
 import { calculateSLA } from '../utils/sapFormatter';
 import { playAlertChime } from '../utils/audioAlert';
 
@@ -72,22 +80,10 @@ export function purgeOldRecords(items: TransferItem[]): {
       console.warn('Erro ao salvar no arquivo histórico:', e);
     }
 
-    // EXCLUI DEFINITIVAMENTE DO BANCO SUPABASE PARA PRESERVAR A COTA GRATUITA
-    const supabase = getSupabase();
-    if (supabase) {
-      const idsToDelete = toArchive.map((i) => String(i.id));
-      Promise.resolve(
-        supabase
-          .from('transfer_requests')
-          .delete()
-          .in('id', idsToDelete)
-      )
-        .then((res: any) => {
-          if (!res?.error) {
-            console.log(`✓ Auto-limpeza Supabase: ${idsToDelete.length} registro(s) antigos (>2 dias) excluídos.`);
-          }
-        })
-        .catch(() => {});
+    // Auto-limpeza na Planilha Google
+    const idsToDelete = toArchive.map((i) => String(i.id));
+    if (idsToDelete.length > 0) {
+      deleteGoogleSheetsItems(idsToDelete).catch(() => {});
     }
   }
 
@@ -173,37 +169,26 @@ export async function saveToSharedCloudStore(items: TransferItem[]): Promise<boo
 
 /**
  * Consulta de itens com fallback multinível ultra-resiliente:
- * 1. Supabase (Com timeout rápido de 3.5s e circuit-breaker inteligente)
- * 2. Shared Cloud Store global (Persistência real-time garantida entre diferentes PCs)
- * 3. Backend Vercel /api/transfers
+ * 1. Google Planilhas (via Google Apps Script Web App)
+ * 2. Backend Serverless Vercel /api/transfers
+ * 3. Shared Cloud Store global (Persistência real-time garantida entre diferentes PCs)
  * 4. Cache Local
  */
 export async function fetchTransferItems(): Promise<{
   items: TransferItem[];
-  source: 'supabase' | 'backend' | 'local';
+  source: 'google_sheets' | 'backend' | 'local';
   purgedCount?: number;
   isConnected: boolean;
 }> {
   const localCached = getLocalCachedItems();
 
-  // 1. Supabase (Apenas se configurado e fora de período de bloqueio do circuit breaker)
-  const supabase = getSupabase();
-  if (supabase && !isSupabaseCircuitOpen()) {
+  // 1. Google Planilhas (Consulta direta ao Web App se configurado)
+  const sheetsUrl = getGoogleSheetsUrl();
+  if (sheetsUrl) {
     try {
-      const queryPromise = supabase
-        .from('transfer_requests')
-        .select('*')
-        .order('criado_em', { ascending: false });
-
-      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'Query Timeout (3.5s)' } }), 3500)
-      );
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
-
-      if (!error && Array.isArray(data)) {
-        const mapped: TransferItem[] = data.map((d: any, index: number) => mapRowToTransferItem(d, index));
-        const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
+      const sheetData = await fetchGoogleSheetsItems();
+      if (sheetData !== null && Array.isArray(sheetData)) {
+        const { active, purgedCount } = purgeOldMonthlyRecords(sheetData);
         const resolved = applyPendingLocalUpdates(active);
 
         if (typeof window !== 'undefined') {
@@ -212,61 +197,27 @@ export async function fetchTransferItems(): Promise<{
           }
         }
 
-        // Replica em background no Shared Cloud Store para manter a nuvem espelhada
         saveToSharedCloudStore(resolved).catch(() => {});
-
-        // Auto-limpeza contínua no Supabase: exclui registros resolvidos com mais de 2 dias (48 horas)
-        const twoDaysAgoIso = new Date(Date.now() - TWO_DAYS_MS).toISOString();
-        Promise.resolve(
-          supabase
-            .from('transfer_requests')
-            .delete()
-            .in('status', ['concluido', 'divergencia'])
-            .lt('criado_em', twoDaysAgoIso)
-        ).catch(() => {});
-
-        return { items: resolved, source: 'supabase', purgedCount, isConnected: true };
-      } else if (error) {
-        markSupabaseFailure();
-        console.warn('Aviso: Supabase em cooldown após erro/timeout:', error.message);
+        return { items: resolved, source: 'google_sheets', purgedCount, isConnected: true };
       }
     } catch (err) {
-      markSupabaseFailure();
-      console.warn('Tentando rota em nuvem após exceção no Supabase:', err);
+      console.warn('Aviso: Falha ao consultar Google Planilhas diretamente, tentando backend...', err);
     }
   }
 
-  // 2. Shared Cloud Store Global (In-Time entre computadores Midea e Buiatte)
-  const cloudItems = await fetchFromSharedCloudStore();
-  if (cloudItems !== null) {
-    if (cloudItems.length > 0 || localCached.length === 0) {
-      // Mescla com itens criados localmente recentemente para garantir que nunca sejam perdidos
-      const cloudMap = new Map(cloudItems.map((i) => [i.id, i]));
-      for (const loc of localCached) {
-        if (!cloudMap.has(loc.id)) {
-          const age = Date.now() - new Date(loc.criadoEm || 0).getTime();
-          if (age < 300000) { // 5 minutos de tolerância para propagação
-            cloudItems.unshift(loc);
-          }
-        }
-      }
-      const { active, purgedCount } = purgeOldMonthlyRecords(cloudItems);
-      const resolved = applyPendingLocalUpdates(active);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
-      }
-      return { items: resolved, source: 'backend', purgedCount, isConnected: true };
-    }
-  }
-
-  // 3. Rota Backend Serverless Vercel (/api/transfers)
+  // 2. Rota Backend Serverless Vercel (/api/transfers)
   if (typeof window !== 'undefined') {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+      const headers: Record<string, string> = { 'Accept': 'application/json' };
+      if (sheetsUrl) {
+        headers['x-google-sheets-url'] = sheetsUrl;
+      }
 
       const res = await fetch('/api/transfers', {
-        headers: { 'Accept': 'application/json' },
+        headers,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -300,6 +251,30 @@ export async function fetchTransferItems(): Promise<{
       // Backend offline ou temporariamente inacessível
     }
   }
+
+  // 2. Shared Cloud Store Global (In-Time entre computadores Midea e Buiatte)
+  const cloudItems = await fetchFromSharedCloudStore();
+  if (cloudItems !== null) {
+    if (cloudItems.length > 0 || localCached.length === 0) {
+      // Mescla com itens criados localmente recentemente para garantir que nunca sejam perdidos
+      const cloudMap = new Map(cloudItems.map((i) => [i.id, i]));
+      for (const loc of localCached) {
+        if (!cloudMap.has(loc.id)) {
+          const age = Date.now() - new Date(loc.criadoEm || 0).getTime();
+          if (age < 300000) { // 5 minutos de tolerância para propagação
+            cloudItems.unshift(loc);
+          }
+        }
+      }
+      const { active, purgedCount } = purgeOldMonthlyRecords(cloudItems);
+      const resolved = applyPendingLocalUpdates(active);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+      }
+      return { items: resolved, source: 'backend', purgedCount, isConnected: true };
+    }
+  }
+
 
   // 4. Fallback LocalStorage (garante que os dados NUNCA sumam da tela)
   if (localCached.length > 0) {
@@ -390,11 +365,15 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
   } catch (e) {}
 
   // 3. Notificar backend Vercel com action: 'insert', novos itens e lista completa
+  const sheetsUrl = getGoogleSheetsUrl();
   if (typeof window !== 'undefined') {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
+
       const res = await fetch('/api/transfers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           action: 'insert',
           items: newItems,
@@ -423,63 +402,13 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
     } catch (e) {}
   }
 
-  // 5. Gravar apenas os novos itens no Supabase (se configurado e fora de período de bloqueio/cooldown)
-  const supabase = getSupabase();
-  if (supabase && !isSupabaseCircuitOpen()) {
+  // 5. Gravar os novos itens no Google Planilhas (direto via Web App se configurado)
+  if (sheetsUrl) {
     try {
-      const payload = newItems.map((i) => ({
-        id: String(i.id),
-        solicitation_code: i.solicitationCode || null,
-        material: i.material,
-        serial: i.serial,
-        centro: i.centro,
-        deposito_origem: i.depositoOrigem,
-        deposito_destino: i.depositoDestino,
-        status: i.status,
-        criado_em: i.criadoEm,
-        criado_por: i.criadoPor,
-        atualizado_em: i.atualizadoEm,
-        atualizado_por: i.atualizadoPor || null,
-        sap_doc_number: i.sapDocNumber || null,
-        observacoes: i.observacoes || null,
-        batch_id: i.batchId || null,
-        label_photo_url: i.labelPhotoUrl || null,
-        originator_client_id: i.originatorClientId || CURRENT_SESSION_ID,
-      }));
-
-      let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
-
-      // Se falhar por colunas ausentes no schema existente do Supabase (código 42703)
-      if (error && (error.code === '42703' || error.message?.includes('column'))) {
-        console.warn('Supabase: detectada ausência de colunas opcionais. Inserindo com campos base...');
-        const corePayload = newItems.map((i) => ({
-          id: String(i.id),
-          solicitation_code: i.solicitationCode || `SOL-${i.id}`,
-          material: i.material,
-          serial: i.serial,
-          centro: i.centro,
-          deposito_origem: i.depositoOrigem,
-          deposito_destino: i.depositoDestino,
-          status: i.status,
-          criado_em: i.criadoEm,
-          criado_por: i.criadoPor,
-          atualizado_em: i.atualizadoEm,
-          sap_doc_number: i.sapDocNumber || null,
-          observacoes: i.observacoes || null,
-        }));
-        const retryRes = await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
-        error = retryRes.error;
-      }
-
-      if (!error) {
-        savedSuccessfully = true;
-      } else {
-        markSupabaseFailure();
-        console.warn('Aviso: Supabase em cooldown após erro/bloqueio:', error.message);
-      }
+      const ok = await insertGoogleSheetsItems(newItems);
+      if (ok) savedSuccessfully = true;
     } catch (err) {
-      markSupabaseFailure();
-      console.warn('Falha na requisição para o Supabase no insert:', err);
+      console.warn('Falha na gravação direta no Google Planilhas no insert:', err);
     }
   }
 
@@ -519,11 +448,15 @@ export async function updateSpecificTransferItems(
   } catch (e) {}
 
   // 4. Notifica backend Vercel com action: 'update', itens afetados e lista completa
+  const sheetsUrl = getGoogleSheetsUrl();
   if (typeof window !== 'undefined') {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
+
       const res = await fetch('/api/transfers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           action: 'update',
           items: affectedItems,
@@ -550,52 +483,13 @@ export async function updateSpecificTransferItems(
     } catch (e) {}
   }
 
-  // 5. Atualização direta no Supabase apenas dos itens afetados (se configurado e fora de cooldown)
-  const supabase = getSupabase();
-  if (supabase && !isSupabaseCircuitOpen()) {
-    for (const item of affectedItems) {
-      try {
-        const fullUpdate: any = {
-          status: item.status,
-          atualizado_em: item.atualizadoEm || new Date().toISOString(),
-          atualizado_por: item.atualizadoPor || null,
-          sap_doc_number: item.sapDocNumber || null,
-          observacoes: item.observacoes || null,
-        };
-        if (item.labelPhotoUrl !== undefined) fullUpdate.label_photo_url = item.labelPhotoUrl;
-        if (item.batchId) fullUpdate.batch_id = item.batchId;
-
-        let { error } = await supabase
-          .from('transfer_requests')
-          .update(fullUpdate)
-          .eq('id', item.id);
-
-        // Se falhar por coluna ausente no Supabase (ex: código 42703), tenta com campos base
-        if (error && (error.code === '42703' || error.message?.includes('column'))) {
-          console.warn(`Supabase: coluna ausente ao atualizar ${item.id}, aplicando campos essenciais...`);
-          const coreUpdate = {
-            status: item.status,
-            atualizado_em: item.atualizadoEm || new Date().toISOString(),
-            sap_doc_number: item.sapDocNumber || null,
-            observacoes: item.observacoes || null,
-          };
-          const retry = await supabase
-            .from('transfer_requests')
-            .update(coreUpdate)
-            .eq('id', item.id);
-          error = retry.error;
-        }
-
-        if (!error) {
-          anySuccess = true;
-        } else {
-          markSupabaseFailure();
-          console.warn(`Aviso: Supabase update error no item ${item.id}:`, error.message);
-        }
-      } catch (err) {
-        markSupabaseFailure();
-        console.warn(`Exceção ao atualizar item ${item.id} no Supabase:`, err);
-      }
+  // 5. Atualização direta no Google Planilhas apenas dos itens afetados
+  if (sheetsUrl) {
+    try {
+      const ok = await updateGoogleSheetsItems(affectedItems);
+      if (ok) anySuccess = true;
+    } catch (err) {
+      console.warn('Falha na atualização direta no Google Planilhas:', err);
     }
   }
 
@@ -625,30 +519,26 @@ export async function deleteSpecificTransferItems(
 
   let anySuccess = false;
 
-  // 3. Excluir diretamente do Supabase
-  const supabase = getSupabase();
-  if (supabase) {
+  // 3. Excluir diretamente do Google Planilhas
+  const sheetsUrl = getGoogleSheetsUrl();
+  if (sheetsUrl) {
     try {
-      const { error } = await supabase
-        .from('transfer_requests')
-        .delete()
-        .in('id', idsToDelete);
-      if (!error) {
-        anySuccess = true;
-      } else {
-        console.warn('Aviso: Erro ao excluir itens do Supabase:', error.message);
-      }
+      const ok = await deleteGoogleSheetsItems(idsToDelete);
+      if (ok) anySuccess = true;
     } catch (err) {
-      console.warn('Exceção ao excluir itens no Supabase:', err);
+      console.warn('Erro ao excluir itens do Google Planilhas:', err);
     }
   }
 
   // 4. Excluir via Backend /api/transfers
   if (typeof window !== 'undefined') {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
+
       const res = await fetch('/api/transfers', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ ids: idsToDelete, clientId: BROWSER_CLIENT_ID }),
       });
       if (res.ok) anySuccess = true;
@@ -798,26 +688,26 @@ export async function clearAllTransferRecords(): Promise<boolean> {
     } catch (e) {}
   }
 
-  // 2. Limpa o banco de dados Supabase na nuvem
-  const supabase = getSupabase();
-  if (supabase) {
+  // 2. Limpa a Planilha Google
+  const sheetsUrl = getGoogleSheetsUrl();
+  if (sheetsUrl) {
     try {
-      const { error } = await supabase
-        .from('transfer_requests')
-        .delete()
-        .neq('id', 'placeholder_none');
-      if (!error) anySuccess = true;
+      const ok = await clearGoogleSheets();
+      if (ok) anySuccess = true;
     } catch (e) {
-      console.warn('Erro ao limpar Supabase:', e);
+      console.warn('Erro ao limpar Planilha Google:', e);
     }
   }
 
   // 3. Notifica o backend Vercel e as outras abas/computadores
   if (typeof window !== 'undefined') {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
+
       const res = await fetch('/api/transfers', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
       });
       if (res.ok) anySuccess = true;
     } catch (e) {
@@ -895,7 +785,6 @@ const globalKnownItemIds = new Set<string>();
 export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
 ): () => void {
-  const supabase = getSupabase();
   let latestItems: TransferItem[] = getLocalCachedItems();
   let isSyncing = false;
   let lastSyncTime = Date.now();
@@ -964,86 +853,7 @@ export function subscribeToRealtimeTransfers(
   // 1. Executa primeira sincronização imediatamente
   safeSync(false);
 
-  // 2. Canal Supabase Realtime (WebSockets):
-  // ATUALIZAÇÃO DIRETA EM MEMÓRIA - NÃO DISPARA SELECT NO BANCO!
-  // Permite que 10, 50 ou 100 computadores recebam alterações instantaneamente sem sobrecarregar o Supabase.
-  let channel: any = null;
-  if (supabase) {
-    try {
-      channel = supabase
-        .channel('transfer_requests_realtime_' + CURRENT_SESSION_ID)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'transfer_requests' },
-          (payload: any) => {
-            const eventType = payload?.eventType;
-            const newRow = payload?.new;
-            const oldRow = payload?.old;
 
-            if (eventType === 'INSERT' && newRow) {
-              const mapped = mapRowToTransferItem(newRow);
-              globalKnownItemIds.add(mapped.id);
-
-              const isFromOther =
-                mapped.originatorClientId !== CURRENT_SESSION_ID &&
-                !sessionCreatedItemIds.has(mapped.id);
-
-              // Atualiza lista em memória sem bater no banco
-              const existingIdx = latestItems.findIndex((i) => i.id === mapped.id);
-              let updatedList: TransferItem[];
-              if (existingIdx >= 0) {
-                updatedList = [...latestItems];
-                updatedList[existingIdx] = mapped;
-              } else {
-                updatedList = [mapped, ...latestItems];
-              }
-
-              // Ordena por criadoEm decrescente e renumera prioridade FIFO
-              updatedList.sort(
-                (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
-              );
-              updatedList = updatedList.map((item, idx) => ({ ...item, prioridadeFifo: idx + 1 }));
-
-              let newPendingList: TransferItem[] | undefined = undefined;
-              if (mapped.status === 'pendente' && isFromOther) {
-                playAlertChime();
-                newPendingList = [mapped];
-              }
-
-              notifyChange(updatedList, 'realtime', newPendingList);
-
-            } else if (eventType === 'UPDATE' && newRow) {
-              const mapped = mapRowToTransferItem(newRow);
-              globalKnownItemIds.add(mapped.id);
-
-              // Atualiza o item correspondente in-place
-              const updatedList = latestItems.map((item) =>
-                item.id === mapped.id ? { ...item, ...mapped } : item
-              );
-              notifyChange(updatedList, 'realtime');
-
-            } else if (eventType === 'DELETE') {
-              const deletedId = String(oldRow?.id || newRow?.id);
-              if (deletedId) {
-                const updatedList = latestItems.filter((i) => i.id !== deletedId);
-                const reindexed = updatedList.map((item, idx) => ({ ...item, prioridadeFifo: idx + 1 }));
-                notifyChange(reindexed, 'realtime');
-              }
-            }
-          }
-        )
-        .subscribe((status: string) => {
-          if (status === 'SUBSCRIBED') {
-            // Canal ativo em tempo real
-          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-            console.warn('Realtime channel:', status, '- agendando sincronização segura');
-            setTimeout(() => safeSync(true), 4000);
-          }
-        });
-    } catch (e) {
-      console.warn('Erro ao assinar canal Supabase Realtime:', e);
-    }
-  }
 
   // 3. Heartbeat de sincronização em tempo real (Polling resiliente a cada 10 segundos)
   // Utiliza o Shared Cloud Store quando o Supabase estiver em cooldown
@@ -1140,9 +950,7 @@ export function subscribeToRealtimeTransfers(
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleWindowFocus);
     }
-    if (channel && supabase) {
-      supabase.removeChannel(channel);
-    }
+
     if (bc) {
       bc.close();
     }

@@ -220,10 +220,10 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
                 title={
                   isCloudConnected
-                    ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Script SQL do Supabase)'
-                    : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico e Script SQL do Supabase)'
+                    ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Conexão com Google Planilhas)'
+                    : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico e Conexão com Google Planilhas)'
                 }
-                aria-label="Diagnóstico do Banco de Dados e Supabase"
+                aria-label="Diagnóstico do Banco de Dados e Google Planilhas"
               >
                 <Radio className="w-4 h-4 text-emerald-300 animate-pulse" />
               </button>
@@ -438,7 +438,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
               >
                 <Radio className="w-4 h-4 text-emerald-400" />
-                <span>Diagnóstico do Banco & Supabase</span>
+                <span>Diagnóstico do Banco & Google Planilhas</span>
               </button>
             )}
           </div>
