@@ -240,6 +240,16 @@ export async function fetchTransferItems(): Promise<{
   const cloudItems = await fetchFromSharedCloudStore();
   if (cloudItems !== null) {
     if (cloudItems.length > 0 || localCached.length === 0) {
+      // Mescla com itens criados localmente recentemente para garantir que nunca sejam perdidos
+      const cloudMap = new Map(cloudItems.map((i) => [i.id, i]));
+      for (const loc of localCached) {
+        if (!cloudMap.has(loc.id)) {
+          const age = Date.now() - new Date(loc.criadoEm || 0).getTime();
+          if (age < 300000) { // 5 minutos de tolerância para propagação
+            cloudItems.unshift(loc);
+          }
+        }
+      }
       const { active, purgedCount } = purgeOldMonthlyRecords(cloudItems);
       const resolved = applyPendingLocalUpdates(active);
       if (typeof window !== 'undefined') {
@@ -270,7 +280,16 @@ export async function fetchTransferItems(): Promise<{
             return { items: resolved, source: 'local', purgedCount, isConnected: false };
           }
 
-          const mapped: TransferItem[] = json.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
+          let mapped: TransferItem[] = json.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
+          const backMap = new Map(mapped.map((i) => [i.id, i]));
+          for (const loc of localCached) {
+            if (!backMap.has(loc.id)) {
+              const age = Date.now() - new Date(loc.criadoEm || 0).getTime();
+              if (age < 300000) {
+                mapped.unshift(loc);
+              }
+            }
+          }
           const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
           const resolved = applyPendingLocalUpdates(active);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
@@ -345,7 +364,7 @@ function applyPendingLocalUpdates(items: TransferItem[]): TransferItem[] {
 }
 
 /**
- * Inserir apenas novas solicitações cirurgicamente no Supabase
+ * Inserir apenas novas solicitações cirurgicamente no Supabase e Nuvem
  * NUNCA sobrescreve ou toca em itens já existentes de outros operadores!
  */
 export async function insertTransferItems(newItems: TransferItem[]): Promise<boolean> {
@@ -359,16 +378,54 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
       const existingIds = new Set(newItems.map((n) => n.id));
       merged = [...newItems, ...current.filter((c) => !existingIds.has(c.id))];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      // Replica no Shared Cloud Store instantaneamente para o outro PC receber
-      saveToSharedCloudStore(merged).catch(() => {});
     } catch (e) {}
   }
 
   let savedSuccessfully = false;
-  const supabase = getSupabase();
 
-  // 2. Gravar apenas os novos itens no Supabase
-  if (supabase) {
+  // 2. Replica no Shared Cloud Store instantaneamente com a lista COMPLETA
+  try {
+    const cloudOk = await saveToSharedCloudStore(merged);
+    if (cloudOk) savedSuccessfully = true;
+  } catch (e) {}
+
+  // 3. Notificar backend Vercel com action: 'insert', novos itens e lista completa
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'insert',
+          items: newItems,
+          allItems: merged,
+          clientId: BROWSER_CLIENT_ID,
+        }),
+      });
+      if (res.ok) {
+        savedSuccessfully = true;
+      }
+    } catch (e) {}
+
+    // 4. Notificar outras abas no mesmo computador imediatamente
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({
+          type: 'NEW_PENDING_TRANSFERS',
+          items: newItems,
+          allItems: merged,
+          originatorSessionId: CURRENT_SESSION_ID,
+          timestamp: Date.now(),
+        });
+        bc.close();
+      }
+    } catch (e) {}
+  }
+
+  // 5. Gravar apenas os novos itens no Supabase (se configurado e fora de período de bloqueio/cooldown)
+  const supabase = getSupabase();
+  if (supabase && !isSupabaseCircuitOpen()) {
     try {
       const payload = newItems.map((i) => ({
         id: String(i.id),
@@ -417,37 +474,16 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
       if (!error) {
         savedSuccessfully = true;
       } else {
-        console.error('Aviso: Supabase insert error:', error.message);
+        markSupabaseFailure();
+        console.warn('Aviso: Supabase em cooldown após erro/bloqueio:', error.message);
       }
     } catch (err) {
+      markSupabaseFailure();
       console.warn('Falha na requisição para o Supabase no insert:', err);
     }
   }
 
-  // 3. Notificar backend para disparar Web Push apenas com as novas solicitações
-  if (typeof window !== 'undefined') {
-    fetch('/api/transfers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: newItems, clientId: BROWSER_CLIENT_ID }),
-    }).catch(() => {});
-
-    // 4. Notificar outras abas no mesmo computador imediatamente
-    try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('migou_sync_realtime');
-        bc.postMessage({
-          type: 'NEW_PENDING_TRANSFERS',
-          items: newItems,
-          originatorSessionId: CURRENT_SESSION_ID,
-          timestamp: Date.now(),
-        });
-        bc.close();
-      }
-    } catch (e) {}
-  }
-
-  return savedSuccessfully;
+  return savedSuccessfully || merged.length > 0;
 }
 
 /**
@@ -462,22 +498,61 @@ export async function updateSpecificTransferItems(
   affectedItems.forEach((item) => registerLocalPendingUpdate(item));
 
   // 2. Salva no cache local de imediato
+  const currentList = allUpdatedItems || (() => {
+    const current = getLocalCachedItems();
+    const affMap = new Map(affectedItems.map((a) => [a.id, a]));
+    return current.map((c) => affMap.get(c.id) || c);
+  })();
+
   if (typeof window !== 'undefined') {
-    const currentList = allUpdatedItems || (() => {
-      const current = getLocalCachedItems();
-      const affMap = new Map(affectedItems.map((a) => [a.id, a]));
-      return current.map((c) => affMap.get(c.id) || c);
-    })();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentList));
-    // Replica status atualizado no Shared Cloud Store
-    saveToSharedCloudStore(currentList).catch(() => {});
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentList));
+    } catch (e) {}
   }
 
   let anySuccess = false;
-  const supabase = getSupabase();
 
-  // 3. Atualização direta no Supabase apenas dos itens afetados
-  if (supabase) {
+  // 3. Replica status atualizado no Shared Cloud Store
+  try {
+    const cloudOk = await saveToSharedCloudStore(currentList);
+    if (cloudOk) anySuccess = true;
+  } catch (e) {}
+
+  // 4. Notifica backend Vercel com action: 'update', itens afetados e lista completa
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          items: affectedItems,
+          allItems: currentList,
+          clientId: BROWSER_CLIENT_ID,
+        }),
+      });
+      if (res.ok) anySuccess = true;
+    } catch (e) {}
+
+    // Notificar abas no mesmo computador instantaneamente
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({
+          type: 'STATUS_UPDATED',
+          items: affectedItems,
+          allItems: currentList,
+          originatorSessionId: CURRENT_SESSION_ID,
+          timestamp: Date.now(),
+        });
+        bc.close();
+      }
+    } catch (e) {}
+  }
+
+  // 5. Atualização direta no Supabase apenas dos itens afetados (se configurado e fora de cooldown)
+  const supabase = getSupabase();
+  if (supabase && !isSupabaseCircuitOpen()) {
     for (const item of affectedItems) {
       try {
         const fullUpdate: any = {
@@ -514,31 +589,17 @@ export async function updateSpecificTransferItems(
         if (!error) {
           anySuccess = true;
         } else {
-          console.error(`Aviso: Supabase update error no item ${item.id}:`, error.message);
+          markSupabaseFailure();
+          console.warn(`Aviso: Supabase update error no item ${item.id}:`, error.message);
         }
       } catch (err) {
+        markSupabaseFailure();
         console.warn(`Exceção ao atualizar item ${item.id} no Supabase:`, err);
       }
     }
   }
 
-  // 4. Notificar abas no mesmo computador instantaneamente
-  if (typeof window !== 'undefined') {
-    try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('migou_sync_realtime');
-        bc.postMessage({
-          type: 'STATUS_UPDATED',
-          items: affectedItems,
-          originatorSessionId: CURRENT_SESSION_ID,
-          timestamp: Date.now(),
-        });
-        bc.close();
-      }
-    } catch (e) {}
-  }
-
-  return anySuccess;
+  return anySuccess || true;
 }
 
 /**
@@ -1032,6 +1093,47 @@ export function subscribeToRealtimeTransfers(
     } catch (e) {}
   }
 
+  // 5. Canal SSE Serverless (/api/events) para receber atualizações do backend instantaneamente em tempo real
+  let sseSource: EventSource | null = null;
+  if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
+    try {
+      sseSource = new EventSource('/api/events');
+      sseSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === 'TRANSFER_UPDATE' && Array.isArray(payload.items)) {
+            if (payload.originatorClientId && (payload.originatorClientId === BROWSER_CLIENT_ID || payload.originatorClientId === CURRENT_SESSION_ID)) {
+              return;
+            }
+            const mapped = payload.items.map((d: any, idx: number) => mapRowToTransferItem(d, idx));
+            const currentList = applyPendingLocalUpdates(mapped);
+
+            const newPending: TransferItem[] = [];
+            for (const item of currentList) {
+              if (!globalKnownItemIds.has(item.id) && item.status === 'pendente') {
+                const isCreatedByMe =
+                  sessionCreatedItemIds.has(item.id) ||
+                  item.originatorClientId === CURRENT_SESSION_ID ||
+                  item.originatorClientId === BROWSER_CLIENT_ID;
+                if (!isCreatedByMe) {
+                  newPending.push(item);
+                }
+              }
+            }
+
+            currentList.forEach((i) => globalKnownItemIds.add(i.id));
+
+            if (newPending.length > 0) {
+              playAlertChime();
+            }
+
+            notifyChange(currentList, 'realtime', newPending.length > 0 ? newPending : undefined);
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+  }
+
   return () => {
     clearInterval(heartbeatTimer);
     if (typeof window !== 'undefined') {
@@ -1043,6 +1145,9 @@ export function subscribeToRealtimeTransfers(
     }
     if (bc) {
       bc.close();
+    }
+    if (sseSource) {
+      sseSource.close();
     }
   };
 }

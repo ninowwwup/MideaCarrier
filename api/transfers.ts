@@ -413,7 +413,11 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       if (cloudRes.ok) {
         const cloudData = await cloudRes.json();
         if (Array.isArray(cloudData?.data?.items)) {
-          memoryStore = cloudData.data.items;
+          const cloudItems = cloudData.data.items;
+          const mergedMap = new Map();
+          for (const it of memoryStore) mergedMap.set(String(it.id), it);
+          for (const it of cloudItems) mergedMap.set(String(it.id), it);
+          memoryStore = Array.from(mergedMap.values());
           savePersistentStore(memoryStore);
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;
@@ -527,6 +531,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       try {
         const parsed = typeof body === 'string' ? JSON.parse(body || '{}') : body;
         const items = parsed.items !== undefined ? parsed.items : (Array.isArray(parsed) ? parsed : null);
+        const action = parsed.action || 'auto'; // 'insert' | 'update' | 'replace' | 'auto'
+        const allItems = Array.isArray(parsed.allItems) ? parsed.allItems : null;
         const originatorClientId = parsed.clientId || parsed.originatorClientId;
 
         if (!items || !Array.isArray(items)) {
@@ -536,15 +542,79 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           return;
         }
 
-        memoryStore = items;
-        lastModified = Date.now();
-        savePersistentStore(items);
+        // Assegura que memoryStore tem os dados mais recentes do disco se estiver vazio
+        if (!Array.isArray(memoryStore) || memoryStore.length === 0) {
+          memoryStore = loadPersistentStore();
+        }
 
-        // Sincroniza Shared Cloud Store
+        let updatedList: any[] = [];
+
+        if (action === 'replace') {
+          // Substituição explícita de toda a lista
+          updatedList = items;
+        } else {
+          // Modo resiliente e incremental: NUNCA apaga registros de outros operadores
+          const itemMap = new Map<string, any>();
+
+          // 1. Carrega itens atuais do memoryStore
+          for (const it of memoryStore) {
+            itemMap.set(String(it.id), it);
+          }
+
+          // 2. Se o cliente enviou allItems (visão mesclada completa do navegador dele), funde preservando todos
+          if (allItems && Array.isArray(allItems)) {
+            for (const it of allItems) {
+              const existing = itemMap.get(String(it.id));
+              if (!existing) {
+                itemMap.set(String(it.id), it);
+              } else {
+                const exTime = new Date(existing.atualizadoEm || existing.atualizado_em || existing.criadoEm || 0).getTime();
+                const newTime = new Date(it.atualizadoEm || it.atualizado_em || it.criadoEm || 0).getTime();
+                if (newTime >= exTime) {
+                  itemMap.set(String(it.id), { ...existing, ...it });
+                }
+              }
+            }
+          }
+
+          // 3. Mescla os itens específicos da requisição
+          for (const it of items) {
+            const existing = itemMap.get(String(it.id));
+            if (!existing) {
+              itemMap.set(String(it.id), it);
+            } else {
+              itemMap.set(String(it.id), { ...existing, ...it });
+            }
+          }
+
+          updatedList = Array.from(itemMap.values());
+        }
+
+        // Ordena por criadoEm decrescente (mais recentes no topo)
+        updatedList.sort((a: any, b: any) => {
+          const tA = new Date(a.criadoEm || a.criado_em || 0).getTime();
+          const tB = new Date(b.criadoEm || b.criado_em || 0).getTime();
+          return tB - tA;
+        });
+
+        // Atualiza numeração de prioridade FIFO
+        updatedList = updatedList.map((it: any, idx: number) => ({
+          ...it,
+          prioridadeFifo: idx + 1,
+        }));
+
+        memoryStore = updatedList;
+        lastModified = Date.now();
+        savePersistentStore(memoryStore);
+
+        // Sincroniza Shared Cloud Store com a lista COMPLETA
         fetch('https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'midea_carrier_transfer_hub_production', data: { items, lastUpdated: lastModified } }),
+          body: JSON.stringify({ 
+            name: 'midea_carrier_transfer_hub_production', 
+            data: { items: memoryStore, lastUpdated: lastModified, count: memoryStore.length } 
+          }),
         }).catch(() => {});
 
         // 1. Notifica instantaneamente todos os outros computadores conectados via SSE
@@ -579,6 +649,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           ).catch((e) => console.warn('Erro ao disparar Web Push:', e));
         }
 
+        // 3. Tenta salvar no Supabase em segundo plano caso o projeto esteja acessível
         if (supabase) {
           try {
             if (items.length > 0) {
@@ -631,7 +702,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ success: true, items: memoryStore, lastModified }));
+        res.end(JSON.stringify({ success: true, count: memoryStore.length, items: memoryStore, lastModified }));
       } catch (err) {
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');

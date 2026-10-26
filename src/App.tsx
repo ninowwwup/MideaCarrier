@@ -370,13 +370,13 @@ export default function App() {
 
     if (isSaved) {
       showSuccessNotice(
-        'Solicitação salva no Supabase!',
-        `${created.length} serial(is) de ${input.material} sincronizado(s) em tempo real com o Time SAP.`
+        'Solicitação registrada com sucesso!',
+        `${created.length} serial(is) de ${input.material} salvo(s) e sincronizado(s) em tempo real com o Time SAP.`
       );
     } else {
       showSuccessNotice(
-        'Salvo em cache local (Aviso Supabase)',
-        `${created.length} serial(is) salvo(s) localmente. A sincronização tentará novamente em segundo plano.`
+        'Salvo localmente (Aviso de Conexão)',
+        `${created.length} serial(is) salvo(s) na máquina. A sincronização em nuvem ocorrerá em segundo plano.`
       );
     }
   };
@@ -390,13 +390,13 @@ export default function App() {
     if (batchItems.length > 0) {
       if (isSaved) {
         showSuccessNotice(
-          'Lote salvo no Supabase!',
-          `${batchItems.length} seriais sincronizados em tempo real com o Time SAP.`
+          'Lote importado com sucesso!',
+          `${batchItems.length} seriais salvos e sincronizados em tempo real com o Time SAP.`
         );
       } else {
         showSuccessNotice(
-          'Salvo em cache local (Aviso Supabase)',
-          `${batchItems.length} seriais salvos localmente. Sincronização pendente com a nuvem.`
+          'Salvo localmente (Aviso de Conexão)',
+          `${batchItems.length} seriais salvos na máquina. Sincronização pendente com a nuvem.`
         );
       }
     }

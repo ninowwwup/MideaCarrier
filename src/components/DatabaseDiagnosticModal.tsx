@@ -10,9 +10,19 @@ import {
   ExternalLink,
   ShieldAlert,
   Server,
-  Trash2
+  Trash2,
+  Key,
+  RotateCcw,
+  Save,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { getSupabase, getSupabaseConfig } from '../services/supabaseClient';
+import { 
+  getSupabase, 
+  getSupabaseConfig, 
+  saveStoredSupabaseCredentials, 
+  clearStoredSupabaseCredentials 
+} from '../services/supabaseClient';
 import { clearAllTransferRecords } from '../services/storage';
 
 interface DatabaseDiagnosticModalProps {
@@ -85,10 +95,53 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
     details?: string;
   }>({ status: 'idle', message: '' });
 
+  const [customUrl, setCustomUrl] = useState(() => {
+    return typeof window !== 'undefined' ? (localStorage.getItem('midea_transfer_supabase_url') || '') : '';
+  });
+  const [customKey, setCustomKey] = useState(() => {
+    return typeof window !== 'undefined' ? (localStorage.getItem('midea_transfer_supabase_anon_key') || '') : '';
+  });
+  const [showCustomConfig, setShowCustomConfig] = useState(false);
+  const [hasCustomCredentials, setHasCustomCredentials] = useState(() => {
+    return typeof window !== 'undefined' ? Boolean(localStorage.getItem('midea_transfer_supabase_url')) : false;
+  });
+
   if (!isOpen) return null;
 
   const { url, anonKey } = getSupabaseConfig();
   const isDirectConfigured = Boolean(url && anonKey);
+
+  const handleSaveCredentials = () => {
+    if (!customUrl.trim() || !customKey.trim()) {
+      alert('Por favor, informe a URL e a Anon Key do Supabase.');
+      return;
+    }
+    saveStoredSupabaseCredentials(customUrl.trim(), customKey.trim());
+    setHasCustomCredentials(true);
+    setTestResult({
+      status: 'success',
+      message: 'Novas credenciais salvas com sucesso!',
+      details: 'O navegador está conectado ao novo projeto Supabase. Recarregando a página...'
+    });
+    setTimeout(() => {
+      window.location.reload();
+    }, 1200);
+  };
+
+  const handleRestoreDefault = () => {
+    clearStoredSupabaseCredentials();
+    setCustomUrl('');
+    setCustomKey('');
+    setHasCustomCredentials(false);
+    setTestResult({
+      status: 'warning',
+      message: 'Credenciais personalizadas removidas!',
+      details: 'Restaurado para as credenciais padrão do repositório/Vercel. Recarregando...'
+    });
+    setTimeout(() => {
+      window.location.reload();
+    }, 1200);
+  };
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(SUPABASE_REPAIR_SQL);
@@ -162,10 +215,15 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
       // 1. Testar SELECT (Leitura)
       const readRes = await supabase.from('transfer_requests').select('id, status').limit(3);
       if (readRes.error) {
+        const isQuota = readRes.error.message?.includes('exceed_egress_quota') || readRes.error.message?.includes('quota');
         setTestResult({
-          status: 'error',
-          message: `Erro na Leitura do Supabase: [${readRes.error.code}] ${readRes.error.message}`,
-          details: 'Provável causa: a tabela transfer_requests ainda não foi criada ou o RLS está bloqueando. Execute o Script SQL abaixo para corrigir em 1 clique.'
+          status: isQuota ? 'warning' : 'error',
+          message: isQuota
+            ? 'Cota Gratuita do Supabase Excedida (exceed_egress_quota)'
+            : `Erro na Leitura do Supabase: [${readRes.error.code}] ${readRes.error.message}`,
+          details: isQuota
+            ? 'O limite mensal de saída de dados gratuito do Supabase foi atingido. O MIGOU ativou automaticamente a contingência via Backend Serverless e Nuvem Compartilhada, garantindo gravação e sincronização ininterrupta. Para restabelecer o Supabase direto, atualize o plano ou configure um novo projeto abaixo.'
+            : 'Provável causa: a tabela transfer_requests ainda não foi criada ou o RLS está bloqueando. Execute o Script SQL abaixo para corrigir em 1 clique.'
         });
         setTesting(false);
         return;
@@ -346,6 +404,92 @@ export const DatabaseDiagnosticModal: React.FC<DatabaseDiagnosticModalProps> = (
                       <p className="text-[11px] opacity-90">{testResult.details}</p>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Conexão com Projeto Alternativo do Supabase (Opcional) */}
+          <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5">
+            <div 
+              className="flex items-center justify-between cursor-pointer select-none"
+              onClick={() => setShowCustomConfig(!showCustomConfig)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-blue-100 text-[#00609C]">
+                  <Key className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>Vincular Novo Projeto Supabase</span>
+                    {hasCustomCredentials && (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-full font-medium">
+                        Personalizado
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Conecte seu próprio projeto Supabase sem precisar recompilar ou alterar variáveis de ambiente.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                aria-label="Expandir/Recolher"
+              >
+                {showCustomConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+
+            {showCustomConfig && (
+              <div className="pt-2 border-t border-slate-200 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Supabase Project URL
+                  </label>
+                  <input
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="https://exemplo.supabase.co"
+                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00609C] font-mono text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Supabase Anon / Public Key
+                  </label>
+                  <input
+                    type="password"
+                    value={customKey}
+                    onChange={(e) => setCustomKey(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00609C] font-mono text-slate-800"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  {hasCustomCredentials ? (
+                    <button
+                      type="button"
+                      onClick={handleRestoreDefault}
+                      className="px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Restaurar Padrão</span>
+                    </button>
+                  ) : <div />}
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCredentials}
+                    className="px-3.5 py-1.5 text-xs bg-[#00609C] hover:bg-[#004e7f] text-white rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer ml-auto"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Salvar e Conectar</span>
+                  </button>
                 </div>
               </div>
             )}

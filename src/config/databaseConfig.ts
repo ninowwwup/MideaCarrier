@@ -38,12 +38,7 @@ export function getEffectiveSupabaseCredentials(): { url: string; anonKey: strin
     return { url: ENV_URL.trim(), anonKey: ENV_KEY.trim() };
   }
 
-  // 2. Chaves diretas do arquivo de configuração
-  if (CONFIGURED_SUPABASE_URL && CONFIGURED_SUPABASE_ANON_KEY) {
-    return { url: CONFIGURED_SUPABASE_URL.trim(), anonKey: CONFIGURED_SUPABASE_ANON_KEY.trim() };
-  }
-
-  // 3. Fallback de cache local persistente
+  // 2. Chaves salvas localmente pelo administrador no navegador (permite conectar novo projeto em caso de cota excedida)
   if (typeof window !== 'undefined') {
     const cachedUrl = localStorage.getItem('midea_transfer_supabase_url') || '';
     const cachedKey = localStorage.getItem('midea_transfer_supabase_anon_key') || '';
@@ -52,7 +47,33 @@ export function getEffectiveSupabaseCredentials(): { url: string; anonKey: strin
     }
   }
 
+  // 3. Chaves padrão do repositório
+  if (CONFIGURED_SUPABASE_URL && CONFIGURED_SUPABASE_ANON_KEY) {
+    return { url: CONFIGURED_SUPABASE_URL.trim(), anonKey: CONFIGURED_SUPABASE_ANON_KEY.trim() };
+  }
+
   return { url: '', anonKey: '' };
+}
+
+export function saveStoredSupabaseCredentials(url: string, anonKey: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (url.trim() && anonKey.trim()) {
+      localStorage.setItem('midea_transfer_supabase_url', url.trim());
+      localStorage.setItem('midea_transfer_supabase_anon_key', anonKey.trim());
+    } else {
+      localStorage.removeItem('midea_transfer_supabase_url');
+      localStorage.removeItem('midea_transfer_supabase_anon_key');
+    }
+  } catch (e) {}
+}
+
+export function clearStoredSupabaseCredentials(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('midea_transfer_supabase_url');
+    localStorage.removeItem('midea_transfer_supabase_anon_key');
+  } catch (e) {}
 }
 
 export function isSupabaseDirectConfigured(): boolean {

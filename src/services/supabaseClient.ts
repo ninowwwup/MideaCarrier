@@ -1,5 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getEffectiveSupabaseCredentials } from '../config/databaseConfig';
+import { getEffectiveSupabaseCredentials, saveStoredSupabaseCredentials, clearStoredSupabaseCredentials } from '../config/databaseConfig';
+
+export { saveStoredSupabaseCredentials, clearStoredSupabaseCredentials };
 
 export interface SupabaseConfig {
   url: string;
