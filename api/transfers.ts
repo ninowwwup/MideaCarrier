@@ -183,6 +183,9 @@ export function broadcastSSE(data: any) {
   }
 }
 
+const DEFAULT_SHEETS_URL = 
+  'https://script.google.com/macros/s/AKfycbzP1cmdZUfC508gitpJNNgQ_ehkatA3jl4At7ajinHdZmay-lKSzaOQlgoCLfuNt2trUQ/exec';
+
 function getGoogleSheetsServerUrl(req?: IncomingMessage): string {
   const headerUrl = req?.headers?.['x-google-sheets-url'];
   if (typeof headerUrl === 'string' && headerUrl.trim()) {
@@ -191,7 +194,7 @@ function getGoogleSheetsServerUrl(req?: IncomingMessage): string {
   return (
     process.env.VITE_GOOGLE_SHEETS_URL ||
     process.env.GOOGLE_SHEETS_URL ||
-    ''
+    DEFAULT_SHEETS_URL
   ).trim();
 }
 

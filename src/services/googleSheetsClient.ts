@@ -2,11 +2,14 @@ import { TransferItem } from '../types/transfer';
 
 const STORAGE_SHEETS_URL_KEY = 'midea_transfer_google_sheets_url';
 
-// URL padrão configurada nas variáveis de ambiente da Vercel / Vite
+export const DEFAULT_PRODUCTION_SHEETS_URL = 
+  'https://script.google.com/macros/s/AKfycbzP1cmdZUfC508gitpJNNgQ_ehkatA3jl4At7ajinHdZmay-lKSzaOQlgoCLfuNt2trUQ/exec';
+
+// URL padrão configurada nas variáveis de ambiente da Vercel / Vite ou URL de produção fixa
 const ENV_SHEETS_URL = 
   (import.meta as any).env?.VITE_GOOGLE_SHEETS_URL ||
   (import.meta as any).env?.GOOGLE_SHEETS_URL ||
-  '';
+  DEFAULT_PRODUCTION_SHEETS_URL;
 
 /**
  * Obtém a URL ativa do Google Apps Script Web App

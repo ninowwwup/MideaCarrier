@@ -16,24 +16,20 @@ import {
   getGoogleSheetsUrl, 
   saveGoogleSheetsUrl, 
   clearGoogleSheetsUrl, 
-  isGoogleSheetsConfigured 
+  isGoogleSheetsConfigured,
+  DEFAULT_PRODUCTION_SHEETS_URL
 } from '../services/googleSheetsClient';
 
 export {
   getGoogleSheetsUrl,
   saveGoogleSheetsUrl,
   clearGoogleSheetsUrl,
-  isGoogleSheetsConfigured
+  isGoogleSheetsConfigured,
+  DEFAULT_PRODUCTION_SHEETS_URL
 };
 
-// Variáveis de ambiente fornecidas pela Vercel / Vite
-const ENV_SHEETS_URL = 
-  (import.meta as any).env?.VITE_GOOGLE_SHEETS_URL ||
-  (import.meta as any).env?.GOOGLE_SHEETS_URL ||
-  '';
-
-// URL padrão inicial (pode ser sobrescrita pelo modal em qualquer computador)
-export const DEFAULT_GOOGLE_SHEETS_URL = ENV_SHEETS_URL || '';
+// URL padrão inicial ativa
+export const DEFAULT_GOOGLE_SHEETS_URL = DEFAULT_PRODUCTION_SHEETS_URL;
 
 /**
  * Funções de compatibilidade para transição suave do Supabase -> Google Planilhas

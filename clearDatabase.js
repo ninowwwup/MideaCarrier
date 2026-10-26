@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const GOOGLE_SHEETS_URL = process.env.VITE_GOOGLE_SHEETS_URL || process.env.GOOGLE_SHEETS_URL || '';
+const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzP1cmdZUfC508gitpJNNgQ_ehkatA3jl4At7ajinHdZmay-lKSzaOQlgoCLfuNt2trUQ/exec';
+const GOOGLE_SHEETS_URL = process.env.VITE_GOOGLE_SHEETS_URL || process.env.GOOGLE_SHEETS_URL || DEFAULT_SHEETS_URL;
 
 async function resetAll() {
   console.log('Iniciando limpeza total dos registros...');
