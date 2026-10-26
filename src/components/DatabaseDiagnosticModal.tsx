@@ -81,6 +81,11 @@ const HEADERS = [
   'originator_client_id'
 ];
 
+function setupInicial() {
+  const sheet = getOrCreateSheet();
+  SpreadsheetApp.getActiveSpreadsheet().toast('Colunas e cabeçalho do MIGOU criados com sucesso!', 'MIGOU', 5);
+}
+
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);

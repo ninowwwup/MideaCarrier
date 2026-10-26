@@ -52,6 +52,14 @@ const HEADERS = [
 ];
 
 /**
+ * Execute esta função no editor do Apps Script para criar a aba 'Transferencias' e todas as 19 colunas imediatamente!
+ */
+function setupInicial() {
+  const sheet = getOrCreateSheet();
+  SpreadsheetApp.getActiveSpreadsheet().toast('Colunas e cabeçalho do MIGOU criados com sucesso!', 'MIGOU', 5);
+}
+
+/**
  * Obtém ou inicializa a aba de transferências formatada
  */
 function getOrCreateSheet() {
