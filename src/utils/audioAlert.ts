@@ -114,13 +114,13 @@ export function setSavedAlertSound(sound: AlertSoundType) {
 }
 
 export const SOUND_FILE_MAP: Record<AlertSoundType, string> = {
-  water_drop: '/audio/water_drop.wav',
-  frog: '/audio/frog.wav',
-  bubbles: '/audio/bubbles.wav',
-  cat: '/audio/cat.wav',
-  rebound: '/audio/rebound.wav',
-  bird: '/audio/bird.wav',
-  tinder: '/audio/tinder.wav',
+  water_drop: './audio/water_drop.wav',
+  frog: './audio/frog.wav',
+  bubbles: './audio/bubbles.wav',
+  cat: './audio/cat.wav',
+  rebound: './audio/rebound.wav',
+  bird: './audio/bird.wav',
+  tinder: './audio/tinder.wav',
 };
 
 let sharedAudioCtx: AudioContext | null = null;

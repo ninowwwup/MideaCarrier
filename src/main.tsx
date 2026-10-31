@@ -14,7 +14,7 @@ if ('serviceWorker' in navigator) {
 
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
+      .register('./sw.js', { updateViaCache: 'none' })
       .then((reg) => {
         reg.update();
       })

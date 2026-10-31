@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: './',
     plugins: [react(), tailwindcss()],
     define: {
       'import.meta.env.VITE_GOOGLE_SHEETS_URL': JSON.stringify(

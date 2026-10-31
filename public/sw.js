@@ -10,19 +10,19 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v7';
+const CACHE_NAME = 'migou-pwa-v8';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon.svg',
-  '/audio/water_drop.wav',
-  '/audio/frog.wav',
-  '/audio/bubbles.wav',
-  '/audio/cat.wav',
-  '/audio/rebound.wav',
-  '/audio/bird.wav',
-  '/audio/tinder.wav',
+  './',
+  './index.html',
+  './manifest.json',
+  './icon.svg',
+  './audio/water_drop.wav',
+  './audio/frog.wav',
+  './audio/bubbles.wav',
+  './audio/cat.wav',
+  './audio/rebound.wav',
+  './audio/bird.wav',
+  './audio/tinder.wav',
 ];
 
 // Instalação do Service Worker
