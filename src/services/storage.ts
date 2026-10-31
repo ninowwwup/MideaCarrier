@@ -9,7 +9,7 @@ import {
   clearGoogleSheets 
 } from './googleSheetsClient';
 import { calculateSLA } from '../utils/sapFormatter';
-import { playAlertChime } from '../utils/audioAlert';
+import { playAlertChime, sendDesktopNotification } from '../utils/audioAlert';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
@@ -168,11 +168,10 @@ export async function saveToSharedCloudStore(items: TransferItem[]): Promise<boo
 }
 
 /**
- * Consulta de itens com fallback multinível ultra-resiliente:
+ * Consulta de itens com fallback multinível ultra-resiliente (100% Direto sem consumir Serverless Functions da Vercel):
  * 1. Google Planilhas (via Google Apps Script Web App)
- * 2. Backend Serverless Vercel /api/transfers
- * 3. Shared Cloud Store global (Persistência real-time garantida entre diferentes PCs)
- * 4. Cache Local
+ * 2. Shared Cloud Store global (Persistência real-time garantida entre diferentes PCs)
+ * 3. Cache Local
  */
 export async function fetchTransferItems(): Promise<{
   items: TransferItem[];
@@ -182,13 +181,14 @@ export async function fetchTransferItems(): Promise<{
 }> {
   const localCached = getLocalCachedItems();
 
-  // 1. Google Planilhas (Consulta direta ao Web App se configurado)
+  // 1. Google Planilhas (Consulta direta ao Web App)
   const sheetsUrl = getGoogleSheetsUrl();
   if (sheetsUrl) {
     try {
       const sheetData = await fetchGoogleSheetsItems();
       if (sheetData !== null && Array.isArray(sheetData)) {
-        const { active, purgedCount } = purgeOldMonthlyRecords(sheetData);
+        const mapped = sheetData.map((d: any, index: number) => mapRowToTransferItem(d, index));
+        const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
         const resolved = applyPendingLocalUpdates(active);
 
         if (typeof window !== 'undefined') {
@@ -201,54 +201,7 @@ export async function fetchTransferItems(): Promise<{
         return { items: resolved, source: 'google_sheets', purgedCount, isConnected: true };
       }
     } catch (err) {
-      console.warn('Aviso: Falha ao consultar Google Planilhas diretamente, tentando backend...', err);
-    }
-  }
-
-  // 2. Rota Backend Serverless Vercel (/api/transfers)
-  if (typeof window !== 'undefined') {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      const headers: Record<string, string> = { 'Accept': 'application/json' };
-      if (sheetsUrl) {
-        headers['x-google-sheets-url'] = sheetsUrl;
-      }
-
-      const res = await fetch('/api/transfers', {
-        headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json && Array.isArray(json.items)) {
-          if (json.items.length === 0 && localCached.length > 0) {
-            const { active, purgedCount } = purgeOldMonthlyRecords(localCached);
-            const resolved = applyPendingLocalUpdates(active);
-            return { items: resolved, source: 'local', purgedCount, isConnected: false };
-          }
-
-          let mapped: TransferItem[] = json.items.map((d: any, index: number) => mapRowToTransferItem(d, index));
-          const backMap = new Map(mapped.map((i) => [i.id, i]));
-          for (const loc of localCached) {
-            if (!backMap.has(loc.id)) {
-              const age = Date.now() - new Date(loc.criadoEm || 0).getTime();
-              if (age < 300000) {
-                mapped.unshift(loc);
-              }
-            }
-          }
-          const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
-          const resolved = applyPendingLocalUpdates(active);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
-          return { items: resolved, source: 'backend', purgedCount, isConnected: true };
-        }
-      }
-    } catch (backendErr) {
-      // Backend offline ou temporariamente inacessível
+      console.warn('Aviso: Falha ao consultar Google Planilhas diretamente, tentando Cloud Store...', err);
     }
   }
 
@@ -364,29 +317,9 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
     if (cloudOk) savedSuccessfully = true;
   } catch (e) {}
 
-  // 3. Notificar backend Vercel com action: 'insert', novos itens e lista completa
+  // 3. Notificar outras abas no mesmo computador imediatamente
   const sheetsUrl = getGoogleSheetsUrl();
   if (typeof window !== 'undefined') {
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
-
-      const res = await fetch('/api/transfers', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          action: 'insert',
-          items: newItems,
-          allItems: merged,
-          clientId: BROWSER_CLIENT_ID,
-        }),
-      });
-      if (res.ok) {
-        savedSuccessfully = true;
-      }
-    } catch (e) {}
-
-    // 4. Notificar outras abas no mesmo computador imediatamente
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('migou_sync_realtime');
@@ -402,7 +335,7 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
     } catch (e) {}
   }
 
-  // 5. Gravar os novos itens no Google Planilhas (direto via Web App se configurado)
+  // 4. Gravar os novos itens diretamente no Google Planilhas (via Web App)
   if (sheetsUrl) {
     try {
       const ok = await insertGoogleSheetsItems(newItems);
@@ -417,7 +350,7 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
 
 /**
  * Atualizar status e dados de itens específicos de forma cirúrgica e resiliente
- * (Comando direto de UPDATE no banco de dados e Supabase - NUNCA sobrescreve itens alheios)
+ * (Comando direto de UPDATE na Planilha Google - NUNCA sobrescreve itens alheios)
  */
 export async function updateSpecificTransferItems(
   affectedItems: TransferItem[],
@@ -447,27 +380,9 @@ export async function updateSpecificTransferItems(
     if (cloudOk) anySuccess = true;
   } catch (e) {}
 
-  // 4. Notifica backend Vercel com action: 'update', itens afetados e lista completa
+  // 4. Notificar abas no mesmo computador instantaneamente
   const sheetsUrl = getGoogleSheetsUrl();
   if (typeof window !== 'undefined') {
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
-
-      const res = await fetch('/api/transfers', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          action: 'update',
-          items: affectedItems,
-          allItems: currentList,
-          clientId: BROWSER_CLIENT_ID,
-        }),
-      });
-      if (res.ok) anySuccess = true;
-    } catch (e) {}
-
-    // Notificar abas no mesmo computador instantaneamente
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('migou_sync_realtime');
@@ -498,7 +413,7 @@ export async function updateSpecificTransferItems(
 
 /**
  * Excluir itens específicos selecionados (para correção de digitação ou cancelamento operacional)
- * Propaga a exclusão cirúrgica para o Supabase, Shared Cloud Store, Backend e abas locais.
+ * Propaga a exclusão cirúrgica para o Google Planilhas, Shared Cloud Store e abas locais.
  */
 export async function deleteSpecificTransferItems(
   idsToDelete: string[],
@@ -530,21 +445,8 @@ export async function deleteSpecificTransferItems(
     }
   }
 
-  // 4. Excluir via Backend /api/transfers
+  // 4. Notificar abas no mesmo computador
   if (typeof window !== 'undefined') {
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
-
-      const res = await fetch('/api/transfers', {
-        method: 'DELETE',
-        headers,
-        body: JSON.stringify({ ids: idsToDelete, clientId: BROWSER_CLIENT_ID }),
-      });
-      if (res.ok) anySuccess = true;
-    } catch (e) {}
-
-    // 5. Notificar abas no mesmo computador
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('migou_sync_realtime');
@@ -564,96 +466,24 @@ export async function deleteSpecificTransferItems(
 }
 
 /**
- * Salvar e propagar alterações para Supabase, Backend Vercel e Cache Local
+ * Salvar e propagar alterações para Planilha Google, Shared Cloud Store e Cache Local
  */
 export async function saveTransferItems(items: TransferItem[]): Promise<boolean> {
-  // Salva no cache local de imediato
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    // Sincroniza com Shared Cloud Store imediatamente
     saveToSharedCloudStore(items).catch(() => {});
   }
 
   let savedSuccessfully = false;
-
-  // 1. Gravar no Supabase (se configurado)
-  const supabase = getSupabase();
-  if (supabase) {
+  const sheetsUrl = getGoogleSheetsUrl();
+  if (sheetsUrl) {
     try {
-      if (items.length === 0) {
-        const { error } = await supabase.from('transfer_requests').delete().neq('id', 'placeholder_none');
-        if (!error) savedSuccessfully = true;
-      } else {
-        const payload = items.map((i) => ({
-          id: String(i.id),
-          solicitation_code: i.solicitationCode || null,
-          material: i.material,
-          serial: i.serial,
-          centro: i.centro,
-          deposito_origem: i.depositoOrigem,
-          deposito_destino: i.depositoDestino,
-          status: i.status,
-          criado_em: i.criadoEm,
-          criado_por: i.criadoPor,
-          atualizado_em: i.atualizadoEm,
-          atualizado_por: i.atualizadoPor || null,
-          sap_doc_number: i.sapDocNumber || null,
-          observacoes: i.observacoes || null,
-          batch_id: i.batchId || null,
-          label_photo_url: i.labelPhotoUrl || null,
-          originator_client_id: i.originatorClientId || null,
-        }));
-
-        let { error } = await supabase.from('transfer_requests').upsert(payload, { onConflict: 'id' });
-
-        if (error && (error.code === '42703' || error.message?.includes('column'))) {
-          console.warn('Supabase: detectada ausência de colunas opcionais. Executando upsert resiliente com campos base...');
-          const corePayload = items.map((i) => ({
-            id: String(i.id),
-            solicitation_code: i.solicitationCode || `SOL-${i.id}`,
-            material: i.material,
-            serial: i.serial,
-            centro: i.centro,
-            deposito_origem: i.depositoOrigem,
-            deposito_destino: i.depositoDestino,
-            status: i.status,
-            criado_em: i.criadoEm,
-            criado_por: i.criadoPor,
-            atualizado_em: i.atualizadoEm,
-            sap_doc_number: i.sapDocNumber || null,
-            observacoes: i.observacoes || null,
-          }));
-          const retryRes = await supabase.from('transfer_requests').upsert(corePayload, { onConflict: 'id' });
-          error = retryRes.error;
-        }
-
-        if (!error) {
-          savedSuccessfully = true;
-        } else {
-          console.error('Aviso: Supabase upsert error:', error.message);
-        }
-      }
-    } catch (err) {
-      console.warn('Falha na requisição para o Supabase:', err);
-    }
+      const ok = await updateGoogleSheetsItems(items);
+      if (ok) savedSuccessfully = true;
+    } catch (e) {}
   }
 
-  // 2. Gravar no Backend /api/transfers
   if (typeof window !== 'undefined') {
-    try {
-      const res = await fetch('/api/transfers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, clientId: BROWSER_CLIENT_ID }),
-      });
-      if (res.ok) {
-        savedSuccessfully = true;
-      }
-    } catch (e) {
-      // Backend offline ou erro de rede
-    }
-
-    // Notificar outras abas no mesmo computador imediatamente
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('migou_sync_realtime');
@@ -699,21 +529,8 @@ export async function clearAllTransferRecords(): Promise<boolean> {
     }
   }
 
-  // 3. Notifica o backend Vercel e as outras abas/computadores
+  // 3. Notifica as outras abas no mesmo computador
   if (typeof window !== 'undefined') {
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (sheetsUrl) headers['x-google-sheets-url'] = sheetsUrl;
-
-      const res = await fetch('/api/transfers', {
-        method: 'DELETE',
-        headers,
-      });
-      if (res.ok) anySuccess = true;
-    } catch (e) {
-      // Backend offline
-    }
-
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('migou_sync_realtime');
@@ -835,6 +652,16 @@ export function subscribeToRealtimeTransfers(
 
         if (newPending.length > 0) {
           playAlertChime();
+          const first = newPending[0];
+          const notifTitle =
+            newPending.length === 1
+              ? `MIGOU: Nova Solicitação SAP (${first.material})`
+              : `MIGOU: ${newPending.length} Novas Solicitações SAP`;
+          const notifBody =
+            newPending.length === 1
+              ? `Serial: ${first.serial} • Centro ${first.centro} (${first.depositoOrigem} ➔ ${first.depositoDestino})`
+              : `Lote de ${newPending.length} seriais aguardando transferência (${first.depositoOrigem} ➔ ${first.depositoDestino}).`;
+          sendDesktopNotification(notifTitle, notifBody);
         }
 
         notifyChange(
@@ -853,26 +680,23 @@ export function subscribeToRealtimeTransfers(
   // 1. Executa primeira sincronização imediatamente
   safeSync(false);
 
-
-
-  // 3. Heartbeat de sincronização em tempo real (Polling resiliente a cada 10 segundos)
-  // Utiliza o Shared Cloud Store quando o Supabase estiver em cooldown
-  const HEARTBEAT_INTERVAL_MS = 10000;
+  // 2. Heartbeat de sincronização em tempo real direto com Google Planilhas (a cada 8 segundos)
+  const HEARTBEAT_INTERVAL_MS = 8000;
   const heartbeatTimer = setInterval(() => {
     if (!isSyncing && Date.now() - lastSyncTime >= HEARTBEAT_INTERVAL_MS) {
       safeSync(false);
     }
-  }, 3500);
+  }, 3000);
 
   // Reconcilia automaticamente ao alternar abas ou focar a janela
   const handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 15000) {
+    if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 8000) {
       safeSync(false);
     }
   };
 
   const handleWindowFocus = () => {
-    if (Date.now() - lastSyncTime > 15000) {
+    if (Date.now() - lastSyncTime > 8000) {
       safeSync(false);
     }
   };
@@ -882,7 +706,7 @@ export function subscribeToRealtimeTransfers(
     window.addEventListener('focus', handleWindowFocus);
   }
 
-  // 4. BroadcastChannel para sincronização instantânea entre abas no mesmo computador
+  // 3. BroadcastChannel para sincronização instantânea entre abas no mesmo computador
   let bc: BroadcastChannel | null = null;
   if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
     try {
@@ -903,47 +727,6 @@ export function subscribeToRealtimeTransfers(
     } catch (e) {}
   }
 
-  // 5. Canal SSE Serverless (/api/events) para receber atualizações do backend instantaneamente em tempo real
-  let sseSource: EventSource | null = null;
-  if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
-    try {
-      sseSource = new EventSource('/api/events');
-      sseSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload?.type === 'TRANSFER_UPDATE' && Array.isArray(payload.items)) {
-            if (payload.originatorClientId && (payload.originatorClientId === BROWSER_CLIENT_ID || payload.originatorClientId === CURRENT_SESSION_ID)) {
-              return;
-            }
-            const mapped = payload.items.map((d: any, idx: number) => mapRowToTransferItem(d, idx));
-            const currentList = applyPendingLocalUpdates(mapped);
-
-            const newPending: TransferItem[] = [];
-            for (const item of currentList) {
-              if (!globalKnownItemIds.has(item.id) && item.status === 'pendente') {
-                const isCreatedByMe =
-                  sessionCreatedItemIds.has(item.id) ||
-                  item.originatorClientId === CURRENT_SESSION_ID ||
-                  item.originatorClientId === BROWSER_CLIENT_ID;
-                if (!isCreatedByMe) {
-                  newPending.push(item);
-                }
-              }
-            }
-
-            currentList.forEach((i) => globalKnownItemIds.add(i.id));
-
-            if (newPending.length > 0) {
-              playAlertChime();
-            }
-
-            notifyChange(currentList, 'realtime', newPending.length > 0 ? newPending : undefined);
-          }
-        } catch (e) {}
-      };
-    } catch (e) {}
-  }
-
   return () => {
     clearInterval(heartbeatTimer);
     if (typeof window !== 'undefined') {
@@ -953,9 +736,6 @@ export function subscribeToRealtimeTransfers(
 
     if (bc) {
       bc.close();
-    }
-    if (sseSource) {
-      sseSource.close();
     }
   };
 }
