@@ -112,6 +112,7 @@ export default function App() {
   });
 
   const [autoPurgedCount, setAutoPurgedCount] = useState<number>(0);
+  const [selectionResetKey, setSelectionResetKey] = useState<number>(0);
 
   // Feedback visual de envio para o solicitante (sem disparar alerta ou som na própria tela)
   const [successNotice, setSuccessNotice] = useState<{ title: string; message: string } | null>(null);
@@ -480,6 +481,7 @@ export default function App() {
     });
 
     setItems(updated);
+    setSelectionResetKey((prev) => prev + 1);
     await updateSpecificTransferItems(affectedItems, updated);
   };
 
@@ -594,8 +596,10 @@ export default function App() {
               return item;
             });
             setItems(updated);
+            setSelectionResetKey((prev) => prev + 1);
             await updateSpecificTransferItems(affectedItems, updated);
           }}
+          selectionResetKey={selectionResetKey}
           onAttachLabelPhoto={handleAttachLabelPhoto}
           onOpenNewModal={() => setIsNewModalOpen(true)}
           onOpenBatchPaste={() => setIsBatchPasteOpen(true)}

@@ -7,9 +7,11 @@
  * 3. bubbles - Bolhas de Sabão: Estalos alegres e sequenciais de bolhas subindo
  * 4. cat - Gato: Miau acolhedor e expressivo ("myaaoow")
  * 5. rebound - Rebound: Salto elástico de mola de cartoon ("boi-oi-o-o-ing")
+ * 6. bird - Som de Pássaro: Canto alegre e cristalino de passarinho ("piu-piu")
+ * 7. tinder - Som do Tinder: Toque vibrante de Match / Notificação do Tinder
  */
 
-export type AlertSoundType = 'water_drop' | 'frog' | 'bubbles' | 'cat' | 'rebound';
+export type AlertSoundType = 'water_drop' | 'frog' | 'bubbles' | 'cat' | 'rebound' | 'bird' | 'tinder';
 
 export interface AlertSoundOption {
   id: AlertSoundType;
@@ -28,6 +30,22 @@ export const ALERT_SOUND_OPTIONS: AlertSoundOption[] = [
     description: 'Som suave, límpido e cristalino de gota d’água (plop-plink)',
     icon: '💧',
     badge: 'Original',
+  },
+  {
+    id: 'bird',
+    name: 'Som de Pássaro',
+    shortName: 'Pássaro',
+    description: 'Canto alegre, nítido e cristalino de passarinho (piu-piu)',
+    icon: '🐦',
+    badge: 'Novo',
+  },
+  {
+    id: 'tinder',
+    name: 'Som do Tinder',
+    shortName: 'Tinder',
+    description: 'Toque vibrante e inconfundível de Match / Notificação do Tinder',
+    icon: '🔥',
+    badge: 'Novo',
   },
   {
     id: 'frog',
@@ -68,7 +86,16 @@ export function getSavedAlertSound(): AlertSoundType {
   if (typeof window === 'undefined') return 'water_drop';
   try {
     const saved = localStorage.getItem(SOUND_PREFERENCE_KEY);
-    if (saved && (saved === 'water_drop' || saved === 'frog' || saved === 'bubbles' || saved === 'cat' || saved === 'rebound')) {
+    if (
+      saved &&
+      (saved === 'water_drop' ||
+        saved === 'frog' ||
+        saved === 'bubbles' ||
+        saved === 'cat' ||
+        saved === 'rebound' ||
+        saved === 'bird' ||
+        saved === 'tinder')
+    ) {
       return saved as AlertSoundType;
     }
   } catch (e) {}
@@ -92,6 +119,8 @@ export const SOUND_FILE_MAP: Record<AlertSoundType, string> = {
   bubbles: '/audio/bubbles.wav',
   cat: '/audio/cat.wav',
   rebound: '/audio/rebound.wav',
+  bird: '/audio/bird.wav',
+  tinder: '/audio/tinder.wav',
 };
 
 let sharedAudioCtx: AudioContext | null = null;
@@ -434,6 +463,96 @@ function synthesizeRebound(ctx: AudioContext, now: number) {
 }
 
 /**
+ * 6. SOM DE PÁSSARO (Assobio / Canto Cristalino)
+ * Canto alegre de passarinho com 3 gorjeios ("piu-piu-trill!")
+ */
+function synthesizeBird(ctx: AudioContext, now: number) {
+  const chirps = [
+    { delay: 0.00, dur: 0.12, fStart: 2150, fPeak: 3150, fEnd: 2650, trill: false, vol: 0.65 },
+    { delay: 0.15, dur: 0.13, fStart: 2350, fPeak: 3450, fEnd: 2800, trill: false, vol: 0.72 },
+    { delay: 0.31, dur: 0.28, fStart: 2600, fPeak: 3650, fEnd: 2250, trill: true, vol: 0.78 },
+  ];
+
+  chirps.forEach(({ delay, dur, fStart, fPeak, fEnd, trill, vol }) => {
+    const t = now + delay;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(fStart, t);
+    osc.frequency.exponentialRampToValueAtTime(fPeak, t + dur * 0.55);
+    osc.frequency.exponentialRampToValueAtTime(fEnd, t + dur);
+
+    if (trill) {
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(42, t);
+      lfoGain.gain.setValueAtTime(180, t);
+      lfo.connect(osc.frequency);
+      lfo.start(t);
+      lfo.stop(t + dur + 0.02);
+    }
+
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(vol, t + 0.015);
+    gain.gain.setValueAtTime(vol * 0.9, t + dur * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  });
+}
+
+/**
+ * 7. SOM DO TINDER (Match / Notificação Vibrante)
+ * Duplo acorde percussivo ascendente brilhante (D6 -> A6)
+ */
+function synthesizeTinder(ctx: AudioContext, now: number) {
+  const notes = [
+    { delay: 0.00, dur: 0.18, freq: 1174.66, subFreq: 587.33, vol: 0.68 },
+    { delay: 0.10, dur: 0.45, freq: 1760.00, subFreq: 880.00, vol: 0.82 },
+  ];
+
+  notes.forEach(({ delay, dur, freq, subFreq, vol }) => {
+    const t = now + delay;
+    const oscMain = ctx.createOscillator();
+    const oscSub = ctx.createOscillator();
+    const gainMain = ctx.createGain();
+    const gainSub = ctx.createGain();
+
+    oscMain.type = 'sine';
+    oscMain.frequency.setValueAtTime(freq * 1.06, t);
+    oscMain.frequency.exponentialRampToValueAtTime(freq, t + 0.015);
+
+    oscSub.type = 'triangle';
+    oscSub.frequency.setValueAtTime(subFreq * 1.06, t);
+    oscSub.frequency.exponentialRampToValueAtTime(subFreq, t + 0.015);
+
+    gainMain.gain.setValueAtTime(0.0001, t);
+    gainMain.gain.linearRampToValueAtTime(vol, t + 0.006);
+    gainMain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+    gainSub.gain.setValueAtTime(0.0001, t);
+    gainSub.gain.linearRampToValueAtTime(vol * 0.45, t + 0.006);
+    gainSub.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+    oscMain.connect(gainMain);
+    oscSub.connect(gainSub);
+    gainMain.connect(ctx.destination);
+    gainSub.connect(ctx.destination);
+
+    oscMain.start(t);
+    oscSub.start(t);
+    oscMain.stop(t + dur + 0.02);
+    oscSub.stop(t + dur + 0.02);
+  });
+}
+
+/**
  * Síntese procedural de contingência via Web Audio API
  */
 export function synthesizeProceduralSound(soundType: AlertSoundType) {
@@ -442,6 +561,12 @@ export function synthesizeProceduralSound(soundType: AlertSoundType) {
   const now = ctx.currentTime;
   try {
     switch (soundType) {
+      case 'bird':
+        synthesizeBird(ctx, now);
+        break;
+      case 'tinder':
+        synthesizeTinder(ctx, now);
+        break;
       case 'frog':
         synthesizeFrog(ctx, now);
         break;

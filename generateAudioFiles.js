@@ -221,6 +221,112 @@ function generateReboundWav() {
   return createWavBuffer(samples);
 }
 
+// 5. BIRD (Som de Pássaro / Assobio e Canto Cristalino)
+function generateBirdWav() {
+  const duration = 0.68;
+  const numSamples = Math.floor(SAMPLE_RATE * duration);
+  const samples = new Float32Array(numSamples);
+
+  // 3 notas de canto de pássaro: Dois "piu-piu" rápidos seguidos de um gorjeio/trinado alegre ("chirp-chirp-trill!")
+  const notes = [
+    { start: 0.02, dur: 0.12, f0: 2150, f1: 3150, f2: 2650, trillHz: 0, trillDepth: 0, vol: 0.82 },
+    { start: 0.17, dur: 0.13, f0: 2350, f1: 3450, f2: 2800, trillHz: 0, trillDepth: 0, vol: 0.88 },
+    { start: 0.33, dur: 0.28, f0: 2600, f1: 3650, f2: 2250, trillHz: 42, trillDepth: 190, vol: 0.92 },
+  ];
+
+  for (const n of notes) {
+    let phase = 0;
+    const startIdx = Math.floor(n.start * SAMPLE_RATE);
+    const endIdx = Math.min(numSamples, Math.floor((n.start + n.dur) * SAMPLE_RATE));
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const localT = (i - startIdx) / SAMPLE_RATE;
+      const p = localT / n.dur;
+
+      // Curva de assobio natural do pássaro: sobe rápido até o pico e curva no final
+      let baseF;
+      if (p < 0.55) {
+        const up = p / 0.55;
+        baseF = n.f0 + (n.f1 - n.f0) * Math.sin((up * Math.PI) / 2);
+      } else {
+        const down = (p - 0.55) / 0.45;
+        baseF = n.f1 + (n.f2 - n.f1) * down;
+      }
+
+      // Trinado (siringe de pássaro) na última nota
+      const trill = n.trillHz > 0 ? Math.sin(2 * Math.PI * n.trillHz * localT) * n.trillDepth : 0;
+      const freq = baseF + trill;
+
+      phase += (2 * Math.PI * freq) / SAMPLE_RATE;
+
+      // Onda senoidal pura com segundo harmônico suave de flauta/assobio
+      const wave = Math.sin(phase) * 0.88 + Math.sin(phase * 2) * 0.14;
+
+      // Envelope macio sem clique
+      let env = 1.0;
+      if (localT < 0.015) {
+        env = localT / 0.015;
+      } else if (p > 0.72) {
+        env = Math.max(0, 1 - (p - 0.72) / 0.28);
+      }
+
+      samples[i] += wave * env * n.vol;
+    }
+  }
+
+  return createWavBuffer(samples);
+}
+
+// 6. TINDER (Som do Tinder / Notificação & Match Vibrante)
+function generateTinderWav() {
+  const duration = 0.65;
+  const numSamples = Math.floor(SAMPLE_RATE * duration);
+  const samples = new Float32Array(numSamples);
+
+  // Toque icônico estilo Tinder: Pluck percussivo duplo ascendente brilhante (D6 -> A6 com harmônicos de marimba/bell)
+  const hits = [
+    { start: 0.01, dur: 0.18, freq: 1174.66, subFreq: 587.33, vol: 0.80 }, // Ré (D6 / D5)
+    { start: 0.11, dur: 0.48, freq: 1760.00, subFreq: 880.00, vol: 0.95 }, // Lá (A6 / A5) - quinta ascendente brilhante
+  ];
+
+  for (const h of hits) {
+    let phaseMain = 0;
+    let phaseSub = 0;
+    let phaseShimmer = 0;
+    const startIdx = Math.floor(h.start * SAMPLE_RATE);
+    const endIdx = Math.min(numSamples, Math.floor((h.start + h.dur) * SAMPLE_RATE));
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const localT = (i - startIdx) / SAMPLE_RATE;
+
+      // Leve ataque percussivo de pitch no início (estilo marimba/kalimba moderna de app)
+      const pitchBump = 1 + 0.08 * Math.exp(-localT / 0.008);
+      const fMain = h.freq * pitchBump;
+      const fSub = h.subFreq * pitchBump;
+      const fShimmer = h.freq * 2.0;
+
+      phaseMain += (2 * Math.PI * fMain) / SAMPLE_RATE;
+      phaseSub += (2 * Math.PI * fSub) / SAMPLE_RATE;
+      phaseShimmer += (2 * Math.PI * fShimmer) / SAMPLE_RATE;
+
+      // Envelope principal e envelope rápido para o brilho metálico
+      const attack = localT < 0.005 ? localT / 0.005 : 1.0;
+      const envMain = attack * Math.exp(-localT / 0.13);
+      const envSub = attack * Math.exp(-localT / 0.16);
+      const envShimmer = attack * Math.exp(-localT / 0.045);
+
+      const wave =
+        Math.sin(phaseMain) * 0.62 * envMain +
+        Math.sin(phaseSub) * 0.35 * envSub +
+        Math.sin(phaseShimmer) * 0.22 * envShimmer;
+
+      samples[i] += wave * h.vol;
+    }
+  }
+
+  return createWavBuffer(samples);
+}
+
 const outDir = path.join(process.cwd(), 'public', 'audio');
 if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
@@ -237,3 +343,9 @@ console.log('✓ public/audio/cat.wav gerado com sucesso!');
 
 fs.writeFileSync(path.join(outDir, 'rebound.wav'), generateReboundWav());
 console.log('✓ public/audio/rebound.wav gerado com sucesso!');
+
+fs.writeFileSync(path.join(outDir, 'bird.wav'), generateBirdWav());
+console.log('✓ public/audio/bird.wav gerado com sucesso!');
+
+fs.writeFileSync(path.join(outDir, 'tinder.wav'), generateTinderWav());
+console.log('✓ public/audio/tinder.wav gerado com sucesso!');

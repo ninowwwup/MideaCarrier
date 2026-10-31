@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   X, 
   FileSpreadsheet, 
@@ -6,7 +6,8 @@ import {
   AlertCircle, 
   ArrowRight,
   ClipboardPaste,
-  Sparkles
+  Sparkles,
+  User
 } from 'lucide-react';
 import { TransferItem } from '../types/transfer';
 import { parsePastedTable } from '../utils/sapFormatter';
@@ -30,6 +31,12 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
   const [pastedText, setPastedText] = useState('');
   const [solicitante, setSolicitante] = useState(defaultSolicitante);
 
+  useEffect(() => {
+    if (!solicitante || solicitante === 'Time Buiatte (Prod)') {
+      setSolicitante(defaultSolicitante);
+    }
+  }, [defaultSolicitante]);
+
   const parsedRows = useMemo(() => {
     return parsePastedTable(pastedText);
   }, [pastedText]);
@@ -39,6 +46,7 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
   const handleImport = () => {
     if (parsedRows.length === 0) return;
 
+    const finalSolicitante = solicitante.trim() || defaultSolicitante;
     const now = new Date().toISOString();
     const batchId = `BATCH-${Date.now().toString().slice(-4)}`;
 
@@ -52,7 +60,7 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
       depositoDestino: row.depositoDestino.trim().toUpperCase(),
       status: 'pendente',
       criadoEm: now,
-      criadoPor: solicitante,
+      criadoPor: finalSolicitante,
       atualizadoEm: now,
       prioridadeFifo: currentCount + idx + 1,
       slaStatus: 'no_prazo',
@@ -107,6 +115,24 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
 
         {/* Modal Body (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 sm:space-y-4 overscroll-contain">
+          {/* Campo Time / Solicitante para Rastreabilidade */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+            <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-[#00609C]" />
+              <span>Time / Solicitante</span>
+              <span className="text-[10px] font-normal text-slate-500">
+                (Informe seu nome para rastreabilidade das solicitações)
+              </span>
+            </label>
+            <input
+              type="text"
+              placeholder="Ex: João Silva - Time Buiatte (Prod)"
+              value={solicitante}
+              onChange={(e) => setSolicitante(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA] focus:border-transparent"
+            />
+          </div>
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div className="text-xs text-slate-600">
               Formato esperado (separado por TAB ou ponto-e-vírgula):
@@ -154,6 +180,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                       <th className="py-2 px-3">Centro</th>
                       <th className="py-2 px-3">Dep. Origem</th>
                       <th className="py-2 px-3">Dep. Destino</th>
+                      <th className="py-2 px-3">Solicitante</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
@@ -165,6 +192,9 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                         <td className="py-1.5 px-3 text-slate-700 font-semibold">{r.centro}</td>
                         <td className="py-1.5 px-3 text-amber-700">{r.depositoOrigem}</td>
                         <td className="py-1.5 px-3 text-emerald-700">{r.depositoDestino}</td>
+                        <td className="py-1.5 px-3 text-slate-700 font-sans truncate max-w-[140px]">
+                          {solicitante.trim() || defaultSolicitante}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

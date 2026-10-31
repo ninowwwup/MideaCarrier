@@ -44,6 +44,7 @@ interface TransferTableProps {
   onOpenResolutionModal: (items: TransferItem[], mode: 'concluir' | 'divergencia') => void;
   onUpdateStatusSingle: (id: string, newStatus: TransferStatus) => void;
   onBatchUpdateStatus?: (ids: string[], newStatus: TransferStatus) => void;
+  selectionResetKey?: number;
   onAttachLabelPhoto?: (itemId: string, photoUrl: string) => void;
   onOpenNewModal?: () => void;
   onOpenBatchPaste?: () => void;
@@ -88,6 +89,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   onOpenResolutionModal,
   onUpdateStatusSingle,
   onBatchUpdateStatus,
+  selectionResetKey,
   onAttachLabelPhoto,
   onOpenNewModal,
   onOpenBatchPaste,
@@ -238,9 +240,70 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     });
   }, [items, filters, sortConfig]);
 
-  // Checkbox master
-  const isAllSelected = filteredItems.length > 0 && selectedIds.size === filteredItems.length;
-  const isSomeSelected = selectedIds.size > 0 && !isAllSelected;
+  // Checkbox master (sincronizado estritamente com os itens visíveis no filtro atual)
+  const isAllSelected =
+    filteredItems.length > 0 && filteredItems.every((i) => selectedIds.has(i.id));
+  const isSomeSelected =
+    filteredItems.some((i) => selectedIds.has(i.id)) && !isAllSelected;
+
+  // Desmarca automaticamente os itens cujo status acabou de ser alterado (individual ou em lote)
+  const prevStatusMapRef = useRef<Map<string, TransferStatus>>(new Map());
+  useEffect(() => {
+    const prevMap = prevStatusMapRef.current;
+    const changedStatusIds = new Set<string>();
+
+    items.forEach((item) => {
+      const prevStatus = prevMap.get(item.id);
+      if (prevStatus && prevStatus !== item.status) {
+        changedStatusIds.add(item.id);
+      }
+    });
+
+    const nextMap = new Map<string, TransferStatus>();
+    items.forEach((item) => nextMap.set(item.id, item.status));
+    prevStatusMapRef.current = nextMap;
+
+    if (changedStatusIds.size > 0) {
+      setSelectedIds((prev) => {
+        if (prev.size === 0) return prev;
+        let modified = false;
+        const next = new Set<string>();
+        prev.forEach((id) => {
+          if (changedStatusIds.has(id)) {
+            modified = true;
+          } else {
+            next.add(id);
+          }
+        });
+        return modified ? next : prev;
+      });
+    }
+  }, [items]);
+
+  // Limpa imediatamente a seleção quando uma alteração em lote ou resolução SAP é concluída
+  useEffect(() => {
+    if (selectionResetKey !== undefined && selectionResetKey > 0) {
+      setSelectedIds(new Set());
+    }
+  }, [selectionResetKey]);
+
+  // Mantém a seleção sincronizada apenas com os itens visíveis no filtro atual
+  useEffect(() => {
+    const visibleIds = new Set(filteredItems.map((i) => i.id));
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      let modified = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visibleIds.has(id)) {
+          next.add(id);
+        } else {
+          modified = true;
+        }
+      });
+      return modified ? next : prev;
+    });
+  }, [filteredItems]);
 
   const handleToggleSelectAll = () => {
     if (isAllSelected) {
@@ -261,8 +324,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   };
 
   const selectedItemsList = useMemo(() => {
-    return items.filter((i) => selectedIds.has(i.id));
-  }, [items, selectedIds]);
+    return filteredItems.filter((i) => selectedIds.has(i.id));
+  }, [filteredItems, selectedIds]);
 
   const handleCopySingleRow = (item: TransferItem) => {
     const text = `${item.material}\t${item.serial}\t${item.centro}\t${item.depositoOrigem}\t${item.depositoDestino}`;
@@ -493,12 +556,20 @@ export const TransferTable: React.FC<TransferTableProps> = ({
           </div>
 
           {/* Selected Rows Batch Action Bar - Botões Dinâmicos, Leves e Suaves */}
-          {selectedIds.size > 0 && (
+          {selectedItemsList.length > 0 && (
             <div className="flex flex-wrap items-center justify-between p-2.5 bg-blue-50/90 border border-blue-200/80 rounded-2xl animate-in fade-in duration-150 gap-2 shadow-sm">
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#00609C] text-white shadow-xs">
-                  {selectedIds.size} selecionado(s)
+                  {selectedItemsList.length} selecionado(s)
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="px-2 py-0.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-rose-600 hover:bg-white/80 border border-transparent hover:border-slate-200 transition-colors cursor-pointer"
+                  title="Desmarcar todos os itens selecionados"
+                >
+                  ✕ Desmarcar
+                </button>
                 <span className="text-xs text-slate-600 hidden sm:inline font-medium">
                   Ações em lote para o SAP:
                 </span>
@@ -544,12 +615,30 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => onBatchUpdateStatus?.(selectedItemsList.map(i => i.id), 'em_analise')}
+                  onClick={() => {
+                    const idsToUpdate = selectedItemsList.map((i) => i.id);
+                    setSelectedIds(new Set());
+                    onBatchUpdateStatus?.(idsToUpdate, 'em_analise');
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs"
                   title="Alterar status dos itens selecionados para Em Análise"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Em Análise</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idsToUpdate = selectedItemsList.map((i) => i.id);
+                    setSelectedIds(new Set());
+                    onBatchUpdateStatus?.(idsToUpdate, 'pendente');
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-xs"
+                  title="Voltar status dos itens selecionados para Pendente"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Pendente</span>
                 </button>
 
                 <button
