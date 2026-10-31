@@ -120,132 +120,83 @@ export function isSupabaseCircuitOpen(): boolean {
 }
 
 export async function fetchFromSharedCloudStore(): Promise<TransferItem[] | null> {
-  if (typeof window === 'undefined') return null;
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(SHARED_CLOUD_STORE_URL, {
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const json = await res.json();
-      const items = json?.data?.items;
-      if (Array.isArray(items)) {
-        return items.map((d: any, idx: number) => mapRowToTransferItem(d, idx));
-      }
-    }
-  } catch (e) {
-    // Falha silenciosa no cloud store fallback
-  }
   return null;
 }
 
-export async function saveToSharedCloudStore(items: TransferItem[]): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(SHARED_CLOUD_STORE_URL, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'midea_carrier_transfer_hub_production',
-        data: {
-          items,
-          lastUpdated: Date.now(),
-          count: items.length,
-        },
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
+export async function saveToSharedCloudStore(_items: TransferItem[]): Promise<boolean> {
+  return false;
 }
 
 /**
- * Consulta de itens com fallback multinível ultra-resiliente (100% Direto sem consumir Serverless Functions da Vercel):
- * 1. Google Planilhas (via Google Apps Script Web App)
- * 2. Shared Cloud Store global (Persistência real-time garantida entre diferentes PCs)
- * 3. Cache Local
+ * Consulta de itens ultra-rápida direto no Google Planilhas com deduplicação de requisições concorrentes
  */
+let inflightFetchPromise: Promise<{
+  items: TransferItem[];
+  source: 'google_sheets' | 'backend' | 'local';
+  purgedCount?: number;
+  isConnected: boolean;
+}> | null = null;
+
 export async function fetchTransferItems(): Promise<{
   items: TransferItem[];
   source: 'google_sheets' | 'backend' | 'local';
   purgedCount?: number;
   isConnected: boolean;
 }> {
-  const localCached = getLocalCachedItems();
+  if (inflightFetchPromise) {
+    return inflightFetchPromise;
+  }
 
-  // 1. Google Planilhas (Consulta direta ao Web App)
-  const sheetsUrl = getGoogleSheetsUrl();
-  if (sheetsUrl) {
+  inflightFetchPromise = (async () => {
     try {
-      const sheetData = await fetchGoogleSheetsItems();
-      if (sheetData !== null && Array.isArray(sheetData)) {
-        const mapped = sheetData.map((d: any, index: number) => mapRowToTransferItem(d, index));
-        const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
-        const resolved = applyPendingLocalUpdates(active);
+      const localCached = getLocalCachedItems();
 
-        if (typeof window !== 'undefined') {
-          if (resolved.length > 0 || localCached.length === 0) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+      // 1. Google Planilhas (Consulta direta ao Web App)
+      const sheetsUrl = getGoogleSheetsUrl();
+      if (sheetsUrl) {
+        try {
+          const sheetData = await fetchGoogleSheetsItems();
+          if (sheetData !== null && Array.isArray(sheetData)) {
+            const mapped = sheetData.map((d: any, index: number) => mapRowToTransferItem(d, index));
+            const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
+            const resolved = applyPendingLocalUpdates(active);
+
+            if (typeof window !== 'undefined') {
+              if (resolved.length > 0 || localCached.length === 0) {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+              }
+            }
+
+            return { items: resolved, source: 'google_sheets', purgedCount, isConnected: true };
           }
-        }
-
-        saveToSharedCloudStore(resolved).catch(() => {});
-        return { items: resolved, source: 'google_sheets', purgedCount, isConnected: true };
-      }
-    } catch (err) {
-      console.warn('Aviso: Falha ao consultar Google Planilhas diretamente, tentando Cloud Store...', err);
-    }
-  }
-
-  // 2. Shared Cloud Store Global (In-Time entre computadores Midea e Buiatte)
-  const cloudItems = await fetchFromSharedCloudStore();
-  if (cloudItems !== null) {
-    if (cloudItems.length > 0 || localCached.length === 0) {
-      // Mescla com itens criados localmente recentemente para garantir que nunca sejam perdidos
-      const cloudMap = new Map(cloudItems.map((i) => [i.id, i]));
-      for (const loc of localCached) {
-        if (!cloudMap.has(loc.id)) {
-          const age = Date.now() - new Date(loc.criadoEm || 0).getTime();
-          if (age < 300000) { // 5 minutos de tolerância para propagação
-            cloudItems.unshift(loc);
-          }
+        } catch (err) {
+          console.warn('Aviso: Falha ao consultar Google Planilhas diretamente:', err);
         }
       }
-      const { active, purgedCount } = purgeOldMonthlyRecords(cloudItems);
-      const resolved = applyPendingLocalUpdates(active);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(resolved));
+
+      // 2. Fallback LocalStorage instantâneo (garante que os dados NUNCA sumam da tela)
+      if (localCached.length > 0) {
+        const { active, purgedCount } = purgeOldMonthlyRecords(localCached);
+        const updated = active.map((item, idx) => ({
+          ...item,
+          prioridadeFifo: idx + 1,
+          slaStatus: calculateSLA(item.criadoEm, item.status).slaStatus,
+        }));
+        const resolved = applyPendingLocalUpdates(updated);
+        return { items: resolved, source: 'local', purgedCount, isConnected: false };
       }
-      return { items: resolved, source: 'backend', purgedCount, isConnected: true };
+
+      return { items: [], source: 'local', isConnected: false };
+    } finally {
+      inflightFetchPromise = null;
     }
-  }
+  })();
 
-
-  // 4. Fallback LocalStorage (garante que os dados NUNCA sumam da tela)
-  if (localCached.length > 0) {
-    const { active, purgedCount } = purgeOldMonthlyRecords(localCached);
-    const updated = active.map((item, idx) => ({
-      ...item,
-      prioridadeFifo: idx + 1,
-      slaStatus: calculateSLA(item.criadoEm, item.status).slaStatus,
-    }));
-    const resolved = applyPendingLocalUpdates(updated);
-    return { items: resolved, source: 'local', purgedCount, isConnected: false };
-  }
-
-  return { items: [], source: 'local', isConnected: false };
+  return inflightFetchPromise;
 }
 
-// Rastreamento de modificações locais recentes com período de carência de 15 segundos
-// Garante que o status alterado pelo operador NUNCA reverta antes de ser confirmado
+// Rastreamento de modificações locais recentes com período de carência de 30 segundos
+// Garante resposta instantânea (0ms) na interface enquanto o Google Planilhas grava em segundo plano
 interface PendingLocalUpdate {
   status: TransferStatus;
   updatedAt: number;
@@ -253,6 +204,8 @@ interface PendingLocalUpdate {
 }
 
 const pendingLocalUpdates = new Map<string, PendingLocalUpdate>();
+const pendingLocalInserts = new Map<string, { item: TransferItem; insertedAt: number }>();
+const pendingLocalDeletes = new Map<string, number>();
 
 export function registerLocalPendingUpdate(item: TransferItem) {
   pendingLocalUpdates.set(item.id, {
@@ -264,21 +217,43 @@ export function registerLocalPendingUpdate(item: TransferItem) {
       atualizadoPor: item.atualizadoPor,
       sapDocNumber: item.sapDocNumber,
       observacoes: item.observacoes,
+      labelPhotoUrl: item.labelPhotoUrl,
     },
   });
 }
 
 function applyPendingLocalUpdates(items: TransferItem[]): TransferItem[] {
   const now = Date.now();
-  return items.map((item) => {
+
+  // Limpa deleções antigas (> 30s) e filtra itens excluídos recentemente em segundo plano
+  pendingLocalDeletes.forEach((deletedAt, id) => {
+    if (now - deletedAt > 30000) {
+      pendingLocalDeletes.delete(id);
+    }
+  });
+
+  const filtered = items.filter((item) => !pendingLocalDeletes.has(item.id));
+  const remoteIds = new Set(filtered.map((i) => i.id));
+
+  // Adiciona itens recém-inseridos localmente que ainda estão sendo gravados na planilha em segundo plano
+  const recentInsertsToPrepend: TransferItem[] = [];
+  pendingLocalInserts.forEach(({ item, insertedAt }, id) => {
+    if (remoteIds.has(id) || now - insertedAt > 30000) {
+      pendingLocalInserts.delete(id);
+    } else if (!pendingLocalDeletes.has(id)) {
+      recentInsertsToPrepend.push(item);
+    }
+  });
+
+  const combined = [...recentInsertsToPrepend, ...filtered];
+
+  return combined.map((item) => {
     if (pendingLocalUpdates.has(item.id)) {
       const local = pendingLocalUpdates.get(item.id)!;
       const remoteTime = new Date(item.atualizadoEm || 0).getTime();
-      // Se a resposta remota já refletir nossa atualização ou data mais recente, confirmar e limpar
-      if (item.status === local.status || remoteTime >= local.updatedAt) {
+      if (item.status === local.status && remoteTime >= local.updatedAt) {
         pendingLocalUpdates.delete(item.id);
-      } else if (now - local.updatedAt < 15000) {
-        // Preserva o status otimista local para que a tela NUNCA reverta
+      } else if (now - local.updatedAt < 30000) {
         return {
           ...item,
           ...local.item,
@@ -292,13 +267,19 @@ function applyPendingLocalUpdates(items: TransferItem[]): TransferItem[] {
 }
 
 /**
- * Inserir apenas novas solicitações cirurgicamente no Supabase e Nuvem
- * NUNCA sobrescreve ou toca em itens já existentes de outros operadores!
+ * Inserir novas solicitações com resposta instantânea (0ms) na interface
+ * e gravação assíncrona em segundo plano no Google Planilhas
  */
 export async function insertTransferItems(newItems: TransferItem[]): Promise<boolean> {
   if (!newItems || newItems.length === 0) return true;
 
-  // 1. Atualiza cache local imediatamente
+  const now = Date.now();
+  newItems.forEach((item) => {
+    pendingLocalInserts.set(item.id, { item, insertedAt: now });
+    globalKnownItemIds.add(item.id);
+  });
+
+  // 1. Atualiza cache local imediatamente (0ms)
   let merged: TransferItem[] = newItems;
   if (typeof window !== 'undefined') {
     try {
@@ -309,16 +290,7 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
     } catch (e) {}
   }
 
-  let savedSuccessfully = false;
-
-  // 2. Replica no Shared Cloud Store instantaneamente com a lista COMPLETA
-  try {
-    const cloudOk = await saveToSharedCloudStore(merged);
-    if (cloudOk) savedSuccessfully = true;
-  } catch (e) {}
-
-  // 3. Notificar outras abas no mesmo computador imediatamente
-  const sheetsUrl = getGoogleSheetsUrl();
+  // 2. Notificar outras abas no mesmo computador imediatamente (0ms)
   if (typeof window !== 'undefined') {
     try {
       if (typeof BroadcastChannel !== 'undefined') {
@@ -335,31 +307,29 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
     } catch (e) {}
   }
 
-  // 4. Gravar os novos itens diretamente no Google Planilhas (via Web App)
+  // 3. Gravar os novos itens no Google Planilhas em segundo plano (sem travar a tela do operador!)
+  const sheetsUrl = getGoogleSheetsUrl();
   if (sheetsUrl) {
-    try {
-      const ok = await insertGoogleSheetsItems(newItems);
-      if (ok) savedSuccessfully = true;
-    } catch (err) {
-      console.warn('Falha na gravação direta no Google Planilhas no insert:', err);
-    }
+    insertGoogleSheetsItems(newItems).catch((err) => {
+      console.warn('Falha na gravação em segundo plano no Google Planilhas:', err);
+    });
   }
 
-  return savedSuccessfully || merged.length > 0;
+  return true;
 }
 
 /**
- * Atualizar status e dados de itens específicos de forma cirúrgica e resiliente
- * (Comando direto de UPDATE na Planilha Google - NUNCA sobrescreve itens alheios)
+ * Atualizar status e dados de itens específicos com resposta instantânea (0ms) na tela
+ * e sincronização assíncrona em segundo plano no Google Planilhas
  */
 export async function updateSpecificTransferItems(
   affectedItems: TransferItem[],
   allUpdatedItems?: TransferItem[]
 ): Promise<boolean> {
-  // 1. Registra no lock otimista local de imediato
+  // 1. Registra no lock otimista local de imediato (0ms)
   affectedItems.forEach((item) => registerLocalPendingUpdate(item));
 
-  // 2. Salva no cache local de imediato
+  // 2. Salva no cache local de imediato (0ms)
   const currentList = allUpdatedItems || (() => {
     const current = getLocalCachedItems();
     const affMap = new Map(affectedItems.map((a) => [a.id, a]));
@@ -372,16 +342,7 @@ export async function updateSpecificTransferItems(
     } catch (e) {}
   }
 
-  let anySuccess = false;
-
-  // 3. Replica status atualizado no Shared Cloud Store
-  try {
-    const cloudOk = await saveToSharedCloudStore(currentList);
-    if (cloudOk) anySuccess = true;
-  } catch (e) {}
-
-  // 4. Notificar abas no mesmo computador instantaneamente
-  const sheetsUrl = getGoogleSheetsUrl();
+  // 3. Notificar abas no mesmo computador instantaneamente (0ms)
   if (typeof window !== 'undefined') {
     try {
       if (typeof BroadcastChannel !== 'undefined') {
@@ -398,22 +359,20 @@ export async function updateSpecificTransferItems(
     } catch (e) {}
   }
 
-  // 5. Atualização direta no Google Planilhas apenas dos itens afetados
+  // 4. Atualização em segundo plano no Google Planilhas (sem travar o modal ou a tabela!)
+  const sheetsUrl = getGoogleSheetsUrl();
   if (sheetsUrl) {
-    try {
-      const ok = await updateGoogleSheetsItems(affectedItems);
-      if (ok) anySuccess = true;
-    } catch (err) {
-      console.warn('Falha na atualização direta no Google Planilhas:', err);
-    }
+    updateGoogleSheetsItems(affectedItems).catch((err) => {
+      console.warn('Falha na atualização em segundo plano no Google Planilhas:', err);
+    });
   }
 
-  return anySuccess || true;
+  return true;
 }
 
 /**
- * Excluir itens específicos selecionados (para correção de digitação ou cancelamento operacional)
- * Propaga a exclusão cirúrgica para o Google Planilhas, Shared Cloud Store e abas locais.
+ * Excluir itens específicos selecionados com resposta instantânea (0ms)
+ * e exclusão em segundo plano na Planilha Google
  */
 export async function deleteSpecificTransferItems(
   idsToDelete: string[],
@@ -421,31 +380,22 @@ export async function deleteSpecificTransferItems(
 ): Promise<boolean> {
   if (!idsToDelete || idsToDelete.length === 0) return true;
 
-  // 1. Atualizar cache local imediatamente
+  const now = Date.now();
+  idsToDelete.forEach((id) => {
+    pendingLocalDeletes.set(id, now);
+    pendingLocalInserts.delete(id);
+    pendingLocalUpdates.delete(id);
+    globalKnownItemIds.delete(id);
+  });
+
+  // 1. Atualizar cache local imediatamente (0ms)
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedRemainingItems));
-      saveToSharedCloudStore(updatedRemainingItems).catch(() => {});
     } catch (e) {}
   }
 
-  // 2. Remove da lista de rastreamento de IDs conhecidos
-  idsToDelete.forEach((id) => globalKnownItemIds.delete(id));
-
-  let anySuccess = false;
-
-  // 3. Excluir diretamente do Google Planilhas
-  const sheetsUrl = getGoogleSheetsUrl();
-  if (sheetsUrl) {
-    try {
-      const ok = await deleteGoogleSheetsItems(idsToDelete);
-      if (ok) anySuccess = true;
-    } catch (err) {
-      console.warn('Erro ao excluir itens do Google Planilhas:', err);
-    }
-  }
-
-  // 4. Notificar abas no mesmo computador
+  // 2. Notificar abas no mesmo computador imediatamente (0ms)
   if (typeof window !== 'undefined') {
     try {
       if (typeof BroadcastChannel !== 'undefined') {
@@ -462,7 +412,15 @@ export async function deleteSpecificTransferItems(
     } catch (e) {}
   }
 
-  return anySuccess;
+  // 3. Excluir em segundo plano do Google Planilhas
+  const sheetsUrl = getGoogleSheetsUrl();
+  if (sheetsUrl) {
+    deleteGoogleSheetsItems(idsToDelete).catch((err) => {
+      console.warn('Erro ao excluir itens do Google Planilhas em segundo plano:', err);
+    });
+  }
+
+  return true;
 }
 
 /**

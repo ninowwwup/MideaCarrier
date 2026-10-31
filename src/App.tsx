@@ -37,6 +37,7 @@ import { AuthUser } from './types/auth';
 import { getStoredUser, clearStoredUser } from './services/authService';
 import { 
   fetchTransferItems, 
+  getLocalCachedItems,
   saveTransferItems, 
   insertTransferItems,
   updateSpecificTransferItems,
@@ -75,12 +76,12 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser());
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => !getStoredUser());
 
-  const [items, setItems] = useState<TransferItem[]>([]);
+  const [items, setItems] = useState<TransferItem[]>(() => getLocalCachedItems());
   const [currentRole, setCurrentRole] = useState<TeamRole>(() => {
     const stored = getStoredUser();
     return stored ? stored.role : 'ambos';
   });
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
   const [isPushSubscribed, setIsPushSubscribed] = useState<boolean>(false);
 
@@ -513,21 +514,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen figma-aurora-bg flex flex-col text-slate-800 relative overflow-hidden font-sans selection:bg-[#249ED5] selection:text-white">
-      {/* Mesh Orbs Ambientais para Reprodução Fiel do Gradiente da Foto */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        {/* Canto Superior Esquerdo: Pêssego / Coral Aquecido */}
-        <div className="absolute top-[-10%] left-[-8%] w-[48vw] h-[48vw] max-w-[650px] max-h-[650px] rounded-full bg-[#e48a60]/55 blur-[120px]" />
-        {/* Topo Direito / Meio Superior: Lavanda / Lilás / Roxo */}
-        <div className="absolute top-[-8%] right-[-10%] w-[52vw] h-[52vw] max-w-[700px] max-h-[700px] rounded-full bg-[#a86ee2]/50 blur-[130px]" />
-        {/* Canto Inferior Direito: Amarelo-Lima Pastel / Menta Luminoso */}
-        <div className="absolute bottom-[-10%] right-[-8%] w-[50vw] h-[50vw] max-w-[680px] max-h-[680px] rounded-full bg-[#f4f7a0]/48 blur-[120px]" />
-        {/* Meio Esquerdo: Ultramarine & Azul Escuro */}
-        <div className="absolute top-[35%] left-[-5%] w-[42vw] h-[42vw] max-w-[550px] max-h-[550px] rounded-full bg-[#12368c]/60 blur-[140px]" />
-        {/* Centro: Azul Cobalto Elétrico */}
-        <div className="absolute top-[40%] left-[30%] w-[45vw] h-[45vw] max-w-[600px] max-h-[600px] rounded-full bg-[#2563eb]/35 blur-[150px]" />
-        {/* Textura sutil de micro-grid estilo Figma */}
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:32px_32px] opacity-[0.035]" />
-      </div>
+      {/* Gradiente Ambiental Otimizado para GPU (Zero Lag de Rolagem / 60fps) */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background:
+            'radial-gradient(circle at 8% 8%, rgba(228,138,96,0.38) 0%, transparent 45%), radial-gradient(circle at 92% 10%, rgba(168,110,226,0.34) 0%, transparent 48%), radial-gradient(circle at 90% 92%, rgba(244,247,160,0.32) 0%, transparent 45%), radial-gradient(circle at 12% 55%, rgba(18,54,140,0.45) 0%, transparent 50%)',
+        }}
+      />
 
       {/* Header com Paleta Midea e Glassmorphism */}
       <Header
