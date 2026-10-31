@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v8';
+const CACHE_NAME = 'migou-pwa-v9';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -53,31 +53,47 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Interceptação de requisições: Network-First para sempre entregar a versão mais recente da Vercel
+// Interceptação de requisições:
+// - HTML / Navegação: Network-First (sempre busca a versão mais nova)
+// - Assets estáticos (.js, .css, .wav, ícones): Stale-While-Revalidate (0ms de resposta!)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (!event.request.url.startsWith(self.location.origin)) return;
   if (event.request.url.includes('/api/')) return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
           }
-        });
-      })
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./')))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });
 
