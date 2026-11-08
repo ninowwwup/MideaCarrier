@@ -10,8 +10,8 @@ interface MigouLogoProps {
 const SIZE_MAP = {
   sm: 'w-9 h-9 rounded-xl',
   md: 'w-11 h-11 sm:w-12 sm:h-12 rounded-2xl',
-  lg: 'w-16 h-16 rounded-2xl',
-  xl: 'w-20 h-20 sm:w-22 sm:h-22 rounded-[26px]',
+  lg: 'w-14 h-14 sm:w-15 sm:h-15 rounded-2xl',
+  xl: 'w-16 h-16 sm:w-18 sm:h-18 rounded-[22px]',
 };
 
 /**
