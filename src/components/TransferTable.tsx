@@ -1489,7 +1489,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             ) : (
                               <span
                                 className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold border border-amber-200 shrink-0"
-                                title={routeAnalysis.origemInfo ? `${routeAnalysis.origemInfo.code}: ${routeAnalysis.origemInfo.title} (${routeAnalysis.origemInfo.target})` : item.depositoOrigem}
+                                title={routeAnalysis.originDeposit ? `${routeAnalysis.originDeposit.code}: ${routeAnalysis.originDeposit.classification} (${routeAnalysis.originDeposit.application})` : item.depositoOrigem}
                               >
                                 {item.depositoOrigem}
                               </span>
@@ -1499,13 +1499,13 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               className={`px-1.5 py-0.5 rounded font-semibold border shrink-0 ${
                                 isInvalidOrigin
                                   ? 'bg-white text-red-900 border-red-400 font-extrabold'
-                                  : routeAnalysis.destinoInfo?.colorTheme === 'yellow'
+                                  : routeAnalysis.destinationDeposit?.colorScheme === 'yellow'
                                   ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
-                                  : routeAnalysis.destinoInfo?.colorTheme === 'red'
+                                  : routeAnalysis.destinationDeposit?.colorScheme === 'red'
                                   ? 'bg-rose-100 text-rose-900 border-rose-300 font-bold'
                                   : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               }`}
-                              title={routeAnalysis.destinoInfo ? `${routeAnalysis.destinoInfo.code}: ${routeAnalysis.destinoInfo.title} (${routeAnalysis.destinoInfo.target})` : item.depositoDestino}
+                              title={routeAnalysis.destinationDeposit ? `${routeAnalysis.destinationDeposit.code}: ${routeAnalysis.destinationDeposit.classification} (${routeAnalysis.destinationDeposit.application})` : item.depositoDestino}
                             >
                               {item.depositoDestino}
                             </span>
@@ -1514,10 +1514,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             <span className="text-[9px] font-sans font-extrabold text-red-800 leading-tight">
                               ❌ PROIBIDO VOLTAR P/ LIVRE
                             </span>
-                          ) : routeAnalysis.hasCenterMismatch || routeAnalysis.hasTargetMismatch ? (
+                          ) : routeAnalysis.hasCenterMismatch || routeAnalysis.hasApplicationMismatch ? (
                             <span
                               className="text-[9px] font-sans font-bold text-amber-700 leading-tight"
-                              title={routeAnalysis.explanation}
+                              title={routeAnalysis.warnings.join(' ')}
                             >
                               ⚠️ Verificar Centro/Depósito
                             </span>
@@ -1525,9 +1525,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             <span className="text-[9px] font-sans font-semibold text-emerald-700 leading-tight">
                               ✓ Entrada em Avaria (OK)
                             </span>
-                          ) : routeAnalysis.destinoInfo ? (
+                          ) : routeAnalysis.destinationDeposit ? (
                             <span className="text-[9px] font-sans font-medium text-slate-500 leading-tight">
-                              {routeAnalysis.destinoInfo.shortBadge} ({routeAnalysis.destinoInfo.target})
+                              {routeAnalysis.destinationDeposit.shortTitle} ({routeAnalysis.destinationDeposit.application})
                             </span>
                           ) : null}
                         </div>

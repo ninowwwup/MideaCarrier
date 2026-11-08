@@ -82,7 +82,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const validDepositsForCentro = useMemo(() => {
     const cleanCentro = centro.trim().toUpperCase();
     const list = Object.values(SAP_DEPOSITOS_CATALOG).filter((d) =>
-      d.centros.includes(cleanCentro)
+      d.allowedCentros.includes(cleanCentro)
     );
     return list.length > 0
       ? list.map((d) => d.code)
@@ -241,7 +241,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 <span>🧭 Inteligência de Centros & Depósitos SAP</span>
                 {routeAnalysis.centroInfo && (
                   <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[#00609C] text-[10px] font-mono">
-                    {routeAnalysis.centroInfo.code}: {routeAnalysis.centroInfo.shortLabel}
+                    {routeAnalysis.centroInfo.code}: {routeAnalysis.centroInfo.channelName}
                   </span>
                 )}
               </div>
@@ -276,17 +276,20 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {ALL_CENTROS.map((c) => {
                     const cInfo = SAP_CENTROS_CATALOG[c];
+                    const validFree = cInfo
+                      ? [cInfo.freeStockProductDeposit, cInfo.freeStockPartsDeposit, cInfo.blueServicePartsDeposit].filter(Boolean)
+                      : [];
                     return (
                       <button
                         key={c}
                         type="button"
                         onClick={() => {
                           setCentro(c);
-                          if (cInfo && !cInfo.depositosLivres.includes(depositoDestino) && ['B110', 'B114', 'B130', 'B412', 'B413'].includes(depositoDestino)) {
-                            setDepositoDestino(cInfo.defaultLivreProduto);
+                          if (cInfo && !validFree.includes(depositoDestino) && ['B110', 'B114', 'B130', 'B412', 'B413'].includes(depositoDestino)) {
+                            setDepositoDestino(cInfo.freeStockProductDeposit);
                           }
                         }}
-                        title={cInfo?.canal || c}
+                        title={cInfo?.channelName || c}
                         className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
                           centro === c
                             ? 'bg-[#002664] text-white border-[#002664] font-bold shadow-2xs'
@@ -306,9 +309,9 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                   <label className="block text-xs font-semibold text-slate-700">
                     Dep. Origem *
                   </label>
-                  {routeAnalysis.origemInfo && (
-                    <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={routeAnalysis.origemInfo.title}>
-                      {routeAnalysis.origemInfo.shortBadge} ({routeAnalysis.origemInfo.target})
+                  {routeAnalysis.originDeposit && (
+                    <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={routeAnalysis.originDeposit.classification}>
+                      {routeAnalysis.originDeposit.shortTitle} ({routeAnalysis.originDeposit.application})
                     </span>
                   )}
                 </div>
@@ -322,13 +325,13 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {validDepositsForCentro.map((d) => {
                     const dInfo = SAP_DEPOSITOS_CATALOG[d];
-                    const isAvaria = dInfo?.category === 'avaria_definitiva';
+                    const isAvaria = dInfo?.category === 'avaria_definitivo';
                     return (
                       <button
                         key={d}
                         type="button"
                         onClick={() => setDepositoOrigem(d)}
-                        title={dInfo ? `${d}: ${dInfo.title} (${dInfo.target})` : d}
+                        title={dInfo ? `${d}: ${dInfo.classification} (${dInfo.application})` : d}
                         className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
                           depositoOrigem === d
                             ? isAvaria
@@ -352,9 +355,9 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                   <label className="block text-xs font-semibold text-slate-700">
                     Dep. Destino *
                   </label>
-                  {routeAnalysis.destinoInfo && (
-                    <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={routeAnalysis.destinoInfo.title}>
-                      {routeAnalysis.destinoInfo.shortBadge} ({routeAnalysis.destinoInfo.target})
+                  {routeAnalysis.destinationDeposit && (
+                    <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={routeAnalysis.destinationDeposit.classification}>
+                      {routeAnalysis.destinationDeposit.shortTitle} ({routeAnalysis.destinationDeposit.application})
                     </span>
                   )}
                 </div>
@@ -373,7 +376,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                         key={d}
                         type="button"
                         onClick={() => setDepositoDestino(d)}
-                        title={dInfo ? `${d}: ${dInfo.title} (${dInfo.target})` : d}
+                        title={dInfo ? `${d}: ${dInfo.classification} (${dInfo.application})` : d}
                         className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
                           depositoDestino === d
                             ? 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold'
@@ -389,23 +392,23 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             </div>
 
             {/* Resumo Inteligente da Rota Selecionada */}
-            {(routeAnalysis.origemInfo || routeAnalysis.destinoInfo) && !damageCheck.isInvalidOrigin && (
+            {(routeAnalysis.originDeposit || routeAnalysis.destinationDeposit) && !damageCheck.isInvalidOrigin && (
               <div className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-[11px] text-slate-700 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="font-bold text-slate-800">Rota Configurada:</span>
                   <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 font-mono font-bold border border-amber-200">
-                    {depositoOrigem} {routeAnalysis.origemInfo ? `(${routeAnalysis.origemInfo.shortBadge})` : ''}
+                    {depositoOrigem} {routeAnalysis.originDeposit ? `(${routeAnalysis.originDeposit.shortTitle})` : ''}
                   </span>
                   <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
                   <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-900 font-mono font-bold border border-emerald-200">
-                    {depositoDestino} {routeAnalysis.destinoInfo ? `(${routeAnalysis.destinoInfo.shortBadge})` : ''}
+                    {depositoDestino} {routeAnalysis.destinationDeposit ? `(${routeAnalysis.destinationDeposit.shortTitle})` : ''}
                   </span>
                 </div>
                 {routeAnalysis.centroInfo && (
                   <span className="text-[10px] text-slate-500">
-                    Livre Produto: <strong className="font-mono text-emerald-700">{routeAnalysis.centroInfo.defaultLivreProduto}</strong>
-                    {routeAnalysis.centroInfo.defaultLivrePecas && (
-                      <> • Livre Peças: <strong className="font-mono text-emerald-700">{routeAnalysis.centroInfo.defaultLivrePecas}</strong></>
+                    Livre Produto: <strong className="font-mono text-emerald-700">{routeAnalysis.centroInfo.freeStockProductDeposit}</strong>
+                    {routeAnalysis.centroInfo.freeStockPartsDeposit && (
+                      <> • Livre Peças: <strong className="font-mono text-emerald-700">{routeAnalysis.centroInfo.freeStockPartsDeposit}</strong></>
                     )}
                   </span>
                 )}
@@ -414,30 +417,30 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
           </div>
 
           {/* Alerta se houver incompatibilidade de Centro x Depósito ou Produto x Peças */}
-          {(routeAnalysis.hasCenterMismatch || routeAnalysis.hasTargetMismatch) && !damageCheck.isInvalidOrigin && (
+          {(routeAnalysis.hasCenterMismatch || routeAnalysis.hasApplicationMismatch) && !damageCheck.isInvalidOrigin && (
             <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2.5 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div className="space-y-1 flex-1">
                 <div className="font-bold text-amber-900">
                   Atenção à Regra de Centro / Depósito SAP:
                 </div>
-                <p className="text-amber-800 leading-relaxed">{routeAnalysis.explanation}</p>
-                {routeAnalysis.suggestedFreeProductDeposit && (
+                <p className="text-amber-800 leading-relaxed">{routeAnalysis.warnings.join(' ')}</p>
+                {routeAnalysis.centroInfo && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setDepositoDestino(routeAnalysis.suggestedFreeProductDeposit!)}
+                      onClick={() => setDepositoDestino(routeAnalysis.centroInfo!.freeStockProductDeposit)}
                       className="px-2.5 py-1 rounded-md bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold text-[11px] transition-colors cursor-pointer"
                     >
-                      Corrigir Destino para {routeAnalysis.suggestedFreeProductDeposit} (Livre Produto do Centro {centro})
+                      Corrigir Destino para {routeAnalysis.centroInfo.freeStockProductDeposit} (Livre Produto do Centro {centro})
                     </button>
-                    {routeAnalysis.suggestedFreePartsDeposit && (
+                    {routeAnalysis.centroInfo.freeStockPartsDeposit && (
                       <button
                         type="button"
-                        onClick={() => setDepositoDestino(routeAnalysis.suggestedFreePartsDeposit!)}
+                        onClick={() => setDepositoDestino(routeAnalysis.centroInfo!.freeStockPartsDeposit!)}
                         className="px-2.5 py-1 rounded-md bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] transition-colors cursor-pointer"
                       >
-                        Usar {routeAnalysis.suggestedFreePartsDeposit} (Livre Peças do Centro {centro})
+                        Usar {routeAnalysis.centroInfo.freeStockPartsDeposit} (Livre Peças do Centro {centro})
                       </button>
                     )}
                   </div>

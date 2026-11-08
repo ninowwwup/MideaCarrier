@@ -622,7 +622,7 @@ export default function App() {
 
         {activeMainTab === 'guia_depositos' ? (
           <DepositsGuideTab
-            onOpenNewRequestWithPreset={(preset) => {
+            onStartRequestWithRoute={(preset) => {
               setNewRequestPreset(preset);
               setIsNewModalOpen(true);
             }}

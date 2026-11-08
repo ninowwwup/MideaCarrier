@@ -250,7 +250,8 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                         const rowCheck = checkDefinitiveDamageOrigin(r.depositoOrigem, r.depositoDestino);
                         const routeAnalysis = analyzeTransferRoute(r.centro, r.depositoOrigem, r.depositoDestino);
                         const isRowInvalid = rowCheck.isInvalidOrigin;
-                        const hasWarning = !isRowInvalid && (routeAnalysis.hasCenterMismatch || routeAnalysis.hasTargetMismatch);
+                        const hasWarning = !isRowInvalid && (routeAnalysis.hasCenterMismatch || routeAnalysis.hasApplicationMismatch);
+                        const warningText = routeAnalysis.warnings.join(' ');
                         return (
                           <tr
                             key={i}
@@ -292,11 +293,11 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                                   {r.depositoOrigem.toUpperCase()}
                                 </span>
                               ) : (
-                                <span className="text-amber-700" title={routeAnalysis.origemInfo?.title}>
+                                <span className="text-amber-700" title={routeAnalysis.originDeposit?.classification}>
                                   {r.depositoOrigem}
-                                  {routeAnalysis.origemInfo && (
+                                  {routeAnalysis.originDeposit && (
                                     <span className="ml-1 text-[9px] text-slate-400 font-sans">
-                                      ({routeAnalysis.origemInfo.shortBadge})
+                                      ({routeAnalysis.originDeposit.shortTitle})
                                     </span>
                                   )}
                                 </span>
@@ -306,12 +307,12 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                               className={`py-1.5 px-3 ${
                                 isRowInvalid ? 'text-red-950 font-bold' : 'text-emerald-700'
                               }`}
-                              title={routeAnalysis.destinoInfo?.title}
+                              title={routeAnalysis.destinationDeposit?.classification}
                             >
                               {r.depositoDestino}
-                              {routeAnalysis.destinoInfo && !isRowInvalid && (
+                              {routeAnalysis.destinationDeposit && !isRowInvalid && (
                                 <span className="ml-1 text-[9px] text-slate-400 font-sans">
-                                  ({routeAnalysis.destinoInfo.shortBadge})
+                                  ({routeAnalysis.destinationDeposit.shortTitle})
                                 </span>
                               )}
                             </td>
@@ -321,8 +322,8 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                                   🚫 ERRO: {rowCheck.originInfo.code} ({rowCheck.originInfo.shortTitle}) não pode ir para estoque livre!
                                 </span>
                               ) : hasWarning ? (
-                                <span className="text-amber-800 font-bold" title={routeAnalysis.explanation}>
-                                  ⚠️ {routeAnalysis.explanation}
+                                <span className="text-amber-800 font-bold" title={warningText}>
+                                  ⚠️ {warningText}
                                 </span>
                               ) : rowCheck.isValidDestination && rowCheck.destinationInfo ? (
                                 <span className="text-emerald-700 font-semibold">
@@ -330,7 +331,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                                 </span>
                               ) : (
                                 <span className="text-emerald-700 font-medium">
-                                  ✅ {routeAnalysis.explanation || 'Rota SAP Válida'}
+                                  ✅ {routeAnalysis.routeExplanation || 'Rota SAP Válida'}
                                 </span>
                               )}
                             </td>

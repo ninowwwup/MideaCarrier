@@ -604,7 +604,7 @@ export async function playSoundByType(soundType: AlertSoundType) {
     }
 
     if (ctx.state === 'running') {
-      let buffer = audioBufferCache[soundType];
+      let buffer: AudioBuffer | null | undefined = audioBufferCache[soundType];
       if (!buffer) {
         buffer = await loadAudioBuffer(soundType);
       }
