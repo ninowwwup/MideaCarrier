@@ -13,6 +13,7 @@ import {
 import { AuthUser } from '../types/auth';
 import { authenticateUser } from '../services/authService';
 import { MigouLogo } from './MigouLogo';
+import { playSoundByType } from '../utils/audioAlert';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -26,8 +27,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLoginSuccess }
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [chirpActive, setChirpActive] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleBirdChirp = () => {
+    setChirpActive(true);
+    playSoundByType('bird');
+    setTimeout(() => setChirpActive(false), 900);
+  };
 
   const handleSelectType = (type: 'admin' | 'prod') => {
     setSelectedUserType(type);
@@ -57,7 +65,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLoginSuccess }
       <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-600/30 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-emerald-500/25 rounded-full blur-[100px] pointer-events-none" />
 
-      <div className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_28px_70px_-15px_rgba(0,18,56,0.65)] border border-white/75 overflow-hidden">
+      <div className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_28px_70px_-15px_rgba(0,18,56,0.65)] border border-white/75 overflow-hidden figma-modal-motion">
         {/* Top Header Card com o Passarinho Azul Oficial do MIGOU */}
         <div className="bg-gradient-to-br from-[#001B4D] via-[#003B7E] to-[#0077BA] px-6 pt-7 pb-6 text-white text-center relative overflow-hidden">
           {/* Reflexos radiais estilo Figma */}
@@ -65,7 +73,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLoginSuccess }
           <div className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full bg-amber-300/15 blur-2xl pointer-events-none" />
 
           <div className="relative inline-flex mb-3.5">
-            <MigouLogo size="xl" animated />
+            <MigouLogo
+              size="xl"
+              animated
+              onClick={handleBirdChirp}
+              className={chirpActive ? 'scale-110 transition-transform duration-300' : ''}
+            />
           </div>
 
           <h2 className="text-2xl sm:text-[26px] font-black tracking-tight flex items-center justify-center gap-2 drop-shadow-xs">
@@ -77,10 +90,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLoginSuccess }
           <p className="text-xs text-cyan-100/90 font-medium mt-1 max-w-xs mx-auto">
             Plataforma Colaborativa de Transferências SAP & WMS
           </p>
-          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-white/10 border border-white/20 text-[10px] text-cyan-100 font-semibold">
-            <span>🐦</span>
-            <span>Time Buiatte (WMS Sênior) ⟷ Time Midea (SAP)</span>
-          </div>
+          <button
+            type="button"
+            onClick={handleBirdChirp}
+            className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] text-cyan-100 font-semibold transition-all cursor-pointer active:scale-95"
+            title="Clique para ouvir o som do Passarinho Azul MIGOU"
+          >
+            <span className={chirpActive ? 'animate-bounce' : ''}>🐦</span>
+            <span>
+              {chirpActive
+                ? '🔊 Piu-piu! Som Oficial da Operação'
+                : 'Time Buiatte (WMS Sênior) ⟷ Time Midea (SAP)'}
+            </span>
+          </button>
         </div>
 
         {/* Form Body */}

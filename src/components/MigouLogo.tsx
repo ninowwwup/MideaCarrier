@@ -173,14 +173,14 @@ export const MigouLogo: React.FC<MigouLogoProps> = ({
           stroke="#7DD3FC"
           strokeWidth="11"
           strokeLinecap="round"
-          className={animated ? 'animate-pulse' : ''}
+          className={animated ? 'migou-wave-1' : ''}
         />
         <path
           d="M432 118 A 70 70 0 0 1 476 182"
           stroke="#FDE047"
           strokeWidth="9"
           strokeLinecap="round"
-          opacity="0.8"
+          className={animated ? 'migou-wave-2' : ''}
         />
 
         {/* Cauda Dinâmica do Passarinho Azul */}
@@ -211,6 +211,7 @@ export const MigouLogo: React.FC<MigouLogoProps> = ({
         <path
           d="M236 226 C182 192 142 136 136 86 C198 100 258 142 294 198 C314 228 310 272 280 298 C248 326 194 324 156 298 C196 298 234 276 244 248 C248 238 244 232 236 226 Z"
           fill={`url(#birdWing-${uniqueId})`}
+          className={animated ? 'migou-wing-glide' : ''}
         />
 
         {/* Olho Expressivo com Brilho */}
@@ -235,3 +236,4 @@ export const MigouLogo: React.FC<MigouLogoProps> = ({
     </div>
   );
 };
+
