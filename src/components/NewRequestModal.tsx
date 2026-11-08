@@ -13,8 +13,9 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { NewTransferInput } from '../types/transfer';
-import { extractSerialsFromInput } from '../utils/sapFormatter';
+import { extractSerialsFromInput, checkDefinitiveDamageOrigin } from '../utils/sapFormatter';
 import { compressImageFile } from '../utils/imageCompressor';
+import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
 
 interface NewRequestModalProps {
   isOpen: boolean;
@@ -41,6 +42,12 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [solicitante, setSolicitante] = useState(defaultSolicitante);
   const [labelPhotoUrl, setLabelPhotoUrl] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isDamageWarningOpen, setIsDamageWarningOpen] = useState(false);
+
+  // Verificação em tempo real dos Depósitos de Avaria Definitiva (B136, B149, B137)
+  const damageCheck = useMemo(() => {
+    return checkDefinitiveDamageOrigin(depositoOrigem, depositoDestino);
+  }, [depositoOrigem, depositoDestino]);
 
   // Parsing em tempo real de múltiplos seriais
   const parsedSerials = useMemo(() => {
@@ -80,21 +87,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!material.trim()) {
-      alert('Por favor informe o código do Material.');
-      return;
-    }
-    if (!centro.trim() || !depositoOrigem.trim() || !depositoDestino.trim()) {
-      alert('Preencha Centro, Depósito de Origem e Depósito de Destino.');
-      return;
-    }
-    if (depositoOrigem.trim().toUpperCase() === depositoDestino.trim().toUpperCase()) {
-      alert('O Depósito de Origem e o Depósito de Destino não podem ser iguais.');
-      return;
-    }
-
+  const executeSubmit = () => {
     const finalSerials = parsedSerials.length > 0 ? parsedSerials : ['S/N'];
 
     onSubmit({
@@ -113,7 +106,32 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     setRawSerials('');
     setObservacoes('');
     setLabelPhotoUrl(null);
+    setIsDamageWarningOpen(false);
     onClose();
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!material.trim()) {
+      alert('Por favor informe o código do Material.');
+      return;
+    }
+    if (!centro.trim() || !depositoOrigem.trim() || !depositoDestino.trim()) {
+      alert('Preencha Centro, Depósito de Origem e Depósito de Destino.');
+      return;
+    }
+    if (depositoOrigem.trim().toUpperCase() === depositoDestino.trim().toUpperCase()) {
+      alert('O Depósito de Origem e o Depósito de Destino não podem ser iguais.');
+      return;
+    }
+
+    // Se o depósito de ORIGEM for de Avaria Definitiva (B136, B149 ou B137), abre a tela de aviso educativo
+    if (damageCheck.isInvalidOrigin && damageCheck.originInfo) {
+      setIsDamageWarningOpen(true);
+      return;
+    }
+
+    executeSubmit();
   };
 
   return (
@@ -268,6 +286,30 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Alerta em Tempo Real caso o Depósito de Origem seja B136, B149 ou B137 */}
+          {damageCheck.isInvalidOrigin && damageCheck.originInfo && (
+            <div className="p-3.5 bg-red-50 border-2 border-red-400 rounded-xl text-xs text-red-900 flex items-start gap-3 animate-in fade-in">
+              <span className="text-xl leading-none">🚨</span>
+              <div className="space-y-1">
+                <div className="font-extrabold text-red-800">
+                  Atenção: Solicitação Incorreta — Origem {damageCheck.originInfo.code} ({damageCheck.originInfo.shortTitle})
+                </div>
+                <p className="text-red-800 leading-relaxed">
+                  <strong>{damageCheck.originInfo.definition}</strong> Produtos alocados neste depósito já tiveram avaria definitiva e recebem tratativa específica — <u>não devendo retornar ao estoque livre como produto bom</u>. Se enviada, a linha ficará <strong>vermelha</strong> na tabela principal.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {damageCheck.isValidDestination && damageCheck.destinationInfo && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>Destino {damageCheck.destinationInfo.code} ({damageCheck.destinationInfo.shortTitle}):</strong> Solicitação válida para segregar material com avaria ({damageCheck.destinationInfo.definition}).
+              </span>
+            </div>
+          )}
 
           {/* Campo de Múltiplos Seriais */}
           <div className="border border-blue-100 rounded-xl p-4 bg-blue-50/30">
@@ -497,6 +539,24 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Modal Educativo de Solicitação Incorreta (Depósitos B136, B149, B137 como Origem) */}
+      {damageCheck.isInvalidOrigin && damageCheck.originInfo && (
+        <DefinitiveDamageWarningModal
+          isOpen={isDamageWarningOpen}
+          invalidRoutes={[
+            {
+              material: material.trim().toUpperCase(),
+              centro: centro.trim().toUpperCase(),
+              depositoOrigem: depositoOrigem.trim().toUpperCase(),
+              depositoDestino: depositoDestino.trim().toUpperCase(),
+              originInfo: damageCheck.originInfo,
+            },
+          ]}
+          onCancelAndFix={() => setIsDamageWarningOpen(false)}
+          onConfirmAnyway={executeSubmit}
+        />
+      )}
     </div>
   );
 };

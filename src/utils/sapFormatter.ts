@@ -1,5 +1,68 @@
 import { TransferItem } from '../types/transfer';
 
+export interface DefinitiveDamageDepositInfo {
+  code: 'B136' | 'B149' | 'B137';
+  classification: string;
+  shortTitle: string;
+  definition: string;
+  application: 'PEÇAS/PRODUTOS' | 'PRODUTO';
+}
+
+export const DEFINITIVE_DAMAGE_CENTROS = ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'] as const;
+
+export const DEFINITIVE_DAMAGE_DEPOSITS: Record<string, DefinitiveDamageDepositInfo> = {
+  B136: {
+    code: 'B136',
+    classification: 'Avaria de produto — Definitivo',
+    shortTitle: 'Sucata',
+    definition: 'Depósito definido para avarias de produto (sucata).',
+    application: 'PEÇAS/PRODUTOS',
+  },
+  B149: {
+    code: 'B149',
+    classification: 'Avaria de produto — Definitivo',
+    shortTitle: 'Outlet (Embalagem Retrabalhada)',
+    definition: 'Depósito definido para avaria de embalagem retrabalhadas. (outlet)',
+    application: 'PRODUTO',
+  },
+  B137: {
+    code: 'B137',
+    classification: 'Avaria de produto — Definitivo',
+    shortTitle: 'Slow Movers (Venda Especial)',
+    definition: 'Depósito definido para avaria de produtos disponíveis para venda especial. (Slow Movers)',
+    application: 'PRODUTO',
+  },
+};
+
+/**
+ * Verifica se a movimentação tem como ORIGEM um depósito de Avaria Definitiva (B136, B149 ou B137).
+ * - Quando B136, B149 ou B137 é apenas o DESTINO, a solicitação é válida (OK).
+ * - Quando B136, B149 ou B137 é a ORIGEM saindo para outro depósito (estoque livre), retorna os detalhes da flag.
+ */
+export function checkDefinitiveDamageOrigin(
+  depositoOrigem?: string,
+  depositoDestino?: string
+): {
+  isInvalidOrigin: boolean;
+  isValidDestination: boolean;
+  originInfo?: DefinitiveDamageDepositInfo;
+  destinationInfo?: DefinitiveDamageDepositInfo;
+} {
+  const orig = (depositoOrigem || '').trim().toUpperCase();
+  const dest = (depositoDestino || '').trim().toUpperCase();
+
+  const originInfo = DEFINITIVE_DAMAGE_DEPOSITS[orig];
+  const destinationInfo = DEFINITIVE_DAMAGE_DEPOSITS[dest];
+
+  return {
+    isInvalidOrigin: Boolean(originInfo && orig !== dest),
+    isValidDestination: Boolean(!originInfo && destinationInfo),
+    originInfo,
+    destinationInfo,
+  };
+}
+
+
 /**
  * Converte linhas em texto delimitado por TAB para fácil colagem no SAP GUI / WebGUI
  */

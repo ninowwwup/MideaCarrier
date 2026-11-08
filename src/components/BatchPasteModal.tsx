@@ -10,8 +10,9 @@ import {
   User
 } from 'lucide-react';
 import { TransferItem } from '../types/transfer';
-import { parsePastedTable } from '../utils/sapFormatter';
+import { parsePastedTable, checkDefinitiveDamageOrigin } from '../utils/sapFormatter';
 import { BROWSER_CLIENT_ID } from '../services/storage';
+import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
 
 interface BatchPasteModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
 }) => {
   const [pastedText, setPastedText] = useState('');
   const [solicitante, setSolicitante] = useState(defaultSolicitante);
+  const [isDamageWarningOpen, setIsDamageWarningOpen] = useState(false);
 
   useEffect(() => {
     if (!solicitante || solicitante === 'Time Buiatte (Prod)') {
@@ -41,9 +43,28 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
     return parsePastedTable(pastedText);
   }, [pastedText]);
 
+  // Identifica linhas que possuem B136, B149 ou B137 como Depósito de Origem
+  const invalidOriginRows = useMemo(() => {
+    return parsedRows
+      .map((r) => {
+        const check = checkDefinitiveDamageOrigin(r.depositoOrigem, r.depositoDestino);
+        if (check.isInvalidOrigin && check.originInfo) {
+          return {
+            material: r.material.trim().toUpperCase(),
+            centro: r.centro.trim().toUpperCase(),
+            depositoOrigem: r.depositoOrigem.trim().toUpperCase(),
+            depositoDestino: r.depositoDestino.trim().toUpperCase(),
+            originInfo: check.originInfo,
+          };
+        }
+        return null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+  }, [parsedRows]);
+
   if (!isOpen) return null;
 
-  const handleImport = () => {
+  const executeImport = () => {
     if (parsedRows.length === 0) return;
 
     const finalSolicitante = solicitante.trim() || defaultSolicitante;
@@ -70,7 +91,19 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
 
     onImportItems(newItems);
     setPastedText('');
+    setIsDamageWarningOpen(false);
     onClose();
+  };
+
+  const handleImport = () => {
+    if (parsedRows.length === 0) return;
+
+    if (invalidOriginRows.length > 0) {
+      setIsDamageWarningOpen(true);
+      return;
+    }
+
+    executeImport();
   };
 
   const handleLoadSample = () => {
@@ -161,44 +194,136 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
 
           {/* Pre-visualização */}
           {parsedRows.length > 0 ? (
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-700">
-                  {parsedRows.length} linhas reconhecidas prontas para importação
-                </span>
-                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium border border-emerald-200 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Formato Válido
-                </span>
-              </div>
-              <div className="max-h-48 sm:max-h-56 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                    <tr>
-                      <th className="py-2 px-3">#</th>
-                      <th className="py-2 px-3">Material</th>
-                      <th className="py-2 px-3">Serial</th>
-                      <th className="py-2 px-3">Centro</th>
-                      <th className="py-2 px-3">Dep. Origem</th>
-                      <th className="py-2 px-3">Dep. Destino</th>
-                      <th className="py-2 px-3">Solicitante</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                    {parsedRows.map((r, i) => (
-                      <tr key={i} className="hover:bg-blue-50/40">
-                        <td className="py-1.5 px-3 text-slate-400 font-sans">{i + 1}</td>
-                        <td className="py-1.5 px-3 font-semibold text-slate-800">{r.material}</td>
-                        <td className="py-1.5 px-3 text-slate-600">{r.serial}</td>
-                        <td className="py-1.5 px-3 text-slate-700 font-semibold">{r.centro}</td>
-                        <td className="py-1.5 px-3 text-amber-700">{r.depositoOrigem}</td>
-                        <td className="py-1.5 px-3 text-emerald-700">{r.depositoDestino}</td>
-                        <td className="py-1.5 px-3 text-slate-700 font-sans truncate max-w-[140px]">
-                          {solicitante.trim() || defaultSolicitante}
-                        </td>
+            <div className="space-y-3">
+              {/* Banner de Alerta quando houver linhas com Origem B136, B149 ou B137 */}
+              {invalidOriginRows.length > 0 && (
+                <div className="bg-red-50 border-2 border-red-400 rounded-xl p-3.5 flex items-start gap-3 animate-in fade-in">
+                  <div className="text-xl leading-none">🚨</div>
+                  <div className="text-xs text-red-900 space-y-1">
+                    <div className="font-extrabold text-red-800">
+                      Atenção: {invalidOriginRows.length}{' '}
+                      {invalidOriginRows.length === 1
+                        ? 'linha colada possui'
+                        : 'linhas coladas possuem'}{' '}
+                      Origem em Depósito de Avaria Definitiva (B136 / B149 / B137)!
+                    </div>
+                    <p className="leading-relaxed">
+                      Produtos nos depósitos <strong>B136 (Sucata)</strong>, <strong>B149 (Outlet)</strong> e{' '}
+                      <strong>B137 (Slow Movers)</strong> já tiveram avaria e{' '}
+                      <strong>não devem ser disponibilizados para o estoque livre</strong>. Se você prosseguir, uma tela de alerta será exibida e essas linhas ficarão <strong>vermelhas</strong> no painel principal.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700">
+                    {parsedRows.length} linhas reconhecidas prontas para importação
+                  </span>
+                  {invalidOriginRows.length > 0 ? (
+                    <span className="text-red-700 bg-red-100 px-2.5 py-0.5 rounded-full font-bold border border-red-300 flex items-center gap-1">
+                      🚫 {invalidOriginRows.length} Solicitação(ões) com Origem de Avaria Definitiva
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium border border-emerald-200 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Formato Válido
+                    </span>
+                  )}
+                </div>
+                <div className="max-h-48 sm:max-h-56 overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">#</th>
+                        <th className="py-2 px-3">Material</th>
+                        <th className="py-2 px-3">Serial</th>
+                        <th className="py-2 px-3">Centro</th>
+                        <th className="py-2 px-3">Dep. Origem</th>
+                        <th className="py-2 px-3">Dep. Destino</th>
+                        <th className="py-2 px-3">Validação de Regra</th>
+                        <th className="py-2 px-3">Solicitante</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                      {parsedRows.map((r, i) => {
+                        const rowCheck = checkDefinitiveDamageOrigin(r.depositoOrigem, r.depositoDestino);
+                        const isRowInvalid = rowCheck.isInvalidOrigin;
+                        return (
+                          <tr
+                            key={i}
+                            className={
+                              isRowInvalid
+                                ? 'bg-red-100 text-red-950 font-semibold hover:bg-red-200/70'
+                                : 'hover:bg-blue-50/40'
+                            }
+                          >
+                            <td
+                              className={`py-1.5 px-3 font-sans ${
+                                isRowInvalid ? 'text-red-700 font-bold' : 'text-slate-400'
+                              }`}
+                            >
+                              {i + 1}
+                            </td>
+                            <td
+                              className={`py-1.5 px-3 font-semibold ${
+                                isRowInvalid ? 'text-red-950 font-extrabold' : 'text-slate-800'
+                              }`}
+                            >
+                              {r.material}
+                            </td>
+                            <td className={`py-1.5 px-3 ${isRowInvalid ? 'text-red-900' : 'text-slate-600'}`}>
+                              {r.serial}
+                            </td>
+                            <td
+                              className={`py-1.5 px-3 font-semibold ${
+                                isRowInvalid ? 'text-red-900' : 'text-slate-700'
+                              }`}
+                            >
+                              {r.centro}
+                            </td>
+                            <td className="py-1.5 px-3">
+                              {isRowInvalid ? (
+                                <span className="bg-red-600 text-white font-mono px-2 py-0.5 rounded font-extrabold">
+                                  {r.depositoOrigem.toUpperCase()}
+                                </span>
+                              ) : (
+                                <span className="text-amber-700">{r.depositoOrigem}</span>
+                              )}
+                            </td>
+                            <td
+                              className={`py-1.5 px-3 ${
+                                isRowInvalid ? 'text-red-950 font-bold' : 'text-emerald-700'
+                              }`}
+                            >
+                              {r.depositoDestino}
+                            </td>
+                            <td className="py-1.5 px-3 font-sans">
+                              {isRowInvalid && rowCheck.originInfo ? (
+                                <span className="text-red-800 font-extrabold">
+                                  🚫 ERRO: {rowCheck.originInfo.code} ({rowCheck.originInfo.shortTitle}) não pode ir para estoque livre!
+                                </span>
+                              ) : rowCheck.isValidDestination && rowCheck.destinationInfo ? (
+                                <span className="text-emerald-700 font-semibold">
+                                  ✅ OK (Destino Avaria é permitido)
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700 font-medium">✅ OK</span>
+                              )}
+                            </td>
+                            <td
+                              className={`py-1.5 px-3 font-sans truncate max-w-[140px] ${
+                                isRowInvalid ? 'text-red-900 font-bold' : 'text-slate-700'
+                              }`}
+                            >
+                              {solicitante.trim() || defaultSolicitante}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           ) : (
@@ -243,6 +368,14 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
           </div>
         </div>
       </div>
+
+      {/* Modal Educativo de Solicitação Incorreta (Depósitos B136, B149, B137 como Origem) */}
+      <DefinitiveDamageWarningModal
+        isOpen={isDamageWarningOpen}
+        invalidRoutes={invalidOriginRows}
+        onCancelAndFix={() => setIsDamageWarningOpen(false)}
+        onConfirmAnyway={executeImport}
+      />
     </div>
   );
 };

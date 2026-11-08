@@ -23,7 +23,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/transfer';
-import { formatForSAPTable, formatSerialsForSAP } from '../utils/sapFormatter';
+import { formatForSAPTable, formatSerialsForSAP, checkDefinitiveDamageOrigin } from '../utils/sapFormatter';
 import { LabelPhotoModal } from './LabelPhotoModal';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -239,6 +239,13 @@ export const TransferTable: React.FC<TransferTableProps> = ({
       }
     });
   }, [items, filters, sortConfig]);
+
+  // Contagem de solicitações flegadas com Origem em Depósito de Avaria Definitiva (B136, B149, B137)
+  const flaggedDamageCount = useMemo(() => {
+    return filteredItems.filter(
+      (i) => checkDefinitiveDamageOrigin(i.depositoOrigem, i.depositoDestino).isInvalidOrigin
+    ).length;
+  }, [filteredItems]);
 
   // Checkbox master (sincronizado estritamente com os itens visíveis no filtro atual)
   const isAllSelected =
@@ -527,6 +534,16 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 </div>
               )}
 
+              {/* Indicador de Solicitações Flegadas com Avaria Definitiva */}
+              {flaggedDamageCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300 animate-in fade-in">
+                  🔴 {flaggedDamageCount}{' '}
+                  {flaggedDamageCount === 1
+                    ? 'Solicitação com Flag de Avaria Definitiva'
+                    : 'Solicitações com Flag de Avaria Definitiva'}
+                </span>
+              )}
+
               {/* Limpar Filtros */}
               {(filters.busca ||
                 filters.status !== 'todos' ||
@@ -685,12 +702,16 @@ export const TransferTable: React.FC<TransferTableProps> = ({
           ) : (
             filteredItems.map((item) => {
               const isSelected = selectedIds.has(item.id);
+              const damageCheck = checkDefinitiveDamageOrigin(item.depositoOrigem, item.depositoDestino);
+              const isInvalidOrigin = damageCheck.isInvalidOrigin;
 
               return (
                 <div
                   key={`mobile-${item.id}`}
                   className={`p-3.5 transition-colors ${
-                    isSelected
+                    isInvalidOrigin
+                      ? 'bg-red-100/95 border-l-4 border-l-red-600'
+                      : isSelected
                       ? 'bg-blue-50/70'
                       : item.status === 'divergencia'
                       ? 'bg-rose-50/40'
@@ -699,19 +720,34 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 >
                   {/* Header do Card Mobile */}
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleToggleSelect(item.id)}
                         className="rounded text-[#0083CA] focus:ring-[#0083CA] cursor-pointer"
                       />
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                      <span
+                        className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          isInvalidOrigin
+                            ? 'bg-red-200 text-red-950 border border-red-400'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
                         FIFO #{item.prioridadeFifo}
                       </span>
-                      <span className="font-mono text-sm font-extrabold text-slate-900">
+                      <span
+                        className={`font-mono text-sm font-extrabold ${
+                          isInvalidOrigin ? 'text-red-950' : 'text-slate-900'
+                        }`}
+                      >
                         {item.material}
                       </span>
+                      {isInvalidOrigin && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-extrabold shadow-2xs">
+                          🚫 SOLICITAÇÃO INCORRETA • AVARIA DEFINITIVA
+                        </span>
+                      )}
                     </div>
 
                     {/* Status Badge Interativo Mobile */}
@@ -770,19 +806,43 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 font-mono text-[11px]">
-                      <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
+                      <span
+                        className={`font-bold px-1.5 py-0.5 rounded ${
+                          isInvalidOrigin
+                            ? 'bg-red-200 text-red-950 border border-red-400'
+                            : 'text-indigo-700 bg-indigo-50'
+                        }`}
+                      >
                         Centro {item.centro}
                       </span>
                       <div className="flex items-center gap-1.5">
-                        <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold">
-                          {item.depositoOrigem}
-                        </span>
-                        <ArrowRight className="w-3 h-3 text-slate-400" />
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-semibold">
+                        {isInvalidOrigin ? (
+                          <span className="px-2 py-0.5 rounded bg-red-600 text-white font-extrabold shadow-2xs">
+                            {item.depositoOrigem} ⚠️
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold">
+                            {item.depositoOrigem}
+                          </span>
+                        )}
+                        <ArrowRight className={`w-3 h-3 ${isInvalidOrigin ? 'text-red-700' : 'text-slate-400'}`} />
+                        <span
+                          className={`px-1.5 py-0.5 rounded font-semibold ${
+                            isInvalidOrigin
+                              ? 'bg-white text-red-900 border border-red-400 font-extrabold'
+                              : 'bg-emerald-50 text-emerald-800'
+                          }`}
+                        >
                           {item.depositoDestino}
                         </span>
                       </div>
                     </div>
+
+                    {isInvalidOrigin && damageCheck.originInfo && (
+                      <div className="pt-1.5 border-t border-red-200 text-[11px] text-red-900 font-semibold leading-snug">
+                        ❌ <strong>Origem {damageCheck.originInfo.code} ({damageCheck.originInfo.shortTitle}):</strong> Produto já avariado (Definitivo). Não deve ir para o estoque livre.
+                      </div>
+                    )}
 
                     {/* Foto da Label no Mobile */}
                     <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
@@ -1210,16 +1270,20 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               ) : (
                 filteredItems.map((item) => {
                   const isSelected = selectedIds.has(item.id);
+                  const damageCheck = checkDefinitiveDamageOrigin(item.depositoOrigem, item.depositoDestino);
+                  const isInvalidOrigin = damageCheck.isInvalidOrigin;
 
                   return (
                     <tr
                       key={item.id}
-                      className={`transition-colors hover:bg-blue-50/50 ${
-                        isSelected
-                          ? 'bg-blue-50/80'
+                      className={`transition-colors ${
+                        isInvalidOrigin
+                          ? 'bg-red-100/90 hover:bg-red-100 border-l-4 border-l-red-600'
+                          : isSelected
+                          ? 'bg-blue-50/80 hover:bg-blue-50'
                           : item.status === 'divergencia'
-                          ? 'bg-rose-50/30'
-                          : ''
+                          ? 'bg-rose-50/30 hover:bg-rose-50/50'
+                          : 'hover:bg-blue-50/50'
                       }`}
                     >
                       {/* 1. Checkbox */}
@@ -1236,7 +1300,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       <td className="py-2 px-1.5 text-center">
                         <span
                           className={`inline-flex items-center justify-center font-mono font-bold text-[10px] w-5 h-5 rounded-full transition-transform active:scale-95 ${
-                            item.prioridadeFifo === 1
+                            isInvalidOrigin
+                              ? 'bg-red-600 text-white shadow-xs'
+                              : item.prioridadeFifo === 1
                               ? 'bg-amber-500 text-white shadow-xs animate-pulse'
                               : 'bg-slate-200 text-slate-700'
                           }`}
@@ -1247,32 +1313,50 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </td>
 
                       {/* 3. Material */}
-                      <td className="py-2 px-2 font-mono font-bold text-slate-900">
-                        <div className="flex items-center gap-1 overflow-hidden" title={item.material}>
-                          <span className="truncate">{item.material}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(item.material);
-                              setCopiedId(`mat-${item.id}`);
-                              setTimeout(() => setCopiedId(null), 1500);
-                            }}
-                            className="text-slate-300 hover:text-slate-600 transition-colors active:scale-90 shrink-0"
-                            title="Copiar código do material"
-                          >
-                            {copiedId === `mat-${item.id}` ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
+                      <td className={`py-2 px-2 font-mono font-bold ${isInvalidOrigin ? 'text-red-950' : 'text-slate-900'}`}>
+                        <div className="flex flex-col gap-0.5 overflow-hidden">
+                          <div className="flex items-center gap-1 overflow-hidden" title={item.material}>
+                            <span className="truncate">{item.material}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(item.material);
+                                setCopiedId(`mat-${item.id}`);
+                                setTimeout(() => setCopiedId(null), 1500);
+                              }}
+                              className={`${
+                                isInvalidOrigin ? 'text-red-400 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
+                              } transition-colors active:scale-90 shrink-0`}
+                              title="Copiar código do material"
+                            >
+                              {copiedId === `mat-${item.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          {isInvalidOrigin && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-sans font-extrabold truncate shadow-2xs w-fit max-w-full"
+                              title={`Solicitação Incorreta: Origem ${damageCheck.originInfo?.code} (${damageCheck.originInfo?.definition}) não deve ir para estoque livre.`}
+                            >
+                              🚫 AVARIA DEFINITIVA
+                            </span>
+                          )}
                         </div>
                       </td>
 
                       {/* 4. Serial */}
-                      <td className="py-2 px-2 font-mono text-slate-700">
+                      <td className={`py-2 px-2 font-mono ${isInvalidOrigin ? 'text-red-950 font-semibold' : 'text-slate-700'}`}>
                         <div className="flex items-center gap-1 overflow-hidden" title={item.serial}>
-                          <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 truncate">
+                          <span
+                            className={`px-1.5 py-0.5 rounded border truncate ${
+                              isInvalidOrigin
+                                ? 'bg-red-50/90 border-red-300 text-red-950'
+                                : 'bg-slate-50 border-slate-200'
+                            }`}
+                          >
                             {item.serial}
                           </span>
                           <button
@@ -1282,7 +1366,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               setCopiedId(`ser-${item.id}`);
                               setTimeout(() => setCopiedId(null), 1500);
                             }}
-                            className="text-slate-300 hover:text-slate-600 transition-colors active:scale-90 shrink-0"
+                            className={`${
+                              isInvalidOrigin ? 'text-red-400 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
+                            } transition-colors active:scale-90 shrink-0`}
                             title="Copiar serial"
                           >
                             {copiedId === `ser-${item.id}` ? (
@@ -1296,21 +1382,54 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
                       {/* 5. Centro */}
                       <td className="py-2 px-1.5 text-center">
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                            isInvalidOrigin
+                              ? 'bg-red-200 text-red-950 border-red-400'
+                              : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          }`}
+                        >
                           {item.centro}
                         </span>
                       </td>
 
                       {/* 6. Depósito Origem -> Destino */}
                       <td className="py-2 px-2 font-mono">
-                        <div className="flex items-center gap-1 text-[11px] overflow-hidden">
-                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold border border-amber-200 shrink-0">
-                            {item.depositoOrigem}
-                          </span>
-                          <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200 shrink-0">
-                            {item.depositoDestino}
-                          </span>
+                        <div className="flex flex-col gap-0.5 overflow-hidden">
+                          <div className="flex items-center gap-1 text-[11px] overflow-hidden">
+                            {isInvalidOrigin ? (
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-red-600 text-white font-extrabold border border-red-700 shadow-2xs shrink-0"
+                                title={damageCheck.originInfo?.definition}
+                              >
+                                {item.depositoOrigem} ⚠️
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold border border-amber-200 shrink-0">
+                                {item.depositoOrigem}
+                              </span>
+                            )}
+                            <ArrowRight className={`w-3 h-3 shrink-0 ${isInvalidOrigin ? 'text-red-700' : 'text-slate-400'}`} />
+                            <span
+                              className={`px-1.5 py-0.5 rounded font-semibold border shrink-0 ${
+                                isInvalidOrigin
+                                  ? 'bg-white text-red-900 border-red-400 font-extrabold'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              }`}
+                            >
+                              {item.depositoDestino}
+                            </span>
+                          </div>
+                          {isInvalidOrigin && (
+                            <span className="text-[9px] font-sans font-extrabold text-red-800 truncate">
+                              ❌ PROIBIDO VOLTAR P/ LIVRE
+                            </span>
+                          )}
+                          {damageCheck.isValidDestination && (
+                            <span className="text-[9px] font-sans font-semibold text-emerald-700 truncate">
+                              ✓ Entrada em Avaria (OK)
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -1402,6 +1521,14 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
                       {/* 9. Doc SAP / Observações */}
                       <td className="py-2 px-2 overflow-hidden">
+                        {isInvalidOrigin && damageCheck.originInfo && (
+                          <div
+                            className="text-[10px] font-bold text-red-900 leading-tight mb-0.5 truncate"
+                            title={`${damageCheck.originInfo.definition} — Produto avariado não deve voltar ao estoque livre.`}
+                          >
+                            🛑 {damageCheck.originInfo.shortTitle}: Proibido voltar p/ livre
+                          </div>
+                        )}
                         {item.sapDocNumber ? (
                           <div className="flex items-center gap-1 text-[11px] font-mono text-emerald-700 font-bold truncate">
                             <FileCheck className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -1412,7 +1539,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         {item.observacoes ? (
                           <div
                             className={`text-[10px] truncate flex items-center gap-1 ${
-                              item.status === 'divergencia'
+                              isInvalidOrigin
+                                ? 'text-red-800 font-semibold'
+                                : item.status === 'divergencia'
                                 ? 'text-rose-700 font-semibold'
                                 : 'text-slate-500'
                             }`}
@@ -1421,17 +1550,22 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             <MessageSquare className="w-2.5 h-2.5 shrink-0" />
                             <span className="truncate">{item.observacoes}</span>
                           </div>
-                        ) : !item.sapDocNumber ? (
+                        ) : !item.sapDocNumber && !isInvalidOrigin ? (
                           <span className="text-slate-400 text-[10px]">-</span>
                         ) : null}
                       </td>
 
                       {/* 10. Solicitante & Data */}
                       <td className="py-2 px-2 text-[10px] text-slate-500 overflow-hidden">
-                        <div className="truncate font-medium text-slate-700" title={item.criadoPor}>
+                        <div
+                          className={`truncate font-medium ${
+                            isInvalidOrigin ? 'text-red-950 font-bold' : 'text-slate-700'
+                          }`}
+                          title={item.criadoPor}
+                        >
                           {item.criadoPor}
                         </div>
-                        <div className="text-[9px] text-slate-400">
+                        <div className={`text-[9px] ${isInvalidOrigin ? 'text-red-700 font-semibold' : 'text-slate-400'}`}>
                           {new Date(item.criadoEm).toLocaleTimeString('pt-BR', {
                             hour: '2-digit',
                             minute: '2-digit',
