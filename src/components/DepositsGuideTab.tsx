@@ -890,3 +890,4 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
     </div>
   );
 };
+

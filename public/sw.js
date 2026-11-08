@@ -10,10 +10,8 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v9';
+const CACHE_NAME = 'migou-pwa-v12-20261108';
 const STATIC_ASSETS = [
-  './',
-  './index.html',
   './manifest.json',
   './icon.svg',
   './audio/water_drop.wav',
@@ -54,8 +52,8 @@ self.addEventListener('activate', (event) => {
 });
 
 // Interceptação de requisições:
-// - HTML / Navegação: Network-First (sempre busca a versão mais nova)
-// - Assets estáticos (.js, .css, .wav, ícones): Stale-While-Revalidate (0ms de resposta!)
+// - HTML / Navegação: Network-First com cache: 'no-store' (sempre busca o index.html mais novo da nuvem sem travar em cache de 10min do GitHub Pages)
+// - Assets estáticos com hash (.js, .css, .wav, ícones): Stale-While-Revalidate (0ms de resposta!)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (!event.request.url.startsWith(self.location.origin)) return;
@@ -63,7 +61,7 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.mode === 'navigate' || event.request.destination === 'document') {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request.url, { cache: 'no-store' })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();

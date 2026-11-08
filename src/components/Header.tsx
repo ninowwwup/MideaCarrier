@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Boxes, 
-  PlusCircle, 
-  FileSpreadsheet, 
-  Download, 
-  Layers, 
-  Users, 
-  Sparkles, 
-  BellRing, 
-  Volume2, 
+import {
+  Boxes,
+  PlusCircle,
+  FileSpreadsheet,
+  Download,
+  Layers,
+  Users,
+  Sparkles,
+  BellRing,
+  Volume2,
   VolumeX,
   Menu,
   X,
@@ -116,11 +116,10 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => onSelectRole('ambos')}
-              className={`px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${
-                currentRole === 'ambos'
+              className={`px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${currentRole === 'ambos'
                   ? 'bg-white text-slate-900 shadow-sm font-semibold'
                   : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
-              }`}
+                }`}
               title="Espelho Geral: Visualizar todas as solicitações de todos os centros"
               aria-label="Espelho Geral"
             >
@@ -130,11 +129,10 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => onSelectRole('buiatte')}
-              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${
-                currentRole === 'buiatte'
+              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${currentRole === 'buiatte'
                   ? 'bg-white text-slate-900 shadow-sm font-semibold'
                   : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
-              }`}
+                }`}
               title="Visão Time Buiatte (WMS Sênior - Solicitações e Divergências)"
               aria-label="Time Buiatte"
             >
@@ -147,18 +145,17 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => onSelectRole('midea')}
-              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${
-                currentRole === 'midea'
+              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${currentRole === 'midea'
                   ? 'bg-white text-slate-900 shadow-sm font-semibold'
                   : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
-              }`}
+                }`}
               title="Visão Time Midea (SAP MIGO - Fila FIFO e Atendimento)"
               aria-label="Time Midea"
             >
               <Sparkles className={`w-3.5 h-3.5 ${currentRole === 'midea' ? 'text-blue-600' : 'text-white/80'}`} />
               <span>Time Midea</span>
               {totalPending > 0 && (
-                 <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs ml-0.5">
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs ml-0.5">
                   {totalPending}
                 </span>
               )}
@@ -171,9 +168,8 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser && (
               <div className="flex items-center gap-2 bg-black/25 backdrop-blur-xl px-2.5 py-1.5 rounded-2xl border border-white/20 text-xs shadow-inner">
                 <div
-                  className={`w-6 h-6 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${
-                    currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
-                  }`}
+                  className={`w-6 h-6 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
+                    }`}
                   title={`${currentUser.displayName} (${currentUser.username})`}
                 >
                   {currentUser.role === 'midea' ? (
@@ -186,11 +182,10 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-white text-[12px]">{currentUser.username}</span>
                     <span
-                      className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full ${
-                        currentUser.role === 'midea'
+                      className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full ${currentUser.role === 'midea'
                           ? 'bg-cyan-400 text-slate-950'
                           : 'bg-emerald-400 text-slate-950'
-                      }`}
+                        }`}
                     >
                       {currentUser.role === 'midea' ? 'Admin' : 'Prod'}
                     </span>
@@ -218,11 +213,10 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenDatabaseDiagnostic}
-                className={`p-2.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 ${
-                  isCloudConnected
+                className={`p-2.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 ${isCloudConnected
                     ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
                     : 'bg-white/15 text-white border-white/25 hover:bg-white/25'
-                }`}
+                  }`}
                 title={
                   isCloudConnected
                     ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Conexão com Google Planilhas)'
@@ -321,9 +315,8 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="p-3 rounded-2xl bg-black/30 border border-white/20 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${
-                      currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
-                    }`}
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
+                      }`}
                   >
                     {currentUser.role === 'midea' ? (
                       <ShieldCheck className="w-4 h-4" />
@@ -367,11 +360,10 @@ export const Header: React.FC<HeaderProps> = ({
                   onSelectRole('ambos');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${
-                  currentRole === 'ambos'
+                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${currentRole === 'ambos'
                     ? 'bg-white text-slate-900 border-white shadow-xs'
                     : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                }`}
+                  }`}
               >
                 Espelho Geral
               </button>
@@ -381,11 +373,10 @@ export const Header: React.FC<HeaderProps> = ({
                   onSelectRole('buiatte');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${
-                  currentRole === 'buiatte'
+                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${currentRole === 'buiatte'
                     ? 'bg-white text-[#00609C] border-white shadow-xs'
                     : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                }`}
+                  }`}
               >
                 Time Buiatte
               </button>
@@ -395,11 +386,10 @@ export const Header: React.FC<HeaderProps> = ({
                   onSelectRole('midea');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${
-                  currentRole === 'midea'
+                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${currentRole === 'midea'
                     ? 'bg-white text-[#002664] border-white shadow-xs'
                     : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                }`}
+                  }`}
               >
                 Time Midea
               </button>
@@ -470,11 +460,10 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectMainTab(activeMainTab === 'guia_depositos' ? 'operacao' : 'guia_depositos')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer ${
-                  activeMainTab === 'guia_depositos'
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer ${activeMainTab === 'guia_depositos'
                     ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_4px_20px_rgba(251,191,36,0.35)]'
                     : 'bg-cyan-500/25 hover:bg-cyan-500/35 text-white border-cyan-300/40'
-                }`}
+                  }`}
                 title="Abrir Guia Interativo de Depósitos SAP (Estoque Livre, Contagem/Faltas e Avarias)"
               >
                 <Compass className={`w-4 h-4 ${activeMainTab === 'guia_depositos' ? 'text-slate-950' : 'text-cyan-200'}`} />
