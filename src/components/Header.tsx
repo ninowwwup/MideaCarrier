@@ -18,7 +18,8 @@ import {
   Bell,
   ShieldCheck,
   Truck,
-  LogOut
+  LogOut,
+  Compass
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 import { AuthUser } from '../types/auth';
@@ -50,6 +51,8 @@ interface HeaderProps {
   onOpenDatabaseDiagnostic?: () => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
+  activeMainTab?: 'operacao' | 'guia_depositos';
+  onSelectMainTab?: (tab: 'operacao' | 'guia_depositos') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -77,6 +80,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDatabaseDiagnostic,
   currentUser,
   onLogout,
+  activeMainTab = 'operacao',
+  onSelectMainTab,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeSound = ALERT_SOUND_OPTIONS.find((s) => s.id === (currentAlertSound || getSavedAlertSound())) || ALERT_SOUND_OPTIONS[0];
@@ -459,7 +464,26 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* BOTÕES DINÂMICOS, LEVES E SUAVES (ESTILO FIGMA) */}
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* BOTÃO GUIA DE DEPÓSITOS SAP */}
+            {onSelectMainTab && (
+              <button
+                type="button"
+                onClick={() => onSelectMainTab(activeMainTab === 'guia_depositos' ? 'operacao' : 'guia_depositos')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer ${
+                  activeMainTab === 'guia_depositos'
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_4px_20px_rgba(251,191,36,0.35)]'
+                    : 'bg-cyan-500/25 hover:bg-cyan-500/35 text-white border-cyan-300/40'
+                }`}
+                title="Abrir Guia Interativo de Depósitos SAP (Estoque Livre, Contagem/Faltas e Avarias)"
+              >
+                <Compass className={`w-4 h-4 ${activeMainTab === 'guia_depositos' ? 'text-slate-950' : 'text-cyan-200'}`} />
+                <span className="tracking-wide">
+                  {activeMainTab === 'guia_depositos' ? 'VOLTAR À FILA SAP' : 'GUIA DE DEPÓSITOS'}
+                </span>
+              </button>
+            )}
+
             {/* BOTÃO COLAR TABELA */}
             <button
               type="button"

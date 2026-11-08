@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   X, 
   Plus, 
@@ -10,10 +10,18 @@ import {
   Trash2,
   Camera,
   UploadCloud,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Compass,
+  ArrowRight
 } from 'lucide-react';
 import { NewTransferInput } from '../types/transfer';
-import { extractSerialsFromInput, checkDefinitiveDamageOrigin } from '../utils/sapFormatter';
+import { 
+  extractSerialsFromInput, 
+  checkDefinitiveDamageOrigin,
+  SAP_CENTROS_CATALOG,
+  SAP_DEPOSITOS_CATALOG,
+  analyzeTransferRoute
+} from '../utils/sapFormatter';
 import { compressImageFile } from '../utils/imageCompressor';
 import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
 
@@ -22,16 +30,23 @@ interface NewRequestModalProps {
   onClose: () => void;
   onSubmit: (data: NewTransferInput) => void;
   defaultSolicitante?: string;
+  initialPreset?: {
+    centro: string;
+    depositoOrigem: string;
+    depositoDestino: string;
+  } | null;
+  onOpenDepositsGuide?: () => void;
 }
 
-const FREQUENT_CENTROS = ['B124', 'B123', 'B179', 'B158'];
-const FREQUENT_DEPOSITOS = ['B148', 'B110', 'B111', 'B114', 'B413'];
+const ALL_CENTROS = ['B124', 'B123', 'B158', 'B159', 'B179', 'B180'];
 
 export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
   defaultSolicitante = 'Time Buiatte (Prod)',
+  initialPreset = null,
+  onOpenDepositsGuide,
 }) => {
   const [material, setMaterial] = useState('');
   const [rawSerials, setRawSerials] = useState('');
@@ -44,10 +59,35 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [isDamageWarningOpen, setIsDamageWarningOpen] = useState(false);
 
+  // Aplica preset vindo do Simulador Interativo de Depósitos
+  useEffect(() => {
+    if (initialPreset && isOpen) {
+      setCentro(initialPreset.centro);
+      setDepositoOrigem(initialPreset.depositoOrigem);
+      setDepositoDestino(initialPreset.depositoDestino);
+    }
+  }, [initialPreset, isOpen]);
+
   // Verificação em tempo real dos Depósitos de Avaria Definitiva (B136, B149, B137)
   const damageCheck = useMemo(() => {
     return checkDefinitiveDamageOrigin(depositoOrigem, depositoDestino);
   }, [depositoOrigem, depositoDestino]);
+
+  // Análise inteligente completa da rota (Centro + Origem + Destino + Produto vs Peças)
+  const routeAnalysis = useMemo(() => {
+    return analyzeTransferRoute(centro, depositoOrigem, depositoDestino);
+  }, [centro, depositoOrigem, depositoDestino]);
+
+  // Depósitos recomendados para o Centro selecionado
+  const validDepositsForCentro = useMemo(() => {
+    const cleanCentro = centro.trim().toUpperCase();
+    const list = Object.values(SAP_DEPOSITOS_CATALOG).filter((d) =>
+      d.centros.includes(cleanCentro)
+    );
+    return list.length > 0
+      ? list.map((d) => d.code)
+      : ['B148', 'B110', 'B114', 'B130', 'B413', 'B412', 'B112', 'B111'];
+  }, [centro]);
 
   // Parsing em tempo real de múltiplos seriais
   const parsedSerials = useMemo(() => {
@@ -194,98 +234,217 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             </div>
           </div>
 
-          {/* Centros e Depósitos */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-            {/* Centro */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Centro SAP *
-              </label>
-              <input
-                type="text"
-                required
-                value={centro}
-                onChange={(e) => setCentro(e.target.value.toUpperCase())}
-                className="w-full px-2.5 py-1.5 text-sm font-mono uppercase bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA]"
-              />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {FREQUENT_CENTROS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCentro(c)}
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors ${
-                      centro === c
-                        ? 'bg-blue-100 text-[#00609C] border-blue-300 font-bold'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
+          {/* Centros e Depósitos com Inteligência de Canal e Tipo (Produto vs Peças) */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#002664]">
+                <span>🧭 Inteligência de Centros & Depósitos SAP</span>
+                {routeAnalysis.centroInfo && (
+                  <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[#00609C] text-[10px] font-mono">
+                    {routeAnalysis.centroInfo.code}: {routeAnalysis.centroInfo.shortLabel}
+                  </span>
+                )}
+              </div>
+              {onOpenDepositsGuide && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDepositsGuide();
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00609C] hover:text-[#002664] bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                >
+                  <Compass className="w-3.5 h-3.5 text-[#249ED5]" />
+                  <span>Consultar Guia de Depósitos</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Centro */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Centro SAP *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={centro}
+                  onChange={(e) => setCentro(e.target.value.toUpperCase())}
+                  className="w-full px-2.5 py-1.5 text-sm font-mono uppercase bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA]"
+                />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {ALL_CENTROS.map((c) => {
+                    const cInfo = SAP_CENTROS_CATALOG[c];
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setCentro(c);
+                          if (cInfo && !cInfo.depositosLivres.includes(depositoDestino) && ['B110', 'B114', 'B130', 'B412', 'B413'].includes(depositoDestino)) {
+                            setDepositoDestino(cInfo.defaultLivreProduto);
+                          }
+                        }}
+                        title={cInfo?.canal || c}
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
+                          centro === c
+                            ? 'bg-[#002664] text-white border-[#002664] font-bold shadow-2xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Depósito Origem */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Dep. Origem *
+                  </label>
+                  {routeAnalysis.origemInfo && (
+                    <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={routeAnalysis.origemInfo.title}>
+                      {routeAnalysis.origemInfo.shortBadge} ({routeAnalysis.origemInfo.target})
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={depositoOrigem}
+                  onChange={(e) => setDepositoOrigem(e.target.value.toUpperCase())}
+                  className="w-full px-2.5 py-1.5 text-sm font-mono uppercase bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA]"
+                />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {validDepositsForCentro.map((d) => {
+                    const dInfo = SAP_DEPOSITOS_CATALOG[d];
+                    const isAvaria = dInfo?.category === 'avaria_definitiva';
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDepositoOrigem(d)}
+                        title={dInfo ? `${d}: ${dInfo.title} (${dInfo.target})` : d}
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
+                          depositoOrigem === d
+                            ? isAvaria
+                              ? 'bg-red-600 text-white border-red-700 font-bold'
+                              : 'bg-amber-100 text-amber-900 border-amber-400 font-bold'
+                            : isAvaria
+                            ? 'bg-red-50/70 text-red-700 border-red-200 hover:bg-red-100'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Depósito Destino */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Dep. Destino *
+                  </label>
+                  {routeAnalysis.destinoInfo && (
+                    <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={routeAnalysis.destinoInfo.title}>
+                      {routeAnalysis.destinoInfo.shortBadge} ({routeAnalysis.destinoInfo.target})
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={depositoDestino}
+                  onChange={(e) => setDepositoDestino(e.target.value.toUpperCase())}
+                  className="w-full px-2.5 py-1.5 text-sm font-mono uppercase bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA]"
+                />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {validDepositsForCentro.map((d) => {
+                    const dInfo = SAP_DEPOSITOS_CATALOG[d];
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDepositoDestino(d)}
+                        title={dInfo ? `${d}: ${dInfo.title} (${dInfo.target})` : d}
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
+                          depositoDestino === d
+                            ? 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            {/* Depósito Origem */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Dep. Origem *
-              </label>
-              <input
-                type="text"
-                required
-                value={depositoOrigem}
-                onChange={(e) => setDepositoOrigem(e.target.value.toUpperCase())}
-                className="w-full px-2.5 py-1.5 text-sm font-mono uppercase bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA]"
-              />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {FREQUENT_DEPOSITOS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDepositoOrigem(d)}
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors ${
-                      depositoOrigem === d
-                        ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
+            {/* Resumo Inteligente da Rota Selecionada */}
+            {(routeAnalysis.origemInfo || routeAnalysis.destinoInfo) && !damageCheck.isInvalidOrigin && (
+              <div className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-[11px] text-slate-700 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-800">Rota Configurada:</span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 font-mono font-bold border border-amber-200">
+                    {depositoOrigem} {routeAnalysis.origemInfo ? `(${routeAnalysis.origemInfo.shortBadge})` : ''}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-900 font-mono font-bold border border-emerald-200">
+                    {depositoDestino} {routeAnalysis.destinoInfo ? `(${routeAnalysis.destinoInfo.shortBadge})` : ''}
+                  </span>
+                </div>
+                {routeAnalysis.centroInfo && (
+                  <span className="text-[10px] text-slate-500">
+                    Livre Produto: <strong className="font-mono text-emerald-700">{routeAnalysis.centroInfo.defaultLivreProduto}</strong>
+                    {routeAnalysis.centroInfo.defaultLivrePecas && (
+                      <> • Livre Peças: <strong className="font-mono text-emerald-700">{routeAnalysis.centroInfo.defaultLivrePecas}</strong></>
+                    )}
+                  </span>
+                )}
               </div>
-            </div>
-
-            {/* Depósito Destino */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Dep. Destino *
-              </label>
-              <input
-                type="text"
-                required
-                value={depositoDestino}
-                onChange={(e) => setDepositoDestino(e.target.value.toUpperCase())}
-                className="w-full px-2.5 py-1.5 text-sm font-mono uppercase bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0083CA]"
-              />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {FREQUENT_DEPOSITOS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDepositoDestino(d)}
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors ${
-                      depositoDestino === d
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
+
+          {/* Alerta se houver incompatibilidade de Centro x Depósito ou Produto x Peças */}
+          {(routeAnalysis.hasCenterMismatch || routeAnalysis.hasTargetMismatch) && !damageCheck.isInvalidOrigin && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 flex-1">
+                <div className="font-bold text-amber-900">
+                  Atenção à Regra de Centro / Depósito SAP:
+                </div>
+                <p className="text-amber-800 leading-relaxed">{routeAnalysis.explanation}</p>
+                {routeAnalysis.suggestedFreeProductDeposit && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setDepositoDestino(routeAnalysis.suggestedFreeProductDeposit!)}
+                      className="px-2.5 py-1 rounded-md bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold text-[11px] transition-colors cursor-pointer"
+                    >
+                      Corrigir Destino para {routeAnalysis.suggestedFreeProductDeposit} (Livre Produto do Centro {centro})
+                    </button>
+                    {routeAnalysis.suggestedFreePartsDeposit && (
+                      <button
+                        type="button"
+                        onClick={() => setDepositoDestino(routeAnalysis.suggestedFreePartsDeposit!)}
+                        className="px-2.5 py-1 rounded-md bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] transition-colors cursor-pointer"
+                      >
+                        Usar {routeAnalysis.suggestedFreePartsDeposit} (Livre Peças do Centro {centro})
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Alerta em Tempo Real caso o Depósito de Origem seja B136, B149 ou B137 */}
           {damageCheck.isInvalidOrigin && damageCheck.originInfo && (

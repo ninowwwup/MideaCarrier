@@ -23,7 +23,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/transfer';
-import { formatForSAPTable, formatSerialsForSAP, checkDefinitiveDamageOrigin } from '../utils/sapFormatter';
+import { formatForSAPTable, formatSerialsForSAP, checkDefinitiveDamageOrigin, analyzeTransferRoute, SAP_DEPOSITOS_CATALOG } from '../utils/sapFormatter';
 import { LabelPhotoModal } from './LabelPhotoModal';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -1352,6 +1352,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 filteredItems.map((item) => {
                   const isSelected = selectedIds.has(item.id);
                   const damageCheck = checkDefinitiveDamageOrigin(item.depositoOrigem, item.depositoDestino);
+                  const routeAnalysis = analyzeTransferRoute(item.centro, item.depositoOrigem, item.depositoDestino);
                   const isInvalidOrigin = damageCheck.isInvalidOrigin;
 
                   return (
@@ -1486,7 +1487,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                                 {item.depositoOrigem} ⚠️
                               </span>
                             ) : (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold border border-amber-200 shrink-0">
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold border border-amber-200 shrink-0"
+                                title={routeAnalysis.origemInfo ? `${routeAnalysis.origemInfo.code}: ${routeAnalysis.origemInfo.title} (${routeAnalysis.origemInfo.target})` : item.depositoOrigem}
+                              >
                                 {item.depositoOrigem}
                               </span>
                             )}
@@ -1495,22 +1499,37 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               className={`px-1.5 py-0.5 rounded font-semibold border shrink-0 ${
                                 isInvalidOrigin
                                   ? 'bg-white text-red-900 border-red-400 font-extrabold'
+                                  : routeAnalysis.destinoInfo?.colorTheme === 'yellow'
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
+                                  : routeAnalysis.destinoInfo?.colorTheme === 'red'
+                                  ? 'bg-rose-100 text-rose-900 border-rose-300 font-bold'
                                   : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               }`}
+                              title={routeAnalysis.destinoInfo ? `${routeAnalysis.destinoInfo.code}: ${routeAnalysis.destinoInfo.title} (${routeAnalysis.destinoInfo.target})` : item.depositoDestino}
                             >
                               {item.depositoDestino}
                             </span>
                           </div>
-                          {isInvalidOrigin && (
+                          {isInvalidOrigin ? (
                             <span className="text-[9px] font-sans font-extrabold text-red-800 leading-tight">
                               ❌ PROIBIDO VOLTAR P/ LIVRE
                             </span>
-                          )}
-                          {damageCheck.isValidDestination && (
+                          ) : routeAnalysis.hasCenterMismatch || routeAnalysis.hasTargetMismatch ? (
+                            <span
+                              className="text-[9px] font-sans font-bold text-amber-700 leading-tight"
+                              title={routeAnalysis.explanation}
+                            >
+                              ⚠️ Verificar Centro/Depósito
+                            </span>
+                          ) : damageCheck.isValidDestination ? (
                             <span className="text-[9px] font-sans font-semibold text-emerald-700 leading-tight">
                               ✓ Entrada em Avaria (OK)
                             </span>
-                          )}
+                          ) : routeAnalysis.destinoInfo ? (
+                            <span className="text-[9px] font-sans font-medium text-slate-500 leading-tight">
+                              {routeAnalysis.destinoInfo.shortBadge} ({routeAnalysis.destinoInfo.target})
+                            </span>
+                          ) : null}
                         </div>
                       </td>
 

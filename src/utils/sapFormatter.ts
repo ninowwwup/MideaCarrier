@@ -1,5 +1,388 @@
 import { TransferItem } from '../types/transfer';
 
+export type DepositCategory =
+  | 'estoque_livre'
+  | 'blue_service'
+  | 'inventario_transitorio'
+  | 'inventario_falta_definitivo'
+  | 'avaria_definitivo'
+  | 'operacional';
+
+export type DepositApplication = 'PRODUTO' | 'PEÇAS' | 'PEÇAS/PRODUTOS';
+
+export interface SAPCentroInfo {
+  code: string;
+  originType: 'NACIONAL' | 'IMPORTADO';
+  channelName: string;
+  segment: 'E-COMMERCE / PÓS VENDA' | 'LOJAS MIDEA CARRIER' | 'PÓS VENDA';
+  freeStockProductDeposit: string;
+  freeStockPartsDeposit?: string;
+  blueServicePartsDeposit?: string;
+  inventoryShortageProductDeposit: string;
+  inventoryCountProductDeposit: string;
+  inventoryShortagePartsDeposit?: string;
+  inventoryCountPartsDeposit?: string;
+  damageDeposits: string[];
+}
+
+export interface SAPDepositInfo {
+  code: string;
+  category: DepositCategory;
+  nature: 'Definitivo' | 'Transitório';
+  colorScheme: 'green' | 'yellow' | 'red';
+  classification: string;
+  shortTitle: string;
+  definition: string;
+  application: DepositApplication;
+  allowedCentros: string[];
+  channels: string[];
+  canBeOriginToFreeStock: boolean;
+  whenToUseAsOrigin: string;
+  whenToUseAsDestination: string;
+}
+
+export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
+  B123: {
+    code: 'B123',
+    originType: 'NACIONAL',
+    channelName: 'CD MG NACIONAL E-COMMERCE / PÓS VENDA',
+    segment: 'E-COMMERCE / PÓS VENDA',
+    freeStockProductDeposit: 'B110',
+    inventoryShortageProductDeposit: 'B111',
+    inventoryCountProductDeposit: 'B112',
+    damageDeposits: ['B136', 'B149', 'B137'],
+  },
+  B124: {
+    code: 'B124',
+    originType: 'IMPORTADO',
+    channelName: 'CD MG IMPORTADO E-COMMERCE / PÓS VENDA',
+    segment: 'E-COMMERCE / PÓS VENDA',
+    freeStockProductDeposit: 'B110',
+    inventoryShortageProductDeposit: 'B111',
+    inventoryCountProductDeposit: 'B112',
+    damageDeposits: ['B136', 'B149', 'B137'],
+  },
+  B158: {
+    code: 'B158',
+    originType: 'NACIONAL',
+    channelName: 'CD MG NACIONAL LOJAS MIDEA CARRIER',
+    segment: 'LOJAS MIDEA CARRIER',
+    freeStockProductDeposit: 'B114',
+    freeStockPartsDeposit: 'B130',
+    blueServicePartsDeposit: 'B416',
+    inventoryShortageProductDeposit: 'B111',
+    inventoryCountProductDeposit: 'B112',
+    inventoryShortagePartsDeposit: 'B152',
+    inventoryCountPartsDeposit: 'B153',
+    damageDeposits: ['B136', 'B149', 'B137'],
+  },
+  B159: {
+    code: 'B159',
+    originType: 'IMPORTADO',
+    channelName: 'CD MG IMPORT. LOJAS MIDEA CARRIER',
+    segment: 'LOJAS MIDEA CARRIER',
+    freeStockProductDeposit: 'B114',
+    freeStockPartsDeposit: 'B130',
+    blueServicePartsDeposit: 'B416',
+    inventoryShortageProductDeposit: 'B111',
+    inventoryCountProductDeposit: 'B112',
+    inventoryShortagePartsDeposit: 'B152',
+    inventoryCountPartsDeposit: 'B153',
+    damageDeposits: ['B136', 'B149', 'B137'],
+  },
+  B179: {
+    code: 'B179',
+    originType: 'NACIONAL',
+    channelName: 'CD MG NACIONAL PÓS VENDA',
+    segment: 'PÓS VENDA',
+    freeStockProductDeposit: 'B413',
+    freeStockPartsDeposit: 'B412',
+    inventoryShortageProductDeposit: 'B111',
+    inventoryCountProductDeposit: 'B112',
+    inventoryShortagePartsDeposit: 'B152',
+    inventoryCountPartsDeposit: 'B153',
+    damageDeposits: ['B136', 'B149', 'B137'],
+  },
+  B180: {
+    code: 'B180',
+    originType: 'IMPORTADO',
+    channelName: 'CD MG IMPORT PÓS VENDA',
+    segment: 'PÓS VENDA',
+    freeStockProductDeposit: 'B413',
+    freeStockPartsDeposit: 'B412',
+    inventoryShortageProductDeposit: 'B111',
+    inventoryCountProductDeposit: 'B112',
+    inventoryShortagePartsDeposit: 'B152',
+    inventoryCountPartsDeposit: 'B153',
+    damageDeposits: ['B136', 'B149', 'B137'],
+  },
+};
+
+export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
+  // 1. ESTOQUE LIVRE & BLUE SERVICE (VERDE — DEFINITIVO)
+  B110: {
+    code: 'B110',
+    category: 'estoque_livre',
+    nature: 'Definitivo',
+    colorScheme: 'green',
+    classification: 'Estoque livre — Definitivo',
+    shortTitle: 'Estoque Livre (Produto)',
+    definition: 'Depósito definido para estoque disponível.',
+    application: 'PRODUTO',
+    allowedCentros: ['B123', 'B124'],
+    channels: ['CD MG NACIONAL PÓS VENDA / E-COMMERCE', 'CD MG IMPORT PÓS VENDA / E-COMMERCE'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando um produto bom nos centros B123/B124 precisa ser segregado por falta (B112/B111) ou avaria (B136/B149/B137).',
+    whenToUseAsDestination: 'Quando um produto localizado (ex: B148 ou B112) em perfeito estado deve ficar disponível para venda nos centros B123 ou B124.',
+  },
+  B114: {
+    code: 'B114',
+    category: 'estoque_livre',
+    nature: 'Definitivo',
+    colorScheme: 'green',
+    classification: 'Estoque livre — Definitivo',
+    shortTitle: 'Estoque Livre Lojas (Produto)',
+    definition: 'Depósito definido para estoque disponível.',
+    application: 'PRODUTO',
+    allowedCentros: ['B158', 'B159'],
+    channels: ['CD MG NACIONAL LOJAS MIDEA CARRIER', 'CD MG IMPORT. LOJAS MIDEA CARRIER'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando um produto do estoque das Lojas Midea (B158/B159) não é localizado (vai p/ B112/B111) ou sofre avaria (B136/B149/B137).',
+    whenToUseAsDestination: 'Para disponibilizar PRODUTO acabado bom no estoque livre das Lojas Midea Carrier (centros B158 e B159).',
+  },
+  B130: {
+    code: 'B130',
+    category: 'estoque_livre',
+    nature: 'Definitivo',
+    colorScheme: 'green',
+    classification: 'Estoque livre — Definitivo',
+    shortTitle: 'Estoque Livre Lojas (Peças)',
+    definition: 'Depósito definido para estoque disponível.',
+    application: 'PEÇAS',
+    allowedCentros: ['B158', 'B159'],
+    channels: ['CD MG NACIONAL LOJAS MIDEA CARRIER', 'CD MG IMPORT. LOJAS MIDEA CARRIER'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando uma PEÇA das Lojas Midea (B158/B159) vai para contagem/falta de peças (B153/B152), venda Blue Service (B416) ou sucata (B136).',
+    whenToUseAsDestination: 'Para disponibilizar PEÇAS boas no estoque livre das Lojas Midea Carrier (centros B158 e B159).',
+  },
+  B416: {
+    code: 'B416',
+    category: 'blue_service',
+    nature: 'Definitivo',
+    colorScheme: 'green',
+    classification: 'Estoque Blue Service — Definitivo',
+    shortTitle: 'Blue Service Garantia (Peças)',
+    definition: 'Depósito para venda Blue Service (venda de Garantia pelo Centro de lojas).',
+    application: 'PEÇAS',
+    allowedCentros: ['B158', 'B159'],
+    channels: ['CD MG NACIONAL LOJAS MIDEA CARRIER', 'CD MG IMPORT. LOJAS MIDEA CARRIER'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando uma peça do estoque Blue Service precisa ir para conferência/falta (B153/B152) ou retorno ao livre de peças (B130).',
+    whenToUseAsDestination: 'Exclusivo para PEÇAS destinadas à venda Blue Service (atendimento de Garantia pelo Centro de Lojas B158 e B159).',
+  },
+  B412: {
+    code: 'B412',
+    category: 'estoque_livre',
+    nature: 'Definitivo',
+    colorScheme: 'green',
+    classification: 'Estoque livre — Definitivo',
+    shortTitle: 'Estoque Livre Pós-Venda (Peças)',
+    definition: 'Depósito definido para estoque disponível.',
+    application: 'PEÇAS',
+    allowedCentros: ['B179', 'B180'],
+    channels: ['CD MG NACIONAL PÓS VENDA', 'CD MG IMPORT PÓS VENDA'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando uma PEÇA do Pós-Venda (B179/B180) não é localizada (vai para B153/B152) ou sofre avaria (B136).',
+    whenToUseAsDestination: 'Para disponibilizar PEÇAS boas no estoque livre do Pós-Venda (centros B179 e B180).',
+  },
+  B413: {
+    code: 'B413',
+    category: 'estoque_livre',
+    nature: 'Definitivo',
+    colorScheme: 'green',
+    classification: 'Estoque livre — Definitivo',
+    shortTitle: 'Estoque Livre Pós-Venda (Produto)',
+    definition: 'Depósito definido para estoque disponível.',
+    application: 'PRODUTO',
+    allowedCentros: ['B179', 'B180'],
+    channels: ['CD MG NACIONAL PÓS VENDA', 'CD MG IMPORT PÓS VENDA'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando um PRODUTO do Pós-Venda (B179/B180) não é localizado (vai para B112/B111) ou sofre avaria (B136/B149/B137).',
+    whenToUseAsDestination: 'Para disponibilizar PRODUTO acabado bom no estoque livre do Pós-Venda (centros B179 e B180).',
+  },
+
+  // 2. INVENTÁRIO E FALTAS IMEDIATAS (AMARELO TRANSITÓRIO & VERMELHO DEFINITIVO)
+  B111: {
+    code: 'B111',
+    category: 'inventario_falta_definitivo',
+    nature: 'Definitivo',
+    colorScheme: 'red',
+    classification: 'Falta de inventário de produto — Definitivo',
+    shortTitle: 'Falta de Inventário (Produto)',
+    definition: 'Depósito definido para faltas de inventário de produto acabado.',
+    application: 'PRODUTO',
+    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL E-COMMERCE',
+      'CD MG IMPORTADO E-COMMERCE',
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando um PRODUTO que estava baixado como falta em B111 é fisicamente localizado no CD e precisa retornar ao estoque livre do centro.',
+    whenToUseAsDestination: 'Quando um PRODUTO acabado não foi localizado no estoque e a falta de inventário é confirmada em caráter definitivo.',
+  },
+  B112: {
+    code: 'B112',
+    category: 'inventario_transitorio',
+    nature: 'Transitório',
+    colorScheme: 'yellow',
+    classification: 'Contagem de inventário de produto — Transitório',
+    shortTitle: 'Contagem Transitória (Produto)',
+    definition: 'Depósito transitório para contagem de inventário de produto acabado.',
+    application: 'PRODUTO',
+    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL E-COMMERCE',
+      'CD MG IMPORTADO E-COMMERCE',
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Após a contagem: se o produto foi encontrado, sai de B112 para o Estoque Livre; se confirmada a falta, vai de B112 para B111.',
+    whenToUseAsDestination: 'Quando um PRODUTO acabado não é localizado de forma imediata na separação/estoque e precisa ser bloqueado temporariamente para contagem.',
+  },
+  B152: {
+    code: 'B152',
+    category: 'inventario_falta_definitivo',
+    nature: 'Definitivo',
+    colorScheme: 'red',
+    classification: 'Falta de inventário de peças — Definitivo',
+    shortTitle: 'Falta de Inventário (Peças)',
+    definition: 'Depósito definido para faltas de inventário de peças.',
+    application: 'PEÇAS',
+    allowedCentros: ['B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Quando uma PEÇA que estava em falta (B152) é fisicamente localizada no CD e retorna para B130, B416 ou B412.',
+    whenToUseAsDestination: 'Quando uma PEÇA não é localizada nos centros B158, B159, B179 ou B180 e a falta de inventário é confirmada.',
+  },
+  B153: {
+    code: 'B153',
+    category: 'inventario_transitorio',
+    nature: 'Transitório',
+    colorScheme: 'yellow',
+    classification: 'Contagem de inventário de peças — Transitório',
+    shortTitle: 'Contagem Transitória (Peças)',
+    definition: 'Depósito transitório para contagem de inventário de peças.',
+    application: 'PEÇAS',
+    allowedCentros: ['B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Após a contagem da peça: se encontrada, retorna ao estoque livre de peças (B130/B412); se confirmada a falta, segue para B152.',
+    whenToUseAsDestination: 'Quando uma PEÇA não é localizada de imediato no endereço (centros B158, B159, B179, B180) e vai para apuração/contagem.',
+  },
+
+  // 3. AVARIA DE PRODUTO — DEFINITIVO (VERMELHO CRÍTICO — SAÍDA BLOQUEADA PARA LIVRE)
+  B136: {
+    code: 'B136',
+    category: 'avaria_definitivo',
+    nature: 'Definitivo',
+    colorScheme: 'red',
+    classification: 'Avaria de produto — Definitivo',
+    shortTitle: 'Sucata (Avaria Definitiva)',
+    definition: 'Depósito definido para avarias de produto (sucata).',
+    application: 'PEÇAS/PRODUTOS',
+    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL E-COMMERCE',
+      'CD MG IMPORTADO E-COMMERCE',
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: false,
+    whenToUseAsOrigin: '🚫 PROIBIDO SAIR PARA ESTOQUE LIVRE! Material em B136 já sofreu avaria grave (sucata) e nunca deve retornar como produto bom.',
+    whenToUseAsDestination: '✅ PERMITIDO: Quando uma peça ou produto sofre avaria irrecuperável e deve ser segregado para sucata (B136).',
+  },
+  B149: {
+    code: 'B149',
+    category: 'avaria_definitivo',
+    nature: 'Definitivo',
+    colorScheme: 'red',
+    classification: 'Avaria de produto — Definitivo',
+    shortTitle: 'Outlet (Embalagem Retrabalhada)',
+    definition: 'Depósito definido para avaria de embalagem retrabalhadas. (outlet)',
+    application: 'PRODUTO',
+    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL E-COMMERCE',
+      'CD MG IMPORTADO E-COMMERCE',
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: false,
+    whenToUseAsOrigin: '🚫 PROIBIDO SAIR PARA ESTOQUE LIVRE! Produtos em B149 têm embalagem retrabalhada e venda direcionada (Outlet).',
+    whenToUseAsDestination: '✅ PERMITIDO: Quando um produto teve avaria de embalagem retrabalhada e vai para o estoque Outlet (B149).',
+  },
+  B137: {
+    code: 'B137',
+    category: 'avaria_definitivo',
+    nature: 'Definitivo',
+    colorScheme: 'red',
+    classification: 'Avaria de produto — Definitivo',
+    shortTitle: 'Slow Movers (Venda Especial)',
+    definition: 'Depósito definido para avaria de produtos disponíveis para venda especial. (Slow Movers)',
+    application: 'PRODUTO',
+    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
+    channels: [
+      'CD MG NACIONAL E-COMMERCE',
+      'CD MG IMPORTADO E-COMMERCE',
+      'CD MG NACIONAL LOJAS MIDEA CARRIER',
+      'CD MG IMPORT. LOJAS MIDEA CARRIER',
+      'CD MG NACIONAL PÓS VENDA',
+      'CD MG IMPORT PÓS VENDA',
+    ],
+    canBeOriginToFreeStock: false,
+    whenToUseAsOrigin: '🚫 PROIBIDO SAIR PARA ESTOQUE LIVRE! Produtos em B137 possuem tratativa comercial específica para clientes especiais.',
+    whenToUseAsDestination: '✅ PERMITIDO: Quando o produto avariado é destinado à venda especial Slow Movers (B137).',
+  },
+
+  // 4. DEPÓSITO OPERACIONAL DE RECEBIMENTO / TRIAGEM (USADO NA OPERAÇÃO)
+  B148: {
+    code: 'B148',
+    category: 'operacional',
+    nature: 'Transitório',
+    colorScheme: 'yellow',
+    classification: 'Depósito Operacional / Triagem',
+    shortTitle: 'Triagem / Operacional',
+    definition: 'Depósito operacional de triagem/qualidade antes da liberação para o estoque livre.',
+    application: 'PEÇAS/PRODUTOS',
+    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
+    channels: ['TODOS OS CANAIS CD MG'],
+    canBeOriginToFreeStock: true,
+    whenToUseAsOrigin: 'Transferência habitual de liberação de mercadoria de B148 para o depósito de Estoque Livre do respectivo centro.',
+    whenToUseAsDestination: 'Quando o material precisa retornar ao depósito operacional B148 para conferência.',
+  },
+};
+
 export interface DefinitiveDamageDepositInfo {
   code: 'B136' | 'B149' | 'B137';
   classification: string;
@@ -61,6 +444,112 @@ export function checkDefinitiveDamageOrigin(
     destinationInfo,
   };
 }
+
+export interface RouteIntelligenceAnalysis {
+  centroInfo?: SAPCentroInfo;
+  originDeposit?: SAPDepositInfo;
+  destinationDeposit?: SAPDepositInfo;
+  isDefinitiveDamageOrigin: boolean;
+  hasCenterMismatch: boolean;
+  hasApplicationMismatch: boolean;
+  warnings: string[];
+  routeExplanation: string;
+  recommendedFreeDeposit?: string;
+}
+
+/**
+ * Analisa de forma inteligente toda a combinação Centro + Depósito Origem + Depósito Destino
+ * com base nas 3 tabelas oficiais (Estoque Livre, Inventário/Faltas e Avarias Definitivas).
+ */
+export function analyzeTransferRoute(
+  centro?: string,
+  depositoOrigem?: string,
+  depositoDestino?: string
+): RouteIntelligenceAnalysis {
+  const c = (centro || '').trim().toUpperCase();
+  const orig = (depositoOrigem || '').trim().toUpperCase();
+  const dest = (depositoDestino || '').trim().toUpperCase();
+
+  const centroInfo = SAP_CENTROS_CATALOG[c];
+  const originDeposit = SAP_DEPOSITOS_CATALOG[orig];
+  const destinationDeposit = SAP_DEPOSITOS_CATALOG[dest];
+
+  const warnings: string[] = [];
+  let hasCenterMismatch = false;
+  let hasApplicationMismatch = false;
+
+  const isDefinitiveDamageOrigin = Boolean(DEFINITIVE_DAMAGE_DEPOSITS[orig] && orig !== dest);
+
+  // 1. Checa se o Depósito de Origem pertence ao Centro informado
+  if (c && originDeposit && !originDeposit.allowedCentros.includes(c)) {
+    hasCenterMismatch = true;
+    warnings.push(
+      `O depósito de origem ${orig} (${originDeposit.shortTitle}) só é utilizado nos centros ${originDeposit.allowedCentros.join(', ')}, não no centro ${c}.`
+    );
+  }
+
+  // 2. Checa se o Depósito de Destino pertence ao Centro informado
+  if (c && destinationDeposit && !destinationDeposit.allowedCentros.includes(c)) {
+    hasCenterMismatch = true;
+    const suggestion = centroInfo
+      ? `No centro ${c} (${centroInfo.channelName}), o Estoque Livre de Produto é ${centroInfo.freeStockProductDeposit}${
+          centroInfo.freeStockPartsDeposit ? ` e de Peças é ${centroInfo.freeStockPartsDeposit}` : ''
+        }.`
+      : '';
+    warnings.push(
+      `O depósito de destino ${dest} (${destinationDeposit.shortTitle}) pertence aos centros ${destinationDeposit.allowedCentros.join(', ')} (atual: ${c}). ${suggestion}`
+    );
+  }
+
+  // 3. Checa incompatibilidade entre PEÇAS vs PRODUTO
+  if (
+    originDeposit &&
+    destinationDeposit &&
+    originDeposit.application !== 'PEÇAS/PRODUTOS' &&
+    destinationDeposit.application !== 'PEÇAS/PRODUTOS' &&
+    originDeposit.application !== destinationDeposit.application
+  ) {
+    hasApplicationMismatch = true;
+    warnings.push(
+      `Atenção: Mistura de tipo de material! Origem ${orig} é exclusivo para ${originDeposit.application}, enquanto Destino ${dest} é exclusivo para ${destinationDeposit.application}.`
+    );
+  }
+
+  // 4. Monta explicação didática da operação
+  let routeExplanation = '';
+  if (isDefinitiveDamageOrigin && originDeposit) {
+    routeExplanation = `🚫 Solicitação Incorreta: Saída de ${orig} (${originDeposit.shortTitle} — Avaria Definitiva). Material avariado não deve voltar ao estoque livre.`;
+  } else if (destinationDeposit?.category === 'avaria_definitivo') {
+    routeExplanation = `✅ Segregação para Avaria Definitiva (${dest} — ${destinationDeposit.shortTitle}).`;
+  } else if (destinationDeposit?.category === 'inventario_transitorio') {
+    routeExplanation = `🟡 Bloqueio Transitório p/ Contagem (${dest}): Item (${destinationDeposit.application}) não localizado de imediato no endereço.`;
+  } else if (destinationDeposit?.category === 'inventario_falta_definitivo') {
+    routeExplanation = `🔴 Baixa p/ Falta de Inventário Definitiva (${dest}): Falta confirmada de ${destinationDeposit.application.toLowerCase()}.`;
+  } else if (
+    (originDeposit?.category === 'inventario_transitorio' ||
+      originDeposit?.category === 'inventario_falta_definitivo') &&
+    (destinationDeposit?.category === 'estoque_livre' || destinationDeposit?.category === 'blue_service')
+  ) {
+    routeExplanation = `🟢 Recuperação de Estoque: Item localizado fisicamente saindo de ${orig} (${originDeposit.shortTitle}) para ${dest} (${destinationDeposit.shortTitle}).`;
+  } else if (destinationDeposit?.category === 'estoque_livre') {
+    routeExplanation = `🟢 Liberação para Estoque Livre (${dest} — ${destinationDeposit.application} disponível para venda).`;
+  } else if (destinationDeposit?.category === 'blue_service') {
+    routeExplanation = `🔵 Liberação para Estoque Blue Service (${dest} — Venda de Garantia de Peças nas Lojas).`;
+  }
+
+  return {
+    centroInfo,
+    originDeposit,
+    destinationDeposit,
+    isDefinitiveDamageOrigin,
+    hasCenterMismatch,
+    hasApplicationMismatch,
+    warnings,
+    routeExplanation,
+    recommendedFreeDeposit: centroInfo?.freeStockProductDeposit,
+  };
+}
+
 
 
 /**

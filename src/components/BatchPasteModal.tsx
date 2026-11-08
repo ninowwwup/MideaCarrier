@@ -10,7 +10,7 @@ import {
   User
 } from 'lucide-react';
 import { TransferItem } from '../types/transfer';
-import { parsePastedTable, checkDefinitiveDamageOrigin } from '../utils/sapFormatter';
+import { parsePastedTable, checkDefinitiveDamageOrigin, analyzeTransferRoute } from '../utils/sapFormatter';
 import { BROWSER_CLIENT_ID } from '../services/storage';
 import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
 
@@ -248,13 +248,17 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                     <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
                       {parsedRows.map((r, i) => {
                         const rowCheck = checkDefinitiveDamageOrigin(r.depositoOrigem, r.depositoDestino);
+                        const routeAnalysis = analyzeTransferRoute(r.centro, r.depositoOrigem, r.depositoDestino);
                         const isRowInvalid = rowCheck.isInvalidOrigin;
+                        const hasWarning = !isRowInvalid && (routeAnalysis.hasCenterMismatch || routeAnalysis.hasTargetMismatch);
                         return (
                           <tr
                             key={i}
                             className={
                               isRowInvalid
                                 ? 'bg-red-100 text-red-950 font-semibold hover:bg-red-200/70'
+                                : hasWarning
+                                ? 'bg-amber-50/90 text-amber-950 hover:bg-amber-100/70'
                                 : 'hover:bg-blue-50/40'
                             }
                           >
@@ -288,27 +292,46 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                                   {r.depositoOrigem.toUpperCase()}
                                 </span>
                               ) : (
-                                <span className="text-amber-700">{r.depositoOrigem}</span>
+                                <span className="text-amber-700" title={routeAnalysis.origemInfo?.title}>
+                                  {r.depositoOrigem}
+                                  {routeAnalysis.origemInfo && (
+                                    <span className="ml-1 text-[9px] text-slate-400 font-sans">
+                                      ({routeAnalysis.origemInfo.shortBadge})
+                                    </span>
+                                  )}
+                                </span>
                               )}
                             </td>
                             <td
                               className={`py-1.5 px-3 ${
                                 isRowInvalid ? 'text-red-950 font-bold' : 'text-emerald-700'
                               }`}
+                              title={routeAnalysis.destinoInfo?.title}
                             >
                               {r.depositoDestino}
+                              {routeAnalysis.destinoInfo && !isRowInvalid && (
+                                <span className="ml-1 text-[9px] text-slate-400 font-sans">
+                                  ({routeAnalysis.destinoInfo.shortBadge})
+                                </span>
+                              )}
                             </td>
                             <td className="py-1.5 px-3 font-sans">
                               {isRowInvalid && rowCheck.originInfo ? (
                                 <span className="text-red-800 font-extrabold">
                                   🚫 ERRO: {rowCheck.originInfo.code} ({rowCheck.originInfo.shortTitle}) não pode ir para estoque livre!
                                 </span>
+                              ) : hasWarning ? (
+                                <span className="text-amber-800 font-bold" title={routeAnalysis.explanation}>
+                                  ⚠️ {routeAnalysis.explanation}
+                                </span>
                               ) : rowCheck.isValidDestination && rowCheck.destinationInfo ? (
                                 <span className="text-emerald-700 font-semibold">
                                   ✅ OK (Destino Avaria é permitido)
                                 </span>
                               ) : (
-                                <span className="text-emerald-700 font-medium">✅ OK</span>
+                                <span className="text-emerald-700 font-medium">
+                                  ✅ {routeAnalysis.explanation || 'Rota SAP Válida'}
+                                </span>
                               )}
                             </td>
                             <td

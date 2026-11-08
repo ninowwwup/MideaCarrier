@@ -174,3 +174,4 @@ export const DefinitiveDamageWarningModal: React.FC<DefinitiveDamageWarningModal
     </div>
   );
 };
+

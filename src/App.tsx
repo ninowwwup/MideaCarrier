@@ -25,7 +25,8 @@ import {
 } from './components/DatabaseDiagnosticModal';
 import { LoginModal } from './components/LoginModal';
 import { SoundSelectorModal } from './components/SoundSelectorModal';
-import { Check, X } from 'lucide-react';
+import { DepositsGuideTab } from './components/DepositsGuideTab';
+import { Check, X, Compass, ClipboardList } from 'lucide-react';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -89,7 +90,13 @@ export default function App() {
   const [isAudioActive, setIsAudioActive] = useState<boolean>(() => isAudioReady());
   const titleIntervalRef = useRef<any>(null);
 
-  // Modais Operacionais
+  // Modais Operacionais e Abas Principais
+  const [activeMainTab, setActiveMainTab] = useState<'operacao' | 'guia_depositos'>('operacao');
+  const [newRequestPreset, setNewRequestPreset] = useState<{
+    centro: string;
+    depositoOrigem: string;
+    depositoDestino: string;
+  } | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
@@ -527,7 +534,10 @@ export default function App() {
       <Header
         currentRole={currentRole}
         onSelectRole={setCurrentRole}
-        onOpenNewModal={() => setIsNewModalOpen(true)}
+        onOpenNewModal={() => {
+          setNewRequestPreset(null);
+          setIsNewModalOpen(true);
+        }}
         onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
         onExportCSV={handleExportCSV}
         totalPending={kpis.pendentes}
@@ -549,56 +559,126 @@ export default function App() {
         onOpenDatabaseDiagnostic={() => setIsDiagnosticOpen(true)}
         currentUser={currentUser}
         onLogout={handleLogout}
+        activeMainTab={activeMainTab}
+        onSelectMainTab={setActiveMainTab}
       />
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-6 relative z-10">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-5 relative z-10">
+        {/* Barra de Abas Principais: Fila de Solicitações vs Guia Interativo de Depósitos SAP */}
+        <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/15 backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-1">
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('operacao')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
+                activeMainTab === 'operacao'
+                  ? 'bg-white text-[#002664] shadow-md'
+                  : 'text-white/90 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <ClipboardList className={`w-4 h-4 ${activeMainTab === 'operacao' ? 'text-[#00609C]' : 'text-cyan-200'}`} />
+              <span>Fila de Solicitações & Operação SAP</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  activeMainTab === 'operacao'
+                    ? 'bg-blue-100 text-[#002664]'
+                    : 'bg-white/20 text-white'
+                }`}
+              >
+                {items.length}
+              </span>
+            </button>
 
-        {/* Dashboard de Indicadores Glassmorphism (FIFO, SLA, Concluídos, Divergências) */}
-        <KPIDashboard
-          stats={kpis}
-          activeStatusFilter={filters.status}
-          onFilterByStatus={(st) => setFilters({ ...filters, status: st })}
-        />
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('guia_depositos')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
+                activeMainTab === 'guia_depositos'
+                  ? 'bg-white text-[#002664] shadow-md'
+                  : 'text-white/90 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Compass className={`w-4 h-4 ${activeMainTab === 'guia_depositos' ? 'text-emerald-600' : 'text-amber-300'}`} />
+              <span>Guia Interativo de Depósitos & Regras SAP</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-400/90 text-slate-950 shadow-2xs">
+                Time Buiatte & Midea
+              </span>
+            </button>
+          </div>
 
-        {/* Tabela Operacional de Movimentações (AppSheet Responsive Grid) */}
-        <TransferTable
-          items={items}
-          currentRole={currentRole}
-          filters={filters}
-          onFilterChange={setFilters}
-          onOpenSAPModal={(selected) => setSapModalItems(selected)}
-          onOpenResolutionModal={(selected, mode) =>
-            setResolutionData({ items: selected, mode })
-          }
-          onUpdateStatusSingle={handleUpdateStatusSingle}
-          onBatchUpdateStatus={async (ids, newStatus) => {
-            const now = new Date().toISOString();
-            const affectedItems: TransferItem[] = [];
-            const updater = currentUser?.teamName || (currentUser?.role === 'buiatte' ? 'Time Buiatte (Prod)' : 'Time Midea (SAP)');
-            const updated = items.map((item) => {
-              if (ids.includes(item.id)) {
-                const up: TransferItem = {
-                  ...item,
-                  status: newStatus,
-                  atualizadoEm: now,
-                  atualizadoPor: updater,
-                };
-                affectedItems.push(up);
-                return up;
+          <div className="hidden xl:flex items-center gap-2 pr-3 text-[11px] text-white/90 font-medium">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/25 border border-emerald-300/40 text-emerald-100">
+              🟢 Livre & Blue Service
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/25 border border-amber-300/40 text-amber-100">
+              🟡 Contagem (B112/B153)
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/30 border border-rose-300/40 text-rose-100">
+              🔴 Falta (B111/B152) & Avarias (B136/B149/B137)
+            </span>
+          </div>
+        </div>
+
+        {activeMainTab === 'guia_depositos' ? (
+          <DepositsGuideTab
+            onOpenNewRequestWithPreset={(preset) => {
+              setNewRequestPreset(preset);
+              setIsNewModalOpen(true);
+            }}
+          />
+        ) : (
+          <>
+            {/* Dashboard de Indicadores Glassmorphism (FIFO, SLA, Concluídos, Divergências) */}
+            <KPIDashboard
+              stats={kpis}
+              activeStatusFilter={filters.status}
+              onFilterByStatus={(st) => setFilters({ ...filters, status: st })}
+            />
+
+            {/* Tabela Operacional de Movimentações (AppSheet Responsive Grid) */}
+            <TransferTable
+              items={items}
+              currentRole={currentRole}
+              filters={filters}
+              onFilterChange={setFilters}
+              onOpenSAPModal={(selected) => setSapModalItems(selected)}
+              onOpenResolutionModal={(selected, mode) =>
+                setResolutionData({ items: selected, mode })
               }
-              return item;
-            });
-            setItems(updated);
-            setSelectionResetKey((prev) => prev + 1);
-            await updateSpecificTransferItems(affectedItems, updated);
-          }}
-          selectionResetKey={selectionResetKey}
-          onAttachLabelPhoto={handleAttachLabelPhoto}
-          onOpenNewModal={() => setIsNewModalOpen(true)}
-          onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
-          onDeleteSelected={handleDeleteSelected}
-        />
+              onUpdateStatusSingle={handleUpdateStatusSingle}
+              onBatchUpdateStatus={async (ids, newStatus) => {
+                const now = new Date().toISOString();
+                const affectedItems: TransferItem[] = [];
+                const updater = currentUser?.teamName || (currentUser?.role === 'buiatte' ? 'Time Buiatte (Prod)' : 'Time Midea (SAP)');
+                const updated = items.map((item) => {
+                  if (ids.includes(item.id)) {
+                    const up: TransferItem = {
+                      ...item,
+                      status: newStatus,
+                      atualizadoEm: now,
+                      atualizadoPor: updater,
+                    };
+                    affectedItems.push(up);
+                    return up;
+                  }
+                  return item;
+                });
+                setItems(updated);
+                setSelectionResetKey((prev) => prev + 1);
+                await updateSpecificTransferItems(affectedItems, updated);
+              }}
+              selectionResetKey={selectionResetKey}
+              onAttachLabelPhoto={handleAttachLabelPhoto}
+              onOpenNewModal={() => {
+                setNewRequestPreset(null);
+                setIsNewModalOpen(true);
+              }}
+              onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
+              onDeleteSelected={handleDeleteSelected}
+            />
+          </>
+        )}
       </main>
 
       {/* Rodapé Corporativo com Estilo Glassmorphism */}
@@ -637,12 +717,17 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
       />
 
-      {/* Modal de Nova Solicitação (com Múltiplos Seriais) */}
+      {/* Modal de Nova Solicitação (com Múltiplos Seriais e Inteligência de Rota SAP) */}
       <NewRequestModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
-        onSubmit={handleCreateRequest}
+        onSubmit={(input) => {
+          handleCreateRequest(input);
+          setActiveMainTab('operacao');
+        }}
         defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
+        initialPreset={newRequestPreset}
+        onOpenDepositsGuide={() => setActiveMainTab('guia_depositos')}
       />
 
       {/* Modal de Importação em Lote (Colar Tabela Excel/WhatsApp) */}
