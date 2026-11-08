@@ -24,6 +24,7 @@ import {
 import { TeamRole } from '../types/transfer';
 import { AuthUser } from '../types/auth';
 import { PWAInstallButton } from './PWAInstallButton';
+import { MigouLogo } from './MigouLogo';
 import { AlertSoundType, ALERT_SOUND_OPTIONS, getSavedAlertSound } from '../utils/audioAlert';
 
 interface HeaderProps {
@@ -91,21 +92,23 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Navbar */}
       <div className="max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6">
         <div className="flex items-center justify-between py-3 gap-3">
-          {/* Logo & Brand Identity */}
+          {/* Logo & Brand Identity com o Passarinho Azul Oficial */}
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-white/20 border border-white/35 backdrop-blur-md flex items-center justify-center text-white shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
-              <Boxes className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-            </div>
+            <MigouLogo
+              size="md"
+              animated
+              onClick={() => onSelectMainTab && onSelectMainTab('operacao')}
+            />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-xl sm:text-2xl tracking-tight text-white drop-shadow-sm">
                   MIGOU
                 </span>
-                <span className="text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 backdrop-blur-md shadow-xs">
+                <span className="text-[10px] font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-cyan-300/90 to-sky-400/90 text-slate-950 border border-white/40 shadow-xs">
                   SAP MIGO
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-white/80 font-normal hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-cyan-50/85 font-medium hidden sm:block">
                 Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea
               </p>
             </div>

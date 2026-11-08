@@ -26,6 +26,7 @@ import {
 import { LoginModal } from './components/LoginModal';
 import { SoundSelectorModal } from './components/SoundSelectorModal';
 import { DepositsGuideTab } from './components/DepositsGuideTab';
+import { MigouLogo } from './components/MigouLogo';
 import { Check, X, Compass, ClipboardList } from 'lucide-react';
 import { 
   TransferItem, 
@@ -566,7 +567,7 @@ export default function App() {
       {/* Conteúdo Principal com Camadas Frosted Glass */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-5 relative z-10">
         {/* Barra de Abas Principais: Fila de Solicitações vs Guia Interativo de Depósitos SAP */}
-        <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/15 backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
+        <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 figma-dark-pill backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-1">
             <button
               type="button"
@@ -681,10 +682,11 @@ export default function App() {
         )}
       </main>
 
-      {/* Rodapé Corporativo com Estilo Glassmorphism */}
-      <footer className="bg-slate-950/25 backdrop-blur-xl text-white border-t border-white/15 py-4 text-xs relative z-10">
+      {/* Rodapé Corporativo com Estilo Glassmorphism e Passarinho Azul */}
+      <footer className="bg-slate-950/35 backdrop-blur-xl text-white border-t border-white/15 py-4 text-xs relative z-10">
         <div className="max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <MigouLogo size="sm" animated={false} />
             <span className="font-extrabold text-[#C2DEEB] tracking-wide">MIGOU</span>
             <span>•</span>
             <span className="text-white/80">Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea</span>

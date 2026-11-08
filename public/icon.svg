@@ -1,32 +1,87 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="mideaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00609C"/>
-      <stop offset="50%" stop-color="#0083CA"/>
-      <stop offset="100%" stop-color="#00A3E0"/>
+    <!-- Deep Midea Carrier Navy to Cyan Squircle Gradient -->
+    <linearGradient id="bgSquircle" x1="32" y1="24" x2="480" y2="488" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#001E54"/>
+      <stop offset="45%" stop-color="#004A8F"/>
+      <stop offset="100%" stop-color="#0083CA"/>
     </linearGradient>
-    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#E2E8F0"/>
+
+    <!-- Ambient Cyan Aurora Glow inside Squircle -->
+    <radialGradient id="auroraGlow" cx="380" cy="120" r="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#249ED5" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#002664" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Bluebird Body Gradient -->
+    <linearGradient id="birdBody" x1="120" y1="120" x2="390" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7DD3FC"/>
+      <stop offset="45%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
     </linearGradient>
+
+    <!-- Bluebird Wing Gradient (Luminous White-Sky to Cyan) -->
+    <linearGradient id="birdWing" x1="165" y1="155" x2="335" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="55%" stop-color="#E0F2FE"/>
+      <stop offset="100%" stop-color="#7DD3FC"/>
+    </linearGradient>
+
+    <!-- Breast / Belly Highlight -->
+    <linearGradient id="birdBreast" x1="250" y1="230" x2="380" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#BAE6FD" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <!-- Golden Beak Gradient -->
+    <linearGradient id="beakGrad" x1="375" y1="175" x2="440" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+
+    <!-- Soft Drop Shadow for Bird -->
+    <filter id="birdShadow" x="50" y="60" width="420" height="400" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#001133" flood-opacity="0.42"/>
+    </filter>
   </defs>
-  <!-- Background rounded squircle with safe zone -->
-  <rect width="512" height="512" rx="112" fill="url(#mideaGrad)"/>
-  
-  <!-- Central Icon: Warehouse Transfer / SAP Hub -->
-  <g transform="translate(64, 64) scale(0.75)" stroke="#ffffff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <!-- Top Box -->
-    <path d="M256 64 L384 138 L256 212 L128 138 Z" fill="url(#boxGrad)" fill-opacity="0.95" stroke="#00609C" stroke-width="16"/>
-    <!-- Box Bottom Left -->
-    <path d="M128 138 L128 276 L256 350 L256 212 Z" fill="#CBD5E1" stroke="#00609C" stroke-width="16"/>
-    <!-- Box Bottom Right -->
-    <path d="M256 212 L256 350 L384 276 L384 138 Z" fill="#F1F5F9" stroke="#00609C" stroke-width="16"/>
-    
-    <!-- Arrows representing transfer / movement -->
-    <path d="M96 384 L416 384" stroke="#ffffff" stroke-width="28"/>
-    <path d="M356 334 L416 384 L356 434" stroke="#ffffff" stroke-width="28"/>
-    
-    <path d="M416 450 L96 450" stroke="#38BDF8" stroke-width="28"/>
-    <path d="M156 500 L96 450 L156 400" stroke="#38BDF8" stroke-width="28"/>
+
+  <!-- Squircle Base -->
+  <rect x="16" y="16" width="480" height="480" rx="116" fill="url(#bgSquircle)"/>
+  <rect x="16" y="16" width="480" height="480" rx="116" fill="url(#auroraGlow)"/>
+  <!-- Inner 3D Specular Border -->
+  <rect x="20" y="20" width="472" height="472" rx="112" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="6"/>
+
+  <!-- Subtle Isometric SAP Logistics Hexagon Grid in Background -->
+  <path d="M256 66 L412 156 L412 336 L256 426 L100 336 L100 156 Z" stroke="#7DD3FC" stroke-opacity="0.14" stroke-width="5" stroke-dasharray="10 10"/>
+
+  <!-- Acoustic Chime / Bird Song Waves (Top Right) -->
+  <path d="M418 148 A 38 38 0 0 1 446 184" stroke="#7DD3FC" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <path d="M432 122 A 68 68 0 0 1 474 182" stroke="#FDE047" stroke-width="8" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Main Bluebird Vector Emblem -->
+  <g filter="url(#birdShadow)">
+    <!-- Tail Feathers (Dynamic Logistics Arrow / Swift Tail) -->
+    <path d="M148 312 L74 358 L112 292 L78 268 L156 274 Z" fill="#0284C7"/>
+
+    <!-- Golden Beak -->
+    <path d="M380 176 L438 190 L384 214 Z" fill="url(#beakGrad)"/>
+
+    <!-- Main Bird Silhouette (Head, Back, Rounded Belly) -->
+    <path d="M324 128 C362 128 392 156 392 194 C392 212 384 228 374 240 C392 276 382 328 344 358 C302 392 232 394 176 358 C142 336 126 302 132 270 C190 278 238 242 262 186 C276 150 296 128 324 128 Z" fill="url(#birdBody)"/>
+
+    <!-- Luminous White/Sky Belly Accent -->
+    <path d="M374 240 C392 276 382 328 344 358 C308 386 254 390 204 370 C258 360 308 324 328 272 C338 248 358 240 374 240 Z" fill="url(#birdBreast)"/>
+
+    <!-- Sweeping Uplifted Wing (Symbolizing Speed & Transfer Flow) -->
+    <path d="M236 226 C182 192 142 136 136 88 C196 102 256 142 292 198 C312 228 310 272 280 298 C248 326 194 324 156 298 C196 298 234 276 244 248 C248 238 244 232 236 226 Z" fill="url(#birdWing)"/>
+
+    <!-- Expressive Eye with Specular Glint -->
+    <circle cx="348" cy="180" r="14" fill="#001E54"/>
+    <circle cx="353" cy="175" r="5" fill="#FFFFFF"/>
   </g>
+
+  <!-- SAP Transfer Orbit Arc at Bottom -->
+  <path d="M132 414 C204 452 316 452 384 410" stroke="#38BDF8" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+  <path d="M366 396 L392 406 L378 430" stroke="#38BDF8" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
