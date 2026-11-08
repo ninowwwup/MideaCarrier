@@ -84,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="bg-white/10 backdrop-blur-2xl border-b border-white/20 sticky top-0 z-30 shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all">
       {/* Top Navbar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6">
         <div className="flex items-center justify-between py-3 gap-3">
           {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3">
@@ -446,8 +446,8 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* HERO ACTION BAR: Translucent Glass Integrado ao Gradiente */}
-      <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-4 sm:px-6 lg:px-8 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-2 sm:px-4 lg:px-6 py-2.5">
+        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Info & Auto-limpeza status */}
           <div className="flex items-center gap-2.5 text-xs text-white/90 text-center sm:text-left font-medium">
             <span className="p-1 rounded-lg bg-white/15 border border-white/25 backdrop-blur-sm hidden sm:inline-block">

@@ -64,21 +64,50 @@ export type ColumnKey =
   | 'solicitante'
   | 'acoes';
 
+const COLUMN_ORDER: ColumnKey[] = [
+  'select',
+  'fifo',
+  'material',
+  'serial',
+  'centro',
+  'rota',
+  'status',
+  'foto',
+  'docSap',
+  'solicitante',
+  'acoes',
+];
+
+// Pesos percentuais que somam exatamente 100% para caber 100% dentro da grid sem cortar nada
 const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
-  select: 38,
-  fifo: 50,
-  material: 130,
-  serial: 175,
-  centro: 75,
-  rota: 150,
-  status: 125,
-  foto: 95,
-  docSap: 155,
-  solicitante: 125,
-  acoes: 110,
+  select: 2.8,
+  fifo: 3.8,
+  material: 10.5,
+  serial: 15.5,
+  centro: 5.2,
+  rota: 11.2,
+  status: 9.5,
+  foto: 6.0,
+  docSap: 14.0,
+  solicitante: 12.0,
+  acoes: 9.5,
 };
 
-const STORAGE_WIDTHS_KEY = 'migou_column_widths_v2';
+const MIN_COLUMN_WIDTHS: Record<ColumnKey, number> = {
+  select: 2.2,
+  fifo: 3.0,
+  material: 6.0,
+  serial: 8.0,
+  centro: 4.0,
+  rota: 7.0,
+  status: 6.5,
+  foto: 4.5,
+  docSap: 7.0,
+  solicitante: 6.5,
+  acoes: 6.5,
+};
+
+const STORAGE_WIDTHS_KEY = 'migou_column_weights_v3';
 
 export const TransferTable: React.FC<TransferTableProps> = ({
   items,
@@ -109,22 +138,30 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   const [itemToDeleteSingle, setItemToDeleteSingle] = useState<TransferItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Colunas redimensionáveis estilo AppSheet
+  // Colunas proporcionais redimensionáveis que mantêm 100% da largura da grid sem estourar
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_WIDTHS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { ...DEFAULT_COLUMN_WIDTHS, ...parsed };
+        const total = COLUMN_ORDER.reduce((acc, k) => acc + (Number(parsed[k]) || 0), 0);
+        if (total >= 98 && total <= 102) {
+          return { ...DEFAULT_COLUMN_WIDTHS, ...parsed };
+        }
       }
     } catch (e) {}
     return DEFAULT_COLUMN_WIDTHS;
   });
 
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const justResizedRef = useRef(false);
   const resizingRef = useRef<{
     colKey: ColumnKey;
+    neighborKey: ColumnKey;
     startX: number;
-    startWidth: number;
+    tableWidth: number;
+    startColWidth: number;
+    startNeighborWidth: number;
   } | null>(null);
 
   // Listas para filtros dinâmicos
@@ -132,8 +169,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   const allDepsOrigem = useMemo(() => Array.from(new Set(items.map((i) => i.depositoOrigem))).sort(), [items]);
   const allDepsDestino = useMemo(() => Array.from(new Set(items.map((i) => i.depositoDestino))).sort(), [items]);
 
-  // Função para alternar ordenação ao clicar no cabeçalho
+  // Função para alternar ordenação ao clicar no cabeçalho (bloqueada durante redimensionamento)
   const handleSort = (field: SortField) => {
+    if (justResizedRef.current) return;
     setSortConfig((prev) => {
       if (prev.field === field) {
         if (prev.direction === 'asc') {
@@ -357,24 +395,56 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     setTimeout(() => setCopiedBatchNotice(false), 2500);
   };
 
-  // Drag para redimensionamento de colunas (estilo AppSheet)
+  // Drag para redimensionamento balanceado entre colunas vizinhas (mantém 100% da grid sem bugs ou saltos)
   const handleStartResize = (e: React.MouseEvent, colKey: ColumnKey) => {
     e.preventDefault();
     e.stopPropagation();
+
+    const colIdx = COLUMN_ORDER.indexOf(colKey);
+    const neighborKey = colIdx >= 0 && colIdx < COLUMN_ORDER.length - 1
+      ? COLUMN_ORDER[colIdx + 1]
+      : COLUMN_ORDER[colIdx - 1];
+
+    if (!neighborKey) return;
+
+    const tableWidth = tableRef.current?.getBoundingClientRect().width || 1200;
+    justResizedRef.current = true;
+
     resizingRef.current = {
       colKey,
+      neighborKey,
       startX: e.clientX,
-      startWidth: columnWidths[colKey],
+      tableWidth,
+      startColWidth: columnWidths[colKey],
+      startNeighborWidth: columnWidths[neighborKey],
     };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizingRef.current) return;
-      const delta = moveEvent.clientX - resizingRef.current.startX;
-      const newWidth = Math.max(35, resizingRef.current.startWidth + delta);
-      setColumnWidths((prev) => {
-        const next = { ...prev, [resizingRef.current!.colKey]: newWidth };
-        return next;
-      });
+      const {
+        colKey: cKey,
+        neighborKey: nKey,
+        startX,
+        tableWidth: tWidth,
+        startColWidth,
+        startNeighborWidth,
+      } = resizingRef.current;
+
+      const deltaPixels = moveEvent.clientX - startX;
+      const deltaPct = (deltaPixels / tWidth) * 100;
+
+      const minDelta = MIN_COLUMN_WIDTHS[cKey] - startColWidth;
+      const maxDelta = startNeighborWidth - MIN_COLUMN_WIDTHS[nKey];
+      const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaPct));
+
+      const nextColWidth = Number((startColWidth + clampedDelta).toFixed(2));
+      const nextNeighborWidth = Number((startNeighborWidth - clampedDelta).toFixed(2));
+
+      setColumnWidths((prev) => ({
+        ...prev,
+        [cKey]: nextColWidth,
+        [nKey]: nextNeighborWidth,
+      }));
     };
 
     const handleMouseUp = () => {
@@ -387,21 +457,29 @@ export const TransferTable: React.FC<TransferTableProps> = ({
         } catch (e) {}
         return current;
       });
+      setTimeout(() => {
+        justResizedRef.current = false;
+      }, 150);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleResetSingleCol = (colKey: ColumnKey) => {
-    setColumnWidths((prev) => {
-      const next = { ...prev, [colKey]: DEFAULT_COLUMN_WIDTHS[colKey] };
-      try {
-        localStorage.setItem(STORAGE_WIDTHS_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
+  const handleResetAllCols = () => {
+    setColumnWidths(DEFAULT_COLUMN_WIDTHS);
+    try {
+      localStorage.removeItem(STORAGE_WIDTHS_KEY);
+    } catch (e) {}
   };
+
+  const handleResetSingleCol = (_colKey: ColumnKey) => {
+    handleResetAllCols();
+  };
+
+  const isCustomColumnWidths = useMemo(() => {
+    return COLUMN_ORDER.some((k) => Math.abs(columnWidths[k] - DEFAULT_COLUMN_WIDTHS[k]) > 0.25);
+  }, [columnWidths]);
 
   const handleDirectAttachPhoto = async (itemId: string, file: File) => {
     if (!file || !onAttachLabelPhoto) return;
@@ -542,6 +620,19 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     ? 'Solicitação com Flag de Avaria Definitiva'
                     : 'Solicitações com Flag de Avaria Definitiva'}
                 </span>
+              )}
+
+              {/* Botão para Restaurar Largura Padrão das Colunas */}
+              {isCustomColumnWidths && (
+                <button
+                  type="button"
+                  onClick={handleResetAllCols}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+                  title="Restaurar tamanho equilibrado de todas as colunas da tabela"
+                >
+                  <RotateCcw className="w-3 h-3 text-[#00609C]" />
+                  <span>Ajustar Colunas</span>
+                </button>
               )}
 
               {/* Limpar Filtros */}
@@ -943,16 +1034,18 @@ export const TransferTable: React.FC<TransferTableProps> = ({
           )}
         </div>
 
-        {/* 2. VISÃO DESKTOP (TABELA COM COLUNAS REDIMENSIONÁVEIS ESTILO APPSHEET) */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse table-fixed">
-            <thead className="bg-slate-100/90 backdrop-blur-md text-slate-600 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-200">
+        {/* 2. VISÃO DESKTOP (TABELA 100% RESPONSIVA DENTRO DA GRID COM REDIMENSIONAMENTO BALANCEADO) */}
+        <div className="hidden md:block w-full overflow-hidden">
+          <table ref={tableRef} className="w-full text-left text-xs border-collapse table-fixed">
+            <colgroup>
+              {COLUMN_ORDER.map((colKey) => (
+                <col key={colKey} style={{ width: `${columnWidths[colKey]}%` }} />
+              ))}
+            </colgroup>
+            <thead className="bg-slate-100/90 backdrop-blur-md text-slate-600 font-semibold uppercase tracking-wider text-[10px] xl:text-[11px] border-b border-slate-200">
               <tr>
                 {/* 1. Checkbox Select */}
-                <th
-                  style={{ width: columnWidths.select, minWidth: columnWidths.select }}
-                  className="py-2.5 px-2 text-center relative select-none"
-                >
+                <th className="py-2.5 px-1 text-center relative select-none">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -963,53 +1056,53 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     className="rounded text-[#0083CA] focus:ring-[#0083CA] cursor-pointer"
                   />
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'select')}
                     onDoubleClick={() => handleResetSingleCol('select')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5] group"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 2. FIFO */}
                 <th
-                  style={{ width: columnWidths.fifo, minWidth: columnWidths.fifo }}
-                  className={`py-2.5 px-1.5 text-center relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1 text-center relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'fifo' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('fifo')}
                   title="Ordenar por Prioridade FIFO (Clique para alternar ordem)"
                 >
-                  <div className="flex items-center justify-center gap-1">
+                  <div className="flex items-center justify-center gap-0.5">
                     <span>FIFO</span>
                     {sortConfig.field === 'fifo' ? (
                       sortConfig.direction === 'asc' ? (
-                        <ArrowUp className="w-2.5 h-2.5 text-[#00609C] stroke-[3]" />
+                        <ArrowUp className="w-2.5 h-2.5 text-[#00609C] stroke-[3] shrink-0" />
                       ) : (
-                        <ArrowDown className="w-2.5 h-2.5 text-[#00609C] stroke-[3]" />
+                        <ArrowDown className="w-2.5 h-2.5 text-[#00609C] stroke-[3] shrink-0" />
                       )
                     ) : (
-                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60" />
+                      <ArrowUpDown className="w-2.5 h-2.5 text-slate-400 opacity-60 shrink-0" />
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'fifo')}
                     onDoubleClick={() => handleResetSingleCol('fifo')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 3. Material */}
                 <th
-                  style={{ width: columnWidths.material, minWidth: columnWidths.material }}
-                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1.5 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'material' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('material')}
                   title="Ordenar e Agrupar por Materiais iguais (Clique para alternar A-Z / Z-A)"
                 >
                   <div className="flex items-center justify-between gap-1">
-                    <span className="truncate">Material</span>
+                    <span className="leading-tight">Material</span>
                     {sortConfig.field === 'material' ? (
                       sortConfig.direction === 'asc' ? (
                         <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
@@ -1021,24 +1114,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'material')}
                     onDoubleClick={() => handleResetSingleCol('material')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna (Duplo clique para auto-ajuste)"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 4. Serial */}
                 <th
-                  style={{ width: columnWidths.serial, minWidth: columnWidths.serial }}
-                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1.5 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'serial' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('serial')}
                   title="Ordenar por Serial (Clique para alternar A-Z / Z-A)"
                 >
                   <div className="flex items-center justify-between gap-1">
-                    <span className="truncate">Serial</span>
+                    <span className="leading-tight">Serial</span>
                     {sortConfig.field === 'serial' ? (
                       sortConfig.direction === 'asc' ? (
                         <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
@@ -1050,23 +1143,23 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'serial')}
                     onDoubleClick={() => handleResetSingleCol('serial')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna (Duplo clique para auto-ajuste)"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 5. Centro */}
                 <th
-                  style={{ width: columnWidths.centro, minWidth: columnWidths.centro }}
-                  className={`py-2.5 px-1.5 text-center relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1 text-center relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'centro' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('centro')}
                   title="Ordenar e Agrupar por Centros iguais (Clique para alternar)"
                 >
-                  <div className="flex items-center justify-center gap-1">
+                  <div className="flex items-center justify-center gap-0.5">
                     <span>Centro</span>
                     {sortConfig.field === 'centro' ? (
                       sortConfig.direction === 'asc' ? (
@@ -1079,24 +1172,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'centro')}
                     onDoubleClick={() => handleResetSingleCol('centro')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 6. Rota Origem ➔ Destino */}
                 <th
-                  style={{ width: columnWidths.rota, minWidth: columnWidths.rota }}
-                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1.5 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'rota' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('rota')}
                   title="Ordenar e Agrupar por Depósitos de Origem e Destino iguais"
                 >
                   <div className="flex items-center justify-between gap-1">
-                    <span className="truncate">Origem ➔ Destino</span>
+                    <span className="leading-tight">Origem ➔ Destino</span>
                     {sortConfig.field === 'rota' ? (
                       sortConfig.direction === 'asc' ? (
                         <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
@@ -1108,17 +1201,17 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'rota')}
                     onDoubleClick={() => handleResetSingleCol('rota')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 7. Status */}
                 <th
-                  style={{ width: columnWidths.status, minWidth: columnWidths.status }}
-                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1.5 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'status' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('status')}
@@ -1137,41 +1230,39 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'status')}
                     onDoubleClick={() => handleResetSingleCol('status')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 8. Foto Label (Novo!) */}
-                <th
-                  style={{ width: columnWidths.foto, minWidth: columnWidths.foto }}
-                  className="py-2.5 px-1.5 text-center relative select-none"
-                >
+                <th className="py-2.5 px-1 text-center relative select-none">
                   <span className="flex items-center justify-center gap-1">
-                    <Camera className="w-3 h-3 text-[#249ED5]" />
+                    <Camera className="w-3 h-3 text-[#249ED5] shrink-0" />
                     <span>Label</span>
                   </span>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'foto')}
                     onDoubleClick={() => handleResetSingleCol('foto')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 9. Doc SAP / Obs */}
                 <th
-                  style={{ width: columnWidths.docSap, minWidth: columnWidths.docSap }}
-                  className={`py-2.5 px-2 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
+                  className={`py-2.5 px-1.5 relative select-none cursor-pointer transition-colors hover:bg-slate-200/80 ${
                     sortConfig.field === 'docSap' ? 'bg-blue-50/90 text-[#002664] font-bold' : ''
                   }`}
                   onClick={() => handleSort('docSap')}
                   title="Ordenar por Documento SAP / Observações"
                 >
                   <div className="flex items-center justify-between gap-1">
-                    <span className="truncate">Doc SAP / Obs</span>
+                    <span className="leading-tight">Doc SAP / Obs</span>
                     {sortConfig.field === 'docSap' ? (
                       sortConfig.direction === 'asc' ? (
                         <ArrowUp className="w-3 h-3 text-[#00609C] stroke-[3] shrink-0" />
@@ -1183,39 +1274,29 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     )}
                   </div>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'docSap')}
                     onDoubleClick={() => handleResetSingleCol('docSap')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 10. Solicitante */}
-                <th
-                  style={{ width: columnWidths.solicitante, minWidth: columnWidths.solicitante }}
-                  className="py-2.5 px-2 relative select-none"
-                >
-                  <span className="truncate">Solicitante</span>
+                <th className="py-2.5 px-1.5 relative select-none">
+                  <span className="leading-tight">Solicitante</span>
                   <div
+                    onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleStartResize(e, 'solicitante')}
                     onDoubleClick={() => handleResetSingleCol('solicitante')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#249ED5]/70 z-10"
+                    title="Arraste para ajustar coluna (Duplo clique para restaurar)"
                   />
                 </th>
 
                 {/* 11. Ações */}
-                <th
-                  style={{ width: columnWidths.acoes, minWidth: columnWidths.acoes }}
-                  className="py-2.5 px-2 text-right relative select-none"
-                >
+                <th className="py-2.5 px-2 text-right relative select-none">
                   <span>Ações</span>
-                  <div
-                    onMouseDown={(e) => handleStartResize(e, 'acoes')}
-                    onDoubleClick={() => handleResetSingleCol('acoes')}
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#249ED5]"
-                    title="Redimensionar coluna"
-                  />
                 </th>
               </tr>
             </thead>
@@ -1287,7 +1368,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       }`}
                     >
                       {/* 1. Checkbox */}
-                      <td className="py-2 px-2 text-center">
+                      <td className="py-2 px-1 text-center align-middle">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -1297,7 +1378,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </td>
 
                       {/* 2. FIFO # */}
-                      <td className="py-2 px-1.5 text-center">
+                      <td className="py-2 px-1 text-center align-middle">
                         <span
                           className={`inline-flex items-center justify-center font-mono font-bold text-[10px] w-5 h-5 rounded-full transition-transform active:scale-95 ${
                             isInvalidOrigin
@@ -1312,11 +1393,11 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </span>
                       </td>
 
-                      {/* 3. Material */}
-                      <td className={`py-2 px-2 font-mono font-bold ${isInvalidOrigin ? 'text-red-950' : 'text-slate-900'}`}>
-                        <div className="flex flex-col gap-0.5 overflow-hidden">
-                          <div className="flex items-center gap-1 overflow-hidden" title={item.material}>
-                            <span className="truncate">{item.material}</span>
+                      {/* 3. Material (Sem ocultar caracteres) */}
+                      <td className={`py-2 px-1.5 font-mono font-bold align-middle ${isInvalidOrigin ? 'text-red-950' : 'text-slate-900'}`}>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-start justify-between gap-1">
+                            <span className="break-all leading-tight text-[11px]">{item.material}</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -1325,8 +1406,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                                 setTimeout(() => setCopiedId(null), 1500);
                               }}
                               className={`${
-                                isInvalidOrigin ? 'text-red-400 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
-                              } transition-colors active:scale-90 shrink-0`}
+                                isInvalidOrigin ? 'text-red-500 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
+                              } transition-colors active:scale-90 shrink-0 mt-0.5`}
                               title="Copiar código do material"
                             >
                               {copiedId === `mat-${item.id}` ? (
@@ -1338,7 +1419,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                           </div>
                           {isInvalidOrigin && (
                             <span
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-sans font-extrabold truncate shadow-2xs w-fit max-w-full"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-sans font-extrabold leading-tight shadow-2xs w-fit max-w-full"
                               title={`Solicitação Incorreta: Origem ${damageCheck.originInfo?.code} (${damageCheck.originInfo?.definition}) não deve ir para estoque livre.`}
                             >
                               🚫 AVARIA DEFINITIVA
@@ -1347,11 +1428,11 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </div>
                       </td>
 
-                      {/* 4. Serial */}
-                      <td className={`py-2 px-2 font-mono ${isInvalidOrigin ? 'text-red-950 font-semibold' : 'text-slate-700'}`}>
-                        <div className="flex items-center gap-1 overflow-hidden" title={item.serial}>
+                      {/* 4. Serial (Sem ocultar dígitos) */}
+                      <td className={`py-2 px-1.5 font-mono align-middle ${isInvalidOrigin ? 'text-red-950 font-semibold' : 'text-slate-700'}`}>
+                        <div className="flex items-start justify-between gap-1">
                           <span
-                            className={`px-1.5 py-0.5 rounded border truncate ${
+                            className={`px-1.5 py-0.5 rounded border break-all leading-tight text-[11px] ${
                               isInvalidOrigin
                                 ? 'bg-red-50/90 border-red-300 text-red-950'
                                 : 'bg-slate-50 border-slate-200'
@@ -1367,8 +1448,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               setTimeout(() => setCopiedId(null), 1500);
                             }}
                             className={`${
-                              isInvalidOrigin ? 'text-red-400 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
-                            } transition-colors active:scale-90 shrink-0`}
+                              isInvalidOrigin ? 'text-red-500 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
+                            } transition-colors active:scale-90 shrink-0 mt-0.5`}
                             title="Copiar serial"
                           >
                             {copiedId === `ser-${item.id}` ? (
@@ -1381,7 +1462,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </td>
 
                       {/* 5. Centro */}
-                      <td className="py-2 px-1.5 text-center">
+                      <td className="py-2 px-1 text-center align-middle">
                         <span
                           className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
                             isInvalidOrigin
@@ -1394,9 +1475,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </td>
 
                       {/* 6. Depósito Origem -> Destino */}
-                      <td className="py-2 px-2 font-mono">
-                        <div className="flex flex-col gap-0.5 overflow-hidden">
-                          <div className="flex items-center gap-1 text-[11px] overflow-hidden">
+                      <td className="py-2 px-1.5 font-mono align-middle">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-wrap items-center gap-1 text-[11px]">
                             {isInvalidOrigin ? (
                               <span
                                 className="px-1.5 py-0.5 rounded bg-red-600 text-white font-extrabold border border-red-700 shadow-2xs shrink-0"
@@ -1421,12 +1502,12 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             </span>
                           </div>
                           {isInvalidOrigin && (
-                            <span className="text-[9px] font-sans font-extrabold text-red-800 truncate">
+                            <span className="text-[9px] font-sans font-extrabold text-red-800 leading-tight">
                               ❌ PROIBIDO VOLTAR P/ LIVRE
                             </span>
                           )}
                           {damageCheck.isValidDestination && (
-                            <span className="text-[9px] font-sans font-semibold text-emerald-700 truncate">
+                            <span className="text-[9px] font-sans font-semibold text-emerald-700 leading-tight">
                               ✓ Entrada em Avaria (OK)
                             </span>
                           )}
@@ -1434,7 +1515,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </td>
 
                       {/* 7. Status Badge com Troca Rápida */}
-                      <td className="py-2 px-2">
+                      <td className="py-2 px-1.5 align-middle">
                         <select
                           value={item.status}
                           onChange={(e) => {
@@ -1445,7 +1526,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               onUpdateStatusSingle(item.id, newStatus);
                             }
                           }}
-                          className={`text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer transition-all outline-hidden appearance-none ${
+                          className={`w-full max-w-full text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer transition-all outline-hidden appearance-none text-center ${
                             item.status === 'pendente'
                               ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
                               : item.status === 'em_analise'
@@ -1463,10 +1544,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </select>
                       </td>
 
-                      {/* 8. Foto Label (Novo!) */}
-                      <td className="py-2 px-1.5 text-center">
+                      {/* 8. Foto Label */}
+                      <td className="py-2 px-1 text-center align-middle">
                         {item.labelPhotoUrl ? (
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex flex-wrap items-center justify-center gap-1">
                             <button
                               type="button"
                               onClick={() => setViewingPhotoItem(item)}
@@ -1478,7 +1559,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                                 alt="Label"
                                 className="w-4 h-4 object-cover rounded shadow-2xs group-hover:scale-110 transition-transform"
                               />
-                              <span className="hidden xl:inline">Label</span>
+                              <span>Foto</span>
                             </button>
 
                             <label
@@ -1500,11 +1581,11 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                           </div>
                         ) : (
                           <label
-                            className="cursor-pointer inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-slate-300 hover:border-[#002664] text-slate-400 hover:text-[#002664] text-[10px] transition-colors"
+                            className="cursor-pointer inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-slate-300 hover:border-[#002664] text-slate-500 hover:text-[#002664] text-[10px] transition-colors"
                             title="Anexar foto da etiqueta para comprovação"
                           >
-                            <Camera className="w-3 h-3" />
-                            <span className="hidden xl:inline">+ Anexar</span>
+                            <Camera className="w-3 h-3 shrink-0" />
+                            <span>+ Foto</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -1519,53 +1600,51 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         )}
                       </td>
 
-                      {/* 9. Doc SAP / Observações */}
-                      <td className="py-2 px-2 overflow-hidden">
+                      {/* 9. Doc SAP / Observações (Texto completo sem ocultar informação) */}
+                      <td className="py-2 px-1.5 align-middle">
                         {isInvalidOrigin && damageCheck.originInfo && (
                           <div
-                            className="text-[10px] font-bold text-red-900 leading-tight mb-0.5 truncate"
+                            className="text-[10px] font-bold text-red-900 leading-tight mb-0.5 break-words whitespace-normal"
                             title={`${damageCheck.originInfo.definition} — Produto avariado não deve voltar ao estoque livre.`}
                           >
                             🛑 {damageCheck.originInfo.shortTitle}: Proibido voltar p/ livre
                           </div>
                         )}
                         {item.sapDocNumber ? (
-                          <div className="flex items-center gap-1 text-[11px] font-mono text-emerald-700 font-bold truncate">
-                            <FileCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span className="truncate">Doc: {item.sapDocNumber}</span>
+                          <div className="flex items-start gap-1 text-[11px] font-mono text-emerald-700 font-bold leading-tight break-all">
+                            <FileCheck className="w-3 h-3 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>Doc: {item.sapDocNumber}</span>
                           </div>
                         ) : null}
 
                         {item.observacoes ? (
                           <div
-                            className={`text-[10px] truncate flex items-center gap-1 ${
+                            className={`text-[10px] flex items-start gap-1 leading-tight break-words whitespace-normal mt-0.5 ${
                               isInvalidOrigin
                                 ? 'text-red-800 font-semibold'
                                 : item.status === 'divergencia'
                                 ? 'text-rose-700 font-semibold'
-                                : 'text-slate-500'
+                                : 'text-slate-600'
                             }`}
-                            title={item.observacoes}
                           >
-                            <MessageSquare className="w-2.5 h-2.5 shrink-0" />
-                            <span className="truncate">{item.observacoes}</span>
+                            <MessageSquare className="w-2.5 h-2.5 shrink-0 mt-0.5" />
+                            <span>{item.observacoes}</span>
                           </div>
                         ) : !item.sapDocNumber && !isInvalidOrigin ? (
                           <span className="text-slate-400 text-[10px]">-</span>
                         ) : null}
                       </td>
 
-                      {/* 10. Solicitante & Data */}
-                      <td className="py-2 px-2 text-[10px] text-slate-500 overflow-hidden">
+                      {/* 10. Solicitante & Data (Nome completo visível sem cortar com '...') */}
+                      <td className="py-2 px-1.5 text-[10px] text-slate-500 align-middle">
                         <div
-                          className={`truncate font-medium ${
-                            isInvalidOrigin ? 'text-red-950 font-bold' : 'text-slate-700'
+                          className={`font-medium leading-tight break-words whitespace-normal ${
+                            isInvalidOrigin ? 'text-red-950 font-bold' : 'text-slate-800'
                           }`}
-                          title={item.criadoPor}
                         >
                           {item.criadoPor}
                         </div>
-                        <div className={`text-[9px] ${isInvalidOrigin ? 'text-red-700 font-semibold' : 'text-slate-400'}`}>
+                        <div className={`text-[9px] mt-0.5 ${isInvalidOrigin ? 'text-red-700 font-semibold' : 'text-slate-400'}`}>
                           {new Date(item.criadoEm).toLocaleTimeString('pt-BR', {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -1573,14 +1652,14 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </div>
                       </td>
 
-                      {/* 11. Ações Rápidas */}
-                      <td className="py-2 px-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      {/* 11. Ações Rápidas (100% dentro da célula sem cortar ícones na direita) */}
+                      <td className="py-2 px-1.5 text-right align-middle">
+                        <div className="flex flex-wrap items-center justify-end gap-0.5">
                           {/* Copiar Linha */}
                           <button
                             type="button"
                             onClick={() => handleCopySingleRow(item)}
-                            className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-all active:scale-90"
+                            className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all active:scale-90"
                             title="Copiar linha formato SAP (TAB)"
                           >
                             {copiedId === item.id ? (
@@ -1631,7 +1710,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             <button
                               type="button"
                               onClick={() => onUpdateStatusSingle(item.id, 'pendente')}
-                              className="p-1 rounded text-slate-400 hover:text-amber-700 hover:bg-amber-50 transition-all active:scale-90"
+                              className="p-1 rounded text-slate-500 hover:text-amber-700 hover:bg-amber-50 transition-all active:scale-90"
                               title="Reabrir item (Voltar para Pendente)"
                             >
                               <Clock className="w-3.5 h-3.5" />

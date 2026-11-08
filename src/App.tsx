@@ -552,7 +552,7 @@ export default function App() {
       />
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-10">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-6 relative z-10">
 
         {/* Dashboard de Indicadores Glassmorphism (FIFO, SLA, Concluídos, Divergências) */}
         <KPIDashboard
@@ -603,7 +603,7 @@ export default function App() {
 
       {/* Rodapé Corporativo com Estilo Glassmorphism */}
       <footer className="bg-slate-950/25 backdrop-blur-xl text-white border-t border-white/15 py-4 text-xs relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-[#C2DEEB] tracking-wide">MIGOU</span>
             <span>•</span>
