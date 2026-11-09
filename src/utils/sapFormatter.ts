@@ -3,7 +3,6 @@ import { TransferItem } from '../types/transfer';
 export type DepositCategory =
   | 'estoque_livre'
   | 'blue_service'
-  | 'inventario_transitorio'
   | 'inventario_falta_definitivo'
   | 'avaria_definitivo'
   | 'operacional';
@@ -19,9 +18,7 @@ export interface SAPCentroInfo {
   freeStockPartsDeposit?: string;
   blueServicePartsDeposit?: string;
   inventoryShortageProductDeposit: string;
-  inventoryCountProductDeposit: string;
   inventoryShortagePartsDeposit?: string;
-  inventoryCountPartsDeposit?: string;
   damageDeposits: string[];
 }
 
@@ -49,7 +46,6 @@ export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
     segment: 'E-COMMERCE / PÓS VENDA',
     freeStockProductDeposit: 'B110',
     inventoryShortageProductDeposit: 'B111',
-    inventoryCountProductDeposit: 'B112',
     damageDeposits: ['B136', 'B149', 'B137'],
   },
   B124: {
@@ -59,7 +55,6 @@ export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
     segment: 'E-COMMERCE / PÓS VENDA',
     freeStockProductDeposit: 'B110',
     inventoryShortageProductDeposit: 'B111',
-    inventoryCountProductDeposit: 'B112',
     damageDeposits: ['B136', 'B149', 'B137'],
   },
   B158: {
@@ -71,9 +66,7 @@ export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
     freeStockPartsDeposit: 'B130',
     blueServicePartsDeposit: 'B416',
     inventoryShortageProductDeposit: 'B111',
-    inventoryCountProductDeposit: 'B112',
     inventoryShortagePartsDeposit: 'B152',
-    inventoryCountPartsDeposit: 'B153',
     damageDeposits: ['B136', 'B149', 'B137'],
   },
   B159: {
@@ -85,9 +78,7 @@ export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
     freeStockPartsDeposit: 'B130',
     blueServicePartsDeposit: 'B416',
     inventoryShortageProductDeposit: 'B111',
-    inventoryCountProductDeposit: 'B112',
     inventoryShortagePartsDeposit: 'B152',
-    inventoryCountPartsDeposit: 'B153',
     damageDeposits: ['B136', 'B149', 'B137'],
   },
   B179: {
@@ -98,9 +89,7 @@ export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
     freeStockProductDeposit: 'B413',
     freeStockPartsDeposit: 'B412',
     inventoryShortageProductDeposit: 'B111',
-    inventoryCountProductDeposit: 'B112',
     inventoryShortagePartsDeposit: 'B152',
-    inventoryCountPartsDeposit: 'B153',
     damageDeposits: ['B136', 'B149', 'B137'],
   },
   B180: {
@@ -111,9 +100,7 @@ export const SAP_CENTROS_CATALOG: Record<string, SAPCentroInfo> = {
     freeStockProductDeposit: 'B413',
     freeStockPartsDeposit: 'B412',
     inventoryShortageProductDeposit: 'B111',
-    inventoryCountProductDeposit: 'B112',
     inventoryShortagePartsDeposit: 'B152',
-    inventoryCountPartsDeposit: 'B153',
     damageDeposits: ['B136', 'B149', 'B137'],
   },
 };
@@ -132,8 +119,8 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     allowedCentros: ['B123', 'B124'],
     channels: ['CD MG NACIONAL PÓS VENDA / E-COMMERCE', 'CD MG IMPORT PÓS VENDA / E-COMMERCE'],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando um produto bom nos centros B123/B124 precisa ser segregado por falta (B112/B111) ou avaria (B136/B149/B137).',
-    whenToUseAsDestination: 'Quando um produto localizado (ex: B148 ou B112) em perfeito estado deve ficar disponível para venda nos centros B123 ou B124.',
+    whenToUseAsOrigin: 'Quando um produto bom nos centros B123/B124 precisa ser segregado por falta de inventário (B111) ou avaria (B136/B149/B137).',
+    whenToUseAsDestination: 'Quando um produto localizado (ex: B148 ou B111) em perfeito estado deve ficar disponível para venda nos centros B123 ou B124.',
   },
   B114: {
     code: 'B114',
@@ -147,7 +134,7 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     allowedCentros: ['B158', 'B159'],
     channels: ['CD MG NACIONAL LOJAS MIDEA CARRIER', 'CD MG IMPORT. LOJAS MIDEA CARRIER'],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando um produto do estoque das Lojas Midea (B158/B159) não é localizado (vai p/ B112/B111) ou sofre avaria (B136/B149/B137).',
+    whenToUseAsOrigin: 'Quando um produto do estoque das Lojas Midea (B158/B159) não é localizado (vai p/ B111) ou sofre avaria (B136/B149/B137).',
     whenToUseAsDestination: 'Para disponibilizar PRODUTO acabado bom no estoque livre das Lojas Midea Carrier (centros B158 e B159).',
   },
   B130: {
@@ -162,7 +149,7 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     allowedCentros: ['B158', 'B159'],
     channels: ['CD MG NACIONAL LOJAS MIDEA CARRIER', 'CD MG IMPORT. LOJAS MIDEA CARRIER'],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando uma PEÇA das Lojas Midea (B158/B159) vai para contagem/falta de peças (B153/B152), venda Blue Service (B416) ou sucata (B136).',
+    whenToUseAsOrigin: 'Quando uma PEÇA das Lojas Midea (B158/B159) vai para falta de inventário de peças (B152), venda Blue Service (B416) ou sucata (B136).',
     whenToUseAsDestination: 'Para disponibilizar PEÇAS boas no estoque livre das Lojas Midea Carrier (centros B158 e B159).',
   },
   B416: {
@@ -177,7 +164,7 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     allowedCentros: ['B158', 'B159'],
     channels: ['CD MG NACIONAL LOJAS MIDEA CARRIER', 'CD MG IMPORT. LOJAS MIDEA CARRIER'],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando uma peça do estoque Blue Service precisa ir para conferência/falta (B153/B152) ou retorno ao livre de peças (B130).',
+    whenToUseAsOrigin: 'Quando uma peça do estoque Blue Service precisa ir para falta de inventário (B152) ou retorno ao livre de peças (B130).',
     whenToUseAsDestination: 'Exclusivo para PEÇAS destinadas à venda Blue Service (atendimento de Garantia pelo Centro de Lojas B158 e B159).',
   },
   B412: {
@@ -192,7 +179,7 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     allowedCentros: ['B179', 'B180'],
     channels: ['CD MG NACIONAL PÓS VENDA', 'CD MG IMPORT PÓS VENDA'],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando uma PEÇA do Pós-Venda (B179/B180) não é localizada (vai para B153/B152) ou sofre avaria (B136).',
+    whenToUseAsOrigin: 'Quando uma PEÇA do Pós-Venda (B179/B180) não é localizada (vai para B152) ou sofre avaria (B136).',
     whenToUseAsDestination: 'Para disponibilizar PEÇAS boas no estoque livre do Pós-Venda (centros B179 e B180).',
   },
   B413: {
@@ -207,11 +194,11 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     allowedCentros: ['B179', 'B180'],
     channels: ['CD MG NACIONAL PÓS VENDA', 'CD MG IMPORT PÓS VENDA'],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando um PRODUTO do Pós-Venda (B179/B180) não é localizado (vai para B112/B111) ou sofre avaria (B136/B149/B137).',
+    whenToUseAsOrigin: 'Quando um PRODUTO do Pós-Venda (B179/B180) não é localizado (vai para B111) ou sofre avaria (B136/B149/B137).',
     whenToUseAsDestination: 'Para disponibilizar PRODUTO acabado bom no estoque livre do Pós-Venda (centros B179 e B180).',
   },
 
-  // 2. INVENTÁRIO E FALTAS IMEDIATAS (AMARELO TRANSITÓRIO & VERMELHO DEFINITIVO)
+  // 2. FALTAS DE INVENTÁRIO (VERMELHO DEFINITIVO)
   B111: {
     code: 'B111',
     category: 'inventario_falta_definitivo',
@@ -231,30 +218,8 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
       'CD MG IMPORT PÓS VENDA',
     ],
     canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Quando um PRODUTO que estava baixado como falta em B111 é fisicamente localizado no CD e precisa retornar ao estoque livre do centro.',
-    whenToUseAsDestination: 'Quando um PRODUTO acabado não foi localizado no estoque e a falta de inventário é confirmada em caráter definitivo.',
-  },
-  B112: {
-    code: 'B112',
-    category: 'inventario_transitorio',
-    nature: 'Transitório',
-    colorScheme: 'yellow',
-    classification: 'Contagem de inventário de produto — Transitório',
-    shortTitle: 'Contagem Transitória (Produto)',
-    definition: 'Depósito transitório para contagem de inventário de produto acabado.',
-    application: 'PRODUTO',
-    allowedCentros: ['B123', 'B124', 'B158', 'B159', 'B179', 'B180'],
-    channels: [
-      'CD MG NACIONAL E-COMMERCE',
-      'CD MG IMPORTADO E-COMMERCE',
-      'CD MG NACIONAL LOJAS MIDEA CARRIER',
-      'CD MG IMPORT. LOJAS MIDEA CARRIER',
-      'CD MG NACIONAL PÓS VENDA',
-      'CD MG IMPORT PÓS VENDA',
-    ],
-    canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Após a contagem: se o produto foi encontrado, sai de B112 para o Estoque Livre; se confirmada a falta, vai de B112 para B111.',
-    whenToUseAsDestination: 'Quando um PRODUTO acabado não é localizado de forma imediata na separação/estoque e precisa ser bloqueado temporariamente para contagem.',
+    whenToUseAsOrigin: 'Quando um PRODUTO que estava em falta (B111) é fisicamente localizado no CD e precisa retornar ao estoque livre do centro.',
+    whenToUseAsDestination: 'Quando um PRODUTO acabado não é localizado no estoque e deve ser transferido para falta de inventário.',
   },
   B152: {
     code: 'B152',
@@ -274,27 +239,7 @@ export const SAP_DEPOSITOS_CATALOG: Record<string, SAPDepositInfo> = {
     ],
     canBeOriginToFreeStock: true,
     whenToUseAsOrigin: 'Quando uma PEÇA que estava em falta (B152) é fisicamente localizada no CD e retorna para B130, B416 ou B412.',
-    whenToUseAsDestination: 'Quando uma PEÇA não é localizada nos centros B158, B159, B179 ou B180 e a falta de inventário é confirmada.',
-  },
-  B153: {
-    code: 'B153',
-    category: 'inventario_transitorio',
-    nature: 'Transitório',
-    colorScheme: 'yellow',
-    classification: 'Contagem de inventário de peças — Transitório',
-    shortTitle: 'Contagem Transitória (Peças)',
-    definition: 'Depósito transitório para contagem de inventário de peças.',
-    application: 'PEÇAS',
-    allowedCentros: ['B158', 'B159', 'B179', 'B180'],
-    channels: [
-      'CD MG NACIONAL LOJAS MIDEA CARRIER',
-      'CD MG IMPORT. LOJAS MIDEA CARRIER',
-      'CD MG NACIONAL PÓS VENDA',
-      'CD MG IMPORT PÓS VENDA',
-    ],
-    canBeOriginToFreeStock: true,
-    whenToUseAsOrigin: 'Após a contagem da peça: se encontrada, retorna ao estoque livre de peças (B130/B412); se confirmada a falta, segue para B152.',
-    whenToUseAsDestination: 'Quando uma PEÇA não é localizada de imediato no endereço (centros B158, B159, B179, B180) e vai para apuração/contagem.',
+    whenToUseAsDestination: 'Quando uma PEÇA não é localizada nos centros B158, B159, B179 ou B180 e deve ser transferida para falta de inventário.',
   },
 
   // 3. AVARIA DE PRODUTO — DEFINITIVO (VERMELHO CRÍTICO — SAÍDA BLOQUEADA PARA LIVRE)
@@ -515,19 +460,24 @@ export function analyzeTransferRoute(
     );
   }
 
+  // 3.5 Bloqueia uso manual dos depósitos B112 e B153 (desativados para solicitação do time)
+  if (orig === 'B112' || dest === 'B112' || orig === 'B153' || dest === 'B153') {
+    hasCenterMismatch = true;
+    warnings.push(
+      `Os depósitos B112 e B153 não devem ser solicitados pelo time. Para falta de inventário, utilize B111 (Produto) ou B152 (Peças).`
+    );
+  }
+
   // 4. Monta explicação didática da operação
   let routeExplanation = '';
   if (isDefinitiveDamageOrigin && originDeposit) {
     routeExplanation = `🚫 Solicitação Incorreta: Saída de ${orig} (${originDeposit.shortTitle} — Avaria Definitiva). Material avariado não deve voltar ao estoque livre.`;
   } else if (destinationDeposit?.category === 'avaria_definitivo') {
     routeExplanation = `✅ Segregação para Avaria Definitiva (${dest} — ${destinationDeposit.shortTitle}).`;
-  } else if (destinationDeposit?.category === 'inventario_transitorio') {
-    routeExplanation = `🟡 Bloqueio Transitório p/ Contagem (${dest}): Item (${destinationDeposit.application}) não localizado de imediato no endereço.`;
   } else if (destinationDeposit?.category === 'inventario_falta_definitivo') {
-    routeExplanation = `🔴 Baixa p/ Falta de Inventário Definitiva (${dest}): Falta confirmada de ${destinationDeposit.application.toLowerCase()}.`;
+    routeExplanation = `🔴 Baixa p/ Falta de Inventário (${dest}): Falta de ${destinationDeposit.application.toLowerCase()} no estoque.`;
   } else if (
-    (originDeposit?.category === 'inventario_transitorio' ||
-      originDeposit?.category === 'inventario_falta_definitivo') &&
+    originDeposit?.category === 'inventario_falta_definitivo' &&
     (destinationDeposit?.category === 'estoque_livre' || destinationDeposit?.category === 'blue_service')
   ) {
     routeExplanation = `🟢 Recuperação de Estoque: Item localizado fisicamente saindo de ${orig} (${originDeposit.shortTitle}) para ${dest} (${destinationDeposit.shortTitle}).`;

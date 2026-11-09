@@ -31,7 +31,6 @@ interface DepositsGuideTabProps {
 type ScenarioKey =
   | 'liberar_livre'
   | 'blue_service'
-  | 'nao_localizado_imediato'
   | 'falta_confirmada'
   | 'item_encontrado'
   | 'avaria_sucata'
@@ -44,7 +43,7 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
   // Estados do Simulador Interativo ("Qual Depósito Devo Usar?")
   const [simCentro, setSimCentro] = useState<string>('B158');
   const [simMaterialType, setSimMaterialType] = useState<'PRODUTO' | 'PEÇAS'>('PRODUTO');
-  const [simScenario, setSimScenario] = useState<ScenarioKey>('nao_localizado_imediato');
+  const [simScenario, setSimScenario] = useState<ScenarioKey>('falta_confirmada');
 
   // Estados de Filtro da Tabela Oficial Unificada
   const [categoryFilter, setCategoryFilter] = useState<'todos' | 'livre' | 'inventario' | 'avaria'>('todos');
@@ -64,9 +63,9 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
     if (isParts && !centerSupportsParts) {
       return {
         isSupported: false,
-        warningTitle: `Atenção: O centro ${c.code} possui mapeamento padrão apenas para PRODUTO Acabado (B110 / B111 / B112).`,
+        warningTitle: `Atenção: O centro ${c.code} possui mapeamento padrão apenas para PRODUTO Acabado (B110 / B111).`,
         warningMessage:
-          'Pela tabela oficial, os depósitos específicos de PEÇAS (Estoque Livre B130/B412, Blue Service B416 e Inventário de Peças B152/B153) operam nos centros B158, B159 (Lojas Midea Carrier) e B179, B180 (Pós-Venda). Se for Sucata (B136), ele aceita Peças/Produtos em todos os centros.',
+          'Pela tabela oficial, os depósitos específicos de PEÇAS (Estoque Livre B130/B412, Blue Service B416 e Falta de Inventário de Peças B152) operam nos centros B158, B159 (Lojas Midea Carrier) e B179, B180 (Pós-Venda). Se for Sucata (B136), ele aceita Peças/Produtos em todos os centros.',
         origem: 'B148',
         destino: 'B136',
         explanation: 'Altere para PRODUTO ou selecione um centro com operação de Peças (B158, B159, B179 ou B180).',
@@ -76,9 +75,6 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
     const freeDeposit = isParts
       ? c.freeStockPartsDeposit || c.freeStockProductDeposit
       : c.freeStockProductDeposit;
-    const countDeposit = isParts
-      ? c.inventoryCountPartsDeposit || 'B153'
-      : c.inventoryCountProductDeposit;
     const shortageDeposit = isParts
       ? c.inventoryShortagePartsDeposit || 'B152'
       : c.inventoryShortageProductDeposit;
@@ -116,37 +112,26 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
           ruleNote: 'Exclusivo para PEÇAS nos centros B158 e B159.',
         };
 
-      case 'nao_localizado_imediato':
-        return {
-          isSupported: true,
-          origem: freeDeposit,
-          destino: countDeposit,
-          badgeColor: 'amber',
-          title: `Item Não Localizado de Imediato ➔ Contagem Transitória (${countDeposit})`,
-          explanation: `Quando um(a) ${simMaterialType} não é localizado(a) de forma imediata na separação/endereço no centro ${c.code}, transfira do Estoque Livre (${freeDeposit}) para o depósito transitório de Contagem de Inventário (${countDeposit}).`,
-          ruleNote: `${countDeposit} é TRANSITÓRIO: retira o saldo do livre imediatamente para não travar novos pedidos enquanto o time realiza a busca/contagem física.`,
-        };
-
       case 'falta_confirmada':
         return {
           isSupported: true,
-          origem: countDeposit,
+          origem: freeDeposit,
           destino: shortageDeposit,
           badgeColor: 'rose',
-          title: `Falta Confirmada em Inventário ➔ Falta Definitiva (${shortageDeposit})`,
-          explanation: `Após a conferência no depósito transitório (${countDeposit}), se o(a) ${simMaterialType} realmente não foi encontrado(a), transfira para ${shortageDeposit} (Falta de Inventário Definitivo de ${simMaterialType}).`,
-          ruleNote: `Também pode ser solicitado diretamente (${freeDeposit} ➔ ${shortageDeposit}) quando a falta de inventário já está validada.`,
+          title: `Não Localizado / Falta de Inventário ➔ Falta Definitiva (${shortageDeposit})`,
+          explanation: `Quando o(a) ${simMaterialType} não é localizado(a) no estoque do centro ${c.code}, transfira do Estoque Livre (${freeDeposit}) para ${shortageDeposit} (Falta de Inventário Definitivo de ${simMaterialType}).`,
+          ruleNote: `Para Produto Acabado utilize sempre B111 e para Peças utilize sempre B152.`,
         };
 
       case 'item_encontrado':
         return {
           isSupported: true,
-          origem: countDeposit,
+          origem: shortageDeposit,
           destino: freeDeposit,
           badgeColor: 'emerald',
           title: `Item Localizado no Físico ➔ Retornar ao Estoque Livre (${freeDeposit})`,
-          explanation: `O material que estava em Contagem (${countDeposit}) ou Falta (${shortageDeposit}) foi localizado fisicamente em perfeito estado! Solicite o retorno para o Estoque Livre (${freeDeposit}) do centro ${c.code}.`,
-          ruleNote: `Diferente dos depósitos de Avaria (B136/B149/B137), os depósitos de inventário (${countDeposit}/${shortageDeposit}) PODEM retornar ao estoque livre se o item for encontrado íntegro!`,
+          explanation: `O material que estava em Falta de Inventário (${shortageDeposit}) foi localizado fisicamente em perfeito estado! Solicite o retorno para o Estoque Livre (${freeDeposit}) do centro ${c.code}.`,
+          ruleNote: `Diferente dos depósitos de Avaria (B136/B149/B137), os depósitos de falta de inventário (${shortageDeposit}) PODEM retornar ao estoque livre se o item for encontrado íntegro!`,
         };
 
       case 'avaria_sucata':
@@ -214,9 +199,7 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
       'B413',
       'B110',
       'B111',
-      'B112',
       'B152',
-      'B153',
       'B136',
       'B149',
       'B137',
@@ -230,7 +213,6 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
         }
         if (
           categoryFilter === 'inventario' &&
-          dep.category !== 'inventario_transitorio' &&
           dep.category !== 'inventario_falta_definitivo'
         ) {
           return false;
@@ -270,7 +252,7 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
               <span>CENTRAL DE INTELIGÊNCIA DE DEPÓSITOS SAP • TIME BUIATTE & TIME MIDEA</span>
             </div>
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">
-              Mapa Oficial de Depósitos: Estoque Livre, Faltas/Inventário e Avarias
+              Mapa Oficial de Depósitos: Estoque Livre, Faltas de Inventário e Avarias
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 max-w-4xl leading-relaxed">
               Consulte rapidamente qual depósito utilizar em cada Centro (<strong>B123, B124, B158, B159, B179 e B180</strong>) para <strong>Produtos</strong> e <strong>Peças</strong>. Use o simulador interativo abaixo caso tenha dúvida antes de abrir uma solicitação.
@@ -286,19 +268,19 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
               </div>
               <div className="text-[11px] text-emerald-700 mt-0.5">B110, B114, B130, B416, B412, B413</div>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-300 text-xs">
-              <div className="font-extrabold text-amber-900 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span>Amarelo • Transitório</span>
+            <div className="px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs">
+              <div className="font-extrabold text-rose-900 flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
+                <span>Vermelho • Falta de Inventário</span>
               </div>
-              <div className="text-[11px] text-amber-800 mt-0.5">Contagem: B112 (Prod) / B153 (Peças)</div>
+              <div className="text-[11px] text-rose-800 mt-0.5">Falta: B111 (Prod) / B152 (Peças)</div>
             </div>
             <div className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs">
               <div className="font-extrabold text-red-800 flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-600" />
-                <span>Vermelho • Definitivo</span>
+                <span>Vermelho • Avaria Definitiva</span>
               </div>
-              <div className="text-[11px] text-red-700 mt-0.5">Falta (B111/B152) e Avaria (B136/B149/B137)</div>
+              <div className="text-[11px] text-red-700 mt-0.5">B136 (Sucata), B149 (Outlet), B137 (Slow)</div>
             </div>
           </div>
         </div>
@@ -398,7 +380,7 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
                   <div>
                     <div className="font-extrabold text-xs sm:text-sm">PRODUTO ACABADO</div>
                     <div className="text-[11px] text-slate-500">
-                      Livre: <strong className="font-mono">{currentCentroInfo.freeStockProductDeposit}</strong> • Falta/Contagem: <strong className="font-mono">B111 / B112</strong>
+                      Livre: <strong className="font-mono">{currentCentroInfo.freeStockProductDeposit}</strong> • Falta: <strong className="font-mono">B111</strong>
                     </div>
                   </div>
                 </button>
@@ -418,7 +400,7 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
                     <div className="text-[11px] text-slate-500">
                       {currentCentroInfo.freeStockPartsDeposit ? (
                         <>
-                          Livre: <strong className="font-mono">{currentCentroInfo.freeStockPartsDeposit}</strong> • Falta/Contagem: <strong className="font-mono">B152 / B153</strong>
+                          Livre: <strong className="font-mono">{currentCentroInfo.freeStockPartsDeposit}</strong> • Falta: <strong className="font-mono">B152</strong>
                         </>
                       ) : (
                         <span>Operação padrão nos centros B158/B159 e B179/B180</span>
@@ -437,21 +419,15 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   {
-                    id: 'nao_localizado_imediato' as ScenarioKey,
-                    icon: '🟡',
-                    title: 'Não localizado de imediato',
-                    sub: 'Bloquear p/ Contagem Transitória (B112 / B153)',
-                  },
-                  {
                     id: 'falta_confirmada' as ScenarioKey,
                     icon: '🔴',
-                    title: 'Falta de inventário confirmada',
-                    sub: 'Transferir p/ Falta Definitiva (B111 / B152)',
+                    title: 'Não localizado / Falta de inventário',
+                    sub: 'Transferir p/ Falta de Inventário (B111 / B152)',
                   },
                   {
                     id: 'item_encontrado' as ScenarioKey,
                     icon: '🟢',
-                    title: 'Item de falta/contagem foi achado',
+                    title: 'Item de falta foi achado no físico',
                     sub: 'Devolver item localizado ao Estoque Livre',
                   },
                   {
@@ -639,26 +615,26 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
           </ul>
         </div>
 
-        {/* Card 2: Não Localizados Imediatos (Transitório vs Definitivo) */}
-        <div className="bg-white/95 rounded-2xl border-l-4 border-l-amber-500 border border-slate-200 p-4 shadow-sm space-y-2">
+        {/* Card 2: Não Localizados & Faltas de Inventário (B111 / B152) */}
+        <div className="bg-white/95 rounded-2xl border-l-4 border-l-rose-500 border border-slate-200 p-4 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-extrabold">
-              🟡/🔴 2. NÃO LOCALIZADOS & FALTAS
+            <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 text-[11px] font-extrabold">
+              🔴 2. FALTAS DE INVENTÁRIO (DEFINITIVO)
             </span>
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <AlertTriangle className="w-4 h-4 text-rose-500" />
           </div>
           <h4 className="font-extrabold text-slate-900 text-sm">
-            Diferença entre Contagem (Transitório) e Falta (Definitivo)
+            Depósitos Oficiais para Falta de Produto e de Peças
           </h4>
           <ul className="text-xs text-slate-600 space-y-1.5 leading-relaxed">
             <li>
-              • <strong>Não achou de imediato? Use Transitório:</strong> <strong className="font-mono bg-amber-100 text-amber-900 px-1 rounded">B112</strong> (Produto) ou <strong className="font-mono bg-amber-100 text-amber-900 px-1 rounded">B153</strong> (Peças). Bloqueia o saldo para contagem.
+              • <strong>Falta de PRODUTO Acabado:</strong> Utilize <strong className="font-mono bg-red-100 text-red-800 px-1 rounded">B111</strong> (disponível em todos os centros B123, B124, B158, B159, B179 e B180).
             </li>
             <li>
-              • <strong>Falta confirmada no inventário? Use Definitivo:</strong> <strong className="font-mono bg-red-100 text-red-800 px-1 rounded">B111</strong> (Produto) ou <strong className="font-mono bg-red-100 text-red-800 px-1 rounded">B152</strong> (Peças).
+              • <strong>Falta de PEÇAS:</strong> Utilize <strong className="font-mono bg-red-100 text-red-800 px-1 rounded">B152</strong> (nos centros B158, B159, B179 e B180).
             </li>
             <li>
-              • <strong>Achou o item depois?</strong> Pode voltar de B112/B111/B153/B152 para o Estoque Livre!
+              • <strong>Achou o item depois?</strong> Pode retornar de <strong className="font-mono">B111</strong> ou <strong className="font-mono">B152</strong> para o Estoque Livre!
             </li>
           </ul>
         </div>
@@ -721,9 +697,9 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
             <div className="flex flex-wrap gap-1.5">
               {[
-                { id: 'todos', label: 'Todos os Depósitos (13)' },
+                { id: 'todos', label: 'Todos os Depósitos (11)' },
                 { id: 'livre', label: '🟢 Estoque Livre & Blue Service (6)' },
-                { id: 'inventario', label: '🟡/🔴 Inventário: Faltas & Contagem (4)' },
+                { id: 'inventario', label: '🔴 Faltas de Inventário (2)' },
                 { id: 'avaria', label: '🛑 Avarias Definitivas (3)' },
               ].map((tab) => (
                 <button
@@ -865,10 +841,6 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
                           ✅ <strong>Destino:</strong> OK (Avaria)
                           <br />
                           🚫 <strong>Origem:</strong> Proibido voltar p/ Livre!
-                        </div>
-                      ) : dep.category === 'inventario_transitorio' ? (
-                        <div className="text-amber-900 font-medium">
-                          🟡 Usar quando o item <strong>não for localizado de imediato</strong> para contagem.
                         </div>
                       ) : dep.category === 'inventario_falta_definitivo' ? (
                         <div className="text-slate-700 font-medium">

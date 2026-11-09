@@ -86,7 +86,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     );
     return list.length > 0
       ? list.map((d) => d.code)
-      : ['B148', 'B110', 'B114', 'B130', 'B413', 'B412', 'B112', 'B111'];
+      : ['B148', 'B110', 'B114', 'B130', 'B413', 'B412', 'B111', 'B152'];
   }, [centro]);
 
   // Parsing em tempo real de múltiplos seriais
@@ -160,8 +160,14 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
       alert('Preencha Centro, Depósito de Origem e Depósito de Destino.');
       return;
     }
-    if (depositoOrigem.trim().toUpperCase() === depositoDestino.trim().toUpperCase()) {
+    const origUpper = depositoOrigem.trim().toUpperCase();
+    const destUpper = depositoDestino.trim().toUpperCase();
+    if (origUpper === destUpper) {
       alert('O Depósito de Origem e o Depósito de Destino não podem ser iguais.');
+      return;
+    }
+    if (origUpper === 'B112' || destUpper === 'B112' || origUpper === 'B153' || destUpper === 'B153') {
+      alert('Os depósitos B112 e B153 não devem ser utilizados para solicitações. Utilize B111 (Produto) ou B152 (Peças).');
       return;
     }
 
