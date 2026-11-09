@@ -13,6 +13,7 @@ import { TransferItem } from '../types/transfer';
 import { parsePastedTable, checkDefinitiveDamageOrigin, analyzeTransferRoute } from '../utils/sapFormatter';
 import { BROWSER_CLIENT_ID } from '../services/storage';
 import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
+import { lookupSerialInIQ09 } from '../services/iq09Service';
 
 interface BatchPasteModalProps {
   isOpen: boolean;
@@ -249,6 +250,13 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                       {parsedRows.map((r, i) => {
                         const rowCheck = checkDefinitiveDamageOrigin(r.depositoOrigem, r.depositoDestino);
                         const routeAnalysis = analyzeTransferRoute(r.centro, r.depositoOrigem, r.depositoDestino);
+                        const iq09Match = lookupSerialInIQ09(r.serial);
+                        const isAlreadyInDestIQ09 =
+                          iq09Match && iq09Match.deposito === r.depositoDestino.trim().toUpperCase();
+                        const isOriginDiffInIQ09 =
+                          iq09Match &&
+                          !isAlreadyInDestIQ09 &&
+                          iq09Match.deposito !== r.depositoOrigem.trim().toUpperCase();
                         const isRowInvalid = rowCheck.isInvalidOrigin;
                         const hasWarning = !isRowInvalid && (routeAnalysis.hasCenterMismatch || routeAnalysis.hasApplicationMismatch);
                         const warningText = routeAnalysis.warnings.join(' ');
@@ -258,7 +266,9 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                             className={
                               isRowInvalid
                                 ? 'bg-red-100 text-red-950 font-semibold hover:bg-red-200/70'
-                                : hasWarning
+                                : isAlreadyInDestIQ09
+                                ? 'bg-blue-50 text-blue-950 hover:bg-blue-100/70'
+                                : hasWarning || isOriginDiffInIQ09
                                 ? 'bg-amber-50/90 text-amber-950 hover:bg-amber-100/70'
                                 : 'hover:bg-blue-50/40'
                             }
@@ -321,6 +331,14 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                                 <span className="text-red-800 font-extrabold">
                                   🚫 ERRO: {rowCheck.originInfo.code} ({rowCheck.originInfo.shortTitle}) não pode ir para estoque livre!
                                 </span>
+                              ) : isAlreadyInDestIQ09 ? (
+                                <span className="text-blue-800 font-extrabold">
+                                  🔵 IQ09: Este UII já consta no depósito destino {iq09Match.deposito} no SAP!
+                                </span>
+                              ) : isOriginDiffInIQ09 ? (
+                                <span className="text-amber-800 font-bold">
+                                  ⚠️ IQ09: Na base SAP este UII está em {iq09Match.deposito} (Centro {iq09Match.centro}), não em {r.depositoOrigem}.
+                                </span>
                               ) : hasWarning ? (
                                 <span className="text-amber-800 font-bold" title={warningText}>
                                   ⚠️ {warningText}
@@ -332,6 +350,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                               ) : (
                                 <span className="text-emerald-700 font-medium">
                                   ✅ {routeAnalysis.routeExplanation || 'Rota SAP Válida'}
+                                  {iq09Match && ' • Confirmado na IQ09'}
                                 </span>
                               )}
                             </td>

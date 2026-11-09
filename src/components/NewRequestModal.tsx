@@ -24,6 +24,7 @@ import {
 } from '../utils/sapFormatter';
 import { compressImageFile } from '../utils/imageCompressor';
 import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
+import { lookupSerialInIQ09, getMemoryIQ09Snapshot } from '../services/iq09Service';
 
 interface NewRequestModalProps {
   isOpen: boolean;
@@ -31,6 +32,8 @@ interface NewRequestModalProps {
   onSubmit: (data: NewTransferInput) => void;
   defaultSolicitante?: string;
   initialPreset?: {
+    material?: string;
+    seriais?: string[];
     centro: string;
     depositoOrigem: string;
     depositoDestino: string;
@@ -59,12 +62,18 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [isDamageWarningOpen, setIsDamageWarningOpen] = useState(false);
 
-  // Aplica preset vindo do Simulador Interativo de Depósitos
+  // Aplica preset vindo do Simulador Interativo de Depósitos ou da Consulta IQ09
   useEffect(() => {
     if (initialPreset && isOpen) {
       setCentro(initialPreset.centro);
       setDepositoOrigem(initialPreset.depositoOrigem);
       setDepositoDestino(initialPreset.depositoDestino);
+      if (initialPreset.material) {
+        setMaterial(initialPreset.material);
+      }
+      if (initialPreset.seriais && initialPreset.seriais.length > 0) {
+        setRawSerials(initialPreset.seriais.join('\n'));
+      }
     }
   }, [initialPreset, isOpen]);
 
@@ -105,6 +114,77 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     });
     return Array.from(dupes);
   }, [parsedSerials]);
+
+  // Cruzamento em tempo real dos seriais colados com a Base IQ09 ativa
+  const iq09Check = useMemo(() => {
+    const hasIQ09 = Boolean(getMemoryIQ09Snapshot());
+    if (!hasIQ09 || parsedSerials.length === 0) return null;
+
+    const matchedItems = parsedSerials
+      .map((sn) => ({ sn, info: lookupSerialInIQ09(sn) }))
+      .filter((x): x is { sn: string; info: NonNullable<ReturnType<typeof lookupSerialInIQ09>> } =>
+        Boolean(x.info)
+      );
+
+    if (matchedItems.length === 0) {
+      return {
+        hasIQ09: true,
+        matchedCount: 0,
+        alreadyInDestination: [] as string[],
+        dominantMaterial: '',
+        dominantCentro: '',
+        dominantOrigem: '',
+        hasFieldMismatch: false,
+      };
+    }
+
+    const destUpper = depositoDestino.trim().toUpperCase();
+    const alreadyInDestination = matchedItems
+      .filter((m) => m.info.deposito === destUpper)
+      .map((m) => m.sn);
+
+    const first = matchedItems[0].info;
+    const matUpper = material.trim().toUpperCase();
+    const cenUpper = centro.trim().toUpperCase();
+    const origUpper = depositoOrigem.trim().toUpperCase();
+
+    const hasFieldMismatch =
+      (matUpper !== '' && matUpper !== first.material) ||
+      cenUpper !== first.centro ||
+      (origUpper !== first.deposito && first.deposito !== destUpper);
+
+    return {
+      hasIQ09: true,
+      matchedCount: matchedItems.length,
+      alreadyInDestination,
+      dominantMaterial: first.material,
+      dominantCentro: first.centro,
+      dominantOrigem: first.deposito,
+      hasFieldMismatch,
+    };
+  }, [parsedSerials, material, centro, depositoOrigem, depositoDestino]);
+
+  // Auto-preenche Material, Centro e Dep. Origem quando o usuário cola um UII e o Material ainda está em branco
+  useEffect(() => {
+    if (
+      iq09Check &&
+      iq09Check.matchedCount > 0 &&
+      !material.trim() &&
+      iq09Check.dominantMaterial
+    ) {
+      setMaterial(iq09Check.dominantMaterial);
+      if (iq09Check.dominantCentro) {
+        setCentro(iq09Check.dominantCentro);
+        const cInfo = SAP_CENTROS_CATALOG[iq09Check.dominantCentro];
+        if (cInfo && iq09Check.dominantOrigem !== cInfo.freeStockProductDeposit) {
+          setDepositoDestino(cInfo.freeStockProductDeposit);
+        }
+      }
+      if (iq09Check.dominantOrigem && iq09Check.dominantOrigem !== depositoDestino) {
+        setDepositoOrigem(iq09Check.dominantOrigem);
+      }
+    }
+  }, [iq09Check, material]);
 
   if (!isOpen) return null;
 
@@ -508,6 +588,62 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 <span>
                   Atenção: Há {duplicateSerials.length} serial(is) repetido(s) no campo: {duplicateSerials.join(', ')}.
                 </span>
+              </div>
+            )}
+
+            {/* Cruzamento em Tempo Real com a Base IQ09 */}
+            {iq09Check && iq09Check.matchedCount > 0 && (
+              <div className="mt-2.5 p-2.5 rounded-xl bg-white border border-blue-200 space-y-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-[#002664]">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Base IQ09: {iq09Check.matchedCount} de {parsedSerials.length} UII(s) localizados no SAP
+                    </span>
+                  </div>
+                  {iq09Check.hasFieldMismatch && iq09Check.dominantMaterial && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMaterial(iq09Check.dominantMaterial);
+                        if (iq09Check.dominantCentro) setCentro(iq09Check.dominantCentro);
+                        if (
+                          iq09Check.dominantOrigem &&
+                          iq09Check.dominantOrigem !== depositoDestino
+                        ) {
+                          setDepositoOrigem(iq09Check.dominantOrigem);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-[#002664] hover:bg-[#003380] text-white font-bold text-[11px] transition-colors cursor-pointer"
+                    >
+                      Preencher da IQ09 ({iq09Check.dominantMaterial} • {iq09Check.dominantCentro} • Origem {iq09Check.dominantOrigem})
+                    </button>
+                  )}
+                </div>
+
+                {iq09Check.alreadyInDestination.length > 0 && (
+                  <div className="p-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-950 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold">
+                      🔵 Atenção: <strong>{iq09Check.alreadyInDestination.length}</strong> UII(s) colado(s){' '}
+                      <strong>já estão alocados no depósito de destino {depositoDestino}</strong> na IQ09!
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const alreadySet = new Set(
+                          iq09Check.alreadyInDestination.map((s) => s.toUpperCase())
+                        );
+                        const remaining = parsedSerials.filter(
+                          (s) => !alreadySet.has(s.toUpperCase())
+                        );
+                        setRawSerials(remaining.join('\n'));
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] transition-colors cursor-pointer shrink-0"
+                    >
+                      Remover {iq09Check.alreadyInDestination.length} UII(s) que já estão em {depositoDestino}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   Truck,
   LogOut,
-  Compass
+  Compass,
+  Database
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 import { AuthUser } from '../types/auth';
@@ -52,8 +53,10 @@ interface HeaderProps {
   onOpenDatabaseDiagnostic?: () => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
-  activeMainTab?: 'operacao' | 'guia_depositos';
-  onSelectMainTab?: (tab: 'operacao' | 'guia_depositos') => void;
+  activeMainTab?: 'operacao' | 'consulta_iq09' | 'guia_depositos';
+  onSelectMainTab?: (tab: 'operacao' | 'consulta_iq09' | 'guia_depositos') => void;
+  iq09TotalItems?: number;
+  iq09UpdatedAt?: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -83,6 +86,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   activeMainTab = 'operacao',
   onSelectMainTab,
+  iq09TotalItems = 0,
+  iq09UpdatedAt = null,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeSound = ALERT_SOUND_OPTIONS.find((s) => s.id === (currentAlertSound || getSavedAlertSound())) || ALERT_SOUND_OPTIONS[0];
@@ -447,17 +452,51 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-2 sm:px-4 lg:px-6 py-2.5">
         <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Info & Auto-limpeza status */}
-          <div className="flex items-center gap-2.5 text-xs text-white/90 text-center sm:text-left font-medium">
+          <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/90 text-center sm:text-left font-medium">
             <span className="p-1 rounded-lg bg-white/15 border border-white/25 backdrop-blur-sm hidden sm:inline-block">
               <CalendarCheck2 className="w-4 h-4 text-[#C2DEEB]" />
             </span>
             <span>
-              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos com auto-limpeza a cada 2 dias.
+              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos.
             </span>
+            {iq09TotalItems > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-400/25 hover:bg-emerald-400/35 border border-emerald-300/50 text-emerald-100 text-[11px] font-bold transition-colors cursor-pointer"
+                title={
+                  iq09UpdatedAt
+                    ? `Base IQ09 atualizada em ${new Date(iq09UpdatedAt).toLocaleString('pt-BR')}`
+                    : 'Base IQ09 ativa'
+                }
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                <span>IQ09 Ativa: {iq09TotalItems.toLocaleString('pt-BR')} UIIs</span>
+              </button>
+            )}
           </div>
 
           {/* BOTÕES DINÂMICOS, LEVES E SUAVES (ESTILO FIGMA) */}
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* BOTÃO CENTRAL IQ09 SAP */}
+            {onSelectMainTab && (
+              <button
+                type="button"
+                onClick={() => onSelectMainTab(activeMainTab === 'consulta_iq09' ? 'operacao' : 'consulta_iq09')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer ${
+                  activeMainTab === 'consulta_iq09'
+                    ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-[0_4px_20px_rgba(16,185,129,0.35)]'
+                    : 'bg-emerald-500/25 hover:bg-emerald-500/35 text-white border-emerald-300/40'
+                }`}
+                title="Abrir Central de Consulta e De-Para da Base IQ09 SAP (UII = Serial)"
+              >
+                <Database className={`w-4 h-4 ${activeMainTab === 'consulta_iq09' ? 'text-slate-950' : 'text-emerald-200'}`} />
+                <span className="tracking-wide">
+                  {activeMainTab === 'consulta_iq09' ? 'VOLTAR À FILA SAP' : 'BASE IQ09 SAP'}
+                </span>
+              </button>
+            )}
+
             {/* BOTÃO GUIA DE DEPÓSITOS SAP */}
             {onSelectMainTab && (
               <button

@@ -10,6 +10,11 @@ import {
 } from './googleSheetsClient';
 import { calculateSLA } from '../utils/sapFormatter';
 import { playAlertChime, sendDesktopNotification } from '../utils/audioAlert';
+import {
+  IQ09_CLOUD_ROW_PREFIX,
+  processIncomingCloudIQ09Rows,
+  loadIQ09SnapshotFromStorage,
+} from './iq09Service';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
@@ -157,7 +162,27 @@ export async function fetchTransferItems(): Promise<{
         try {
           const sheetData = await fetchGoogleSheetsItems();
           if (sheetData !== null && Array.isArray(sheetData)) {
-            const mapped = sheetData.map((d: any, index: number) => mapRowToTransferItem(d, index));
+            const iq09CloudRows: any[] = [];
+            const transferRows: any[] = [];
+
+            for (const row of sheetData) {
+              const rowId = String(row?.id || '');
+              const rowMat = String(row?.material || '');
+              if (
+                rowId.startsWith(IQ09_CLOUD_ROW_PREFIX) ||
+                rowMat === '__IQ09_SYSTEM_SNAPSHOT__'
+              ) {
+                iq09CloudRows.push(row);
+              } else {
+                transferRows.push(row);
+              }
+            }
+
+            if (iq09CloudRows.length > 0) {
+              processIncomingCloudIQ09Rows(iq09CloudRows).catch(() => {});
+            }
+
+            const mapped = transferRows.map((d: any, index: number) => mapRowToTransferItem(d, index));
             const { active, purgedCount } = purgeOldMonthlyRecords(mapped);
             const resolved = applyPendingLocalUpdates(active);
 
@@ -671,6 +696,10 @@ export function subscribeToRealtimeTransfers(
       bc = new BroadcastChannel('migou_sync_realtime');
       bc.onmessage = (ev) => {
         if (ev?.data?.originatorSessionId && ev.data.originatorSessionId === CURRENT_SESSION_ID) {
+          return;
+        }
+        if (ev?.data?.type === 'IQ09_SNAPSHOT_UPDATED' || ev?.data?.type === 'IQ09_SNAPSHOT_CLEARED') {
+          loadIQ09SnapshotFromStorage().catch(() => {});
           return;
         }
         if (ev?.data?.type === 'ITEMS_DELETED' && Array.isArray(ev.data.remainingItems)) {

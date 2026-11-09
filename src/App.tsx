@@ -26,8 +26,15 @@ import {
 import { LoginModal } from './components/LoginModal';
 import { SoundSelectorModal } from './components/SoundSelectorModal';
 import { DepositsGuideTab } from './components/DepositsGuideTab';
+import { IQ09ConsultTab } from './components/IQ09ConsultTab';
 import { MigouLogo } from './components/MigouLogo';
-import { Check, X, Compass, ClipboardList } from 'lucide-react';
+import { Check, X, Compass, ClipboardList, Database } from 'lucide-react';
+import { IQ09Snapshot } from './types/iq09';
+import {
+  loadIQ09SnapshotFromStorage,
+  subscribeToIQ09Snapshot,
+  getStoredIQ09Metadata,
+} from './services/iq09Service';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -92,8 +99,12 @@ export default function App() {
   const titleIntervalRef = useRef<any>(null);
 
   // Modais Operacionais e Abas Principais
-  const [activeMainTab, setActiveMainTab] = useState<'operacao' | 'guia_depositos'>('operacao');
+  const [activeMainTab, setActiveMainTab] = useState<'operacao' | 'consulta_iq09' | 'guia_depositos'>('operacao');
+  const [iq09Snapshot, setIq09Snapshot] = useState<IQ09Snapshot | null>(null);
+  const [iq09CachedMeta, setIq09CachedMeta] = useState(() => getStoredIQ09Metadata());
   const [newRequestPreset, setNewRequestPreset] = useState<{
+    material?: string;
+    seriais?: string[];
     centro: string;
     depositoOrigem: string;
     depositoDestino: string;
@@ -325,9 +336,20 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  // Assinatura em Tempo Real (Supabase Realtime WebSockets + Polling Infallible)
+  // Assinatura em Tempo Real (Supabase Realtime WebSockets + Polling Infallible + Snapshot IQ09)
   useEffect(() => {
     loadData();
+    loadIQ09SnapshotFromStorage().then((snap) => {
+      if (snap) {
+        setIq09Snapshot(snap);
+        setIq09CachedMeta(snap.metadata);
+      }
+    });
+
+    const unsubIQ09 = subscribeToIQ09Snapshot((snap) => {
+      setIq09Snapshot(snap);
+      setIq09CachedMeta(snap ? snap.metadata : null);
+    });
 
     const unsubscribe = subscribeToRealtimeTransfers((updatedItems, source, newIncomingPending) => {
       setItems(updatedItems);
@@ -342,6 +364,7 @@ export default function App() {
 
     return () => {
       unsubscribe();
+      unsubIQ09();
     };
   }, [loadData, flashTitleNotification]);
 
@@ -562,11 +585,13 @@ export default function App() {
         onLogout={handleLogout}
         activeMainTab={activeMainTab}
         onSelectMainTab={setActiveMainTab}
+        iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
+        iq09UpdatedAt={iq09Snapshot?.metadata.updatedAt || iq09CachedMeta?.updatedAt || null}
       />
 
       {/* Conteúdo Principal com Camadas Frosted Glass */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-5 relative z-10">
-        {/* Barra de Abas Principais: Fila de Solicitações vs Guia Interativo de Depósitos SAP */}
+        {/* Barra de Abas Principais: Fila de Solicitações vs Consulta IQ09 vs Guia Interativo de Depósitos SAP */}
         <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 figma-dark-pill backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-1">
             <button
@@ -593,6 +618,32 @@ export default function App() {
 
             <button
               type="button"
+              onClick={() => setActiveMainTab('consulta_iq09')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
+                activeMainTab === 'consulta_iq09'
+                  ? 'bg-white text-[#002664] shadow-md'
+                  : 'text-white/90 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Database className={`w-4 h-4 ${activeMainTab === 'consulta_iq09' ? 'text-cyan-600' : 'text-cyan-300'}`} />
+              <span>🔍 Consulta & Validador IQ09 (SAP)</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  activeMainTab === 'consulta_iq09'
+                    ? 'bg-cyan-100 text-[#002664]'
+                    : (iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0) > 0
+                    ? 'bg-emerald-400 text-slate-950'
+                    : 'bg-cyan-500/30 text-cyan-100 border border-cyan-300/40'
+                }`}
+              >
+                {(iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0) > 0
+                  ? `${(iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0).toLocaleString('pt-BR')} UIIs`
+                  : 'UII = Serial'}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveMainTab('guia_depositos')}
               className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'guia_depositos'
@@ -612,8 +663,8 @@ export default function App() {
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/25 border border-emerald-300/40 text-emerald-100">
               🟢 Livre & Blue Service
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/25 border border-amber-300/40 text-amber-100">
-              🟡 Contagem (B112/B153)
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-400/25 border border-cyan-300/40 text-cyan-100">
+              🔍 IQ09 (UII = Serial)
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/30 border border-rose-300/40 text-rose-100">
               🔴 Falta (B111/B152) & Avarias (B136/B149/B137)
@@ -627,6 +678,19 @@ export default function App() {
               setNewRequestPreset(preset);
               setIsNewModalOpen(true);
             }}
+          />
+        ) : activeMainTab === 'consulta_iq09' ? (
+          <IQ09ConsultTab
+            snapshot={iq09Snapshot}
+            queueItems={items}
+            defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
+            currentRole={currentRole}
+            onImportBatchRequests={handleImportBatch}
+            onOpenNewRequestWithPreset={(preset) => {
+              setNewRequestPreset(preset);
+              setIsNewModalOpen(true);
+            }}
+            onSwitchToQueueTab={() => setActiveMainTab('operacao')}
           />
         ) : (
           <>
