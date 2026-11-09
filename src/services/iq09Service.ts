@@ -1244,3 +1244,4 @@ export function getOfficialSampleIQ09Items(): IQ09Item[] {
     { material: 'TSM62', serial: '541711001X9B6233500679', centro: 'B124', deposito: 'B136', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '05/11/2026', modificadoPor: 'APEREIRA', equipamento: '51090399' },
   ];
 }
+

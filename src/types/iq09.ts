@@ -68,3 +68,4 @@ export interface IQ09BatchValidationItem {
   statusDetail: string;
   canCreateRequest: boolean;
 }
+

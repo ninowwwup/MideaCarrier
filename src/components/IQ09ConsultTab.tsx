@@ -37,7 +37,6 @@ import {
   saveAndActivateIQ09Snapshot,
   clearIQ09Snapshot,
   validateSerialsBatchAgainstIQ09,
-  getOfficialSampleIQ09Items,
 } from '../services/iq09Service';
 import {
   SAP_CENTROS_CATALOG,
@@ -351,39 +350,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
     }
   };
 
-  const handleLoadOfficialSample = async () => {
-    setIsParsingFile(true);
-    setImportError(null);
-    try {
-      const sampleItems = getOfficialSampleIQ09Items();
-      const snap = await saveAndActivateIQ09Snapshot(sampleItems, {
-        updatedBy: defaultSolicitante || 'Time Midea (SAP)',
-        fileName: 'Amostra_Real_IQ09_Midea.xlsx',
-        sourceType: 'sample',
-      });
-
-      // Já preenche exemplos reais no validador para o usuário ver o cruzamento funcionando na hora
-      setBatchSerialsInput(
-        [
-          '541760002ZGB4133400502', // Apto (em B148 -> vai p/ B110 no B124)
-          '541760002ZGB4133400533', // Apto (em B148 -> vai p/ B110 no B124)
-          'S1326B21294802', // Apto (em B111 -> vai p/ B413 no B179)
-          'S1326B21294807', // Apto (em B111 -> vai p/ B114 no B158)
-          'S4221B10960628', // Já está no destino B413 (do print!)
-          'S4621B11175122', // Já está no destino B413 (do print!)
-          '541711001X9B6233500679', // Bloqueado em Avaria Definitiva B136
-        ].join('\n')
-      );
-
-      setImportSuccessMsg(
-        `Amostra oficial da IQ09 carregada (${snap.metadata.totalItems} seriais mapeados)! Confira o cruzamento automático abaixo.`
-      );
-      setIsImporterOpen(false);
-    } finally {
-      setIsParsingFile(false);
-    }
-  };
-
   // ============================================================================
   // GERAR SOLICITAÇÕES COM 1 CLIQUE A PARTIR DOS SERIAIS APTOS NA IQ09
   // ============================================================================
@@ -565,17 +531,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
               <UploadCloud className="w-4 h-4 text-cyan-300" />
               <span>{metadata ? 'Atualizar Base IQ09 (.xlsx / Colar)' : 'Importar Base IQ09 (.xlsx / Colar)'}</span>
             </button>
-
-            {!metadata && (
-              <button
-                type="button"
-                onClick={handleLoadOfficialSample}
-                className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
-              >
-                <Sparkles className="w-4 h-4 text-emerald-200" />
-                <span>Carregar Amostra da IQ09</span>
-              </button>
-            )}
 
             {metadata && currentRole !== 'buiatte' && (
               <button
@@ -787,15 +742,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                           }}
                         />
                       </label>
-
-                      <button
-                        type="button"
-                        onClick={handleLoadOfficialSample}
-                        className="px-4 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <Sparkles className="w-4 h-4 text-emerald-600" />
-                        <span>Testar com Amostra Real do Print IQ09</span>
-                      </button>
                     </div>
                   </div>
                 )}
@@ -810,13 +756,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   className="w-full p-3 text-xs font-mono border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#0083CA]"
                 />
                 <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={handleLoadOfficialSample}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
-                  >
-                    Carregar Amostra do Print
-                  </button>
                   <button
                     type="button"
                     disabled={!rawPasteText.trim() || isParsingFile}
@@ -954,20 +893,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 className="w-full p-3 text-xs font-mono border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#0083CA] leading-relaxed"
               />
             </div>
-
-            {iq09Items.length > 0 && !batchSerialsInput.trim() && (
-              <button
-                type="button"
-                onClick={() => {
-                  const sampleUIIs = iq09Items.slice(0, 8).map((i) => i.serial);
-                  setBatchSerialsInput(sampleUIIs.join('\n'));
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#00609C]" />
-                <span>Preencher com UIIs da Base Atual para Testar</span>
-              </button>
-            )}
           </div>
 
           {/* Painel Direito: Resultado "Mastigado" do Cruzamento com a IQ09 */}
@@ -1396,16 +1321,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   ? 'Nenhuma base IQ09 importada no momento'
                   : 'Nenhum serial (UII) encontrado para os filtros aplicados'}
               </div>
-              {iq09Items.length === 0 && (
-                <button
-                  type="button"
-                  onClick={handleLoadOfficialSample}
-                  className="mt-2 px-4 py-2 rounded-xl bg-[#002664] text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
-                  <span>Carregar Amostra Real da IQ09</span>
-                </button>
-              )}
             </div>
           ) : (
             <>
@@ -1631,3 +1546,4 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
     </div>
   );
 };
+
