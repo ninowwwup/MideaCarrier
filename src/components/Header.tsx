@@ -449,48 +449,52 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* HERO ACTION BAR: Translucent Glass Integrado ao Gradiente */}
-      <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-2 sm:px-4 lg:px-6 py-2.5">
-        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Info & Auto-limpeza status */}
-          <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/90 text-center sm:text-left font-medium">
-            <span className="p-1 rounded-lg bg-white/15 border border-white/25 backdrop-blur-sm hidden sm:inline-block">
-              <CalendarCheck2 className="w-4 h-4 text-[#C2DEEB]" />
-            </span>
-            <span>
-              <strong className="text-white font-semibold">Sincronização em Tempo Real (In-time):</strong> Conexão ativa entre dispositivos.
-            </span>
-            {iq09TotalItems > 0 && (
+      <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-2 sm:px-4 lg:px-6 py-2">
+        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+          {/* Status Rápido da Base IQ09 (Sem frase redundante de sincronização) */}
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 text-xs text-white/90 font-medium">
+            {iq09TotalItems > 0 ? (
               <button
                 type="button"
                 onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-400/25 hover:bg-emerald-400/35 border border-emerald-300/50 text-emerald-100 text-[11px] font-bold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 hover:bg-emerald-400/35 border border-emerald-300/50 text-emerald-100 text-xs font-bold transition-all cursor-pointer shadow-2xs"
                 title={
                   iq09UpdatedAt
-                    ? `Base IQ09 atualizada em ${new Date(iq09UpdatedAt).toLocaleString('pt-BR')}`
-                    : 'Base IQ09 ativa'
+                    ? `Base IQ09 atualizada em ${new Date(iq09UpdatedAt).toLocaleString('pt-BR')} — Clique para consultar`
+                    : 'Base IQ09 ativa — Clique para consultar'
                 }
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
                 <span>IQ09 Ativa: {iq09TotalItems.toLocaleString('pt-BR')} UIIs</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 text-white/80 text-[11px] font-semibold transition-all cursor-pointer"
+                title="Clique para importar a planilha IQ09 do SAP"
+              >
+                <Database className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Base IQ09 SAP: Aguardando carga (.xlsx)</span>
               </button>
             )}
           </div>
 
-          {/* BOTÕES DINÂMICOS, LEVES E SUAVES (ESTILO FIGMA) */}
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* BOTÕES DINÂMICOS E RESPONSIVOS (GRID EM TELAS MENORES / FLEX NO DESKTOP) */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-end gap-2 w-full md:w-auto">
             {/* BOTÃO CENTRAL IQ09 SAP */}
             {onSelectMainTab && (
               <button
                 type="button"
                 onClick={() => onSelectMainTab(activeMainTab === 'consulta_iq09' ? 'operacao' : 'consulta_iq09')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer ${
+                className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap ${
                   activeMainTab === 'consulta_iq09'
                     ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-[0_4px_20px_rgba(16,185,129,0.35)]'
                     : 'bg-emerald-500/25 hover:bg-emerald-500/35 text-white border-emerald-300/40'
                 }`}
                 title="Abrir Central de Consulta e De-Para da Base IQ09 SAP (UII = Serial)"
               >
-                <Database className={`w-4 h-4 ${activeMainTab === 'consulta_iq09' ? 'text-slate-950' : 'text-emerald-200'}`} />
+                <Database className={`w-4 h-4 shrink-0 ${activeMainTab === 'consulta_iq09' ? 'text-slate-950' : 'text-emerald-200'}`} />
                 <span className="tracking-wide">
                   {activeMainTab === 'consulta_iq09' ? 'VOLTAR À FILA SAP' : 'BASE IQ09 SAP'}
                 </span>
@@ -502,13 +506,13 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectMainTab(activeMainTab === 'guia_depositos' ? 'operacao' : 'guia_depositos')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer ${activeMainTab === 'guia_depositos'
+                className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap ${activeMainTab === 'guia_depositos'
                     ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_4px_20px_rgba(251,191,36,0.35)]'
                     : 'bg-cyan-500/25 hover:bg-cyan-500/35 text-white border-cyan-300/40'
                   }`}
                 title="Abrir Guia Interativo de Depósitos SAP (Estoque Livre, Contagem/Faltas e Avarias)"
               >
-                <Compass className={`w-4 h-4 ${activeMainTab === 'guia_depositos' ? 'text-slate-950' : 'text-cyan-200'}`} />
+                <Compass className={`w-4 h-4 shrink-0 ${activeMainTab === 'guia_depositos' ? 'text-slate-950' : 'text-cyan-200'}`} />
                 <span className="tracking-wide">
                   {activeMainTab === 'guia_depositos' ? 'VOLTAR À FILA SAP' : 'GUIA DE DEPÓSITOS'}
                 </span>
@@ -519,12 +523,12 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenBatchPaste}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-white bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group"
+              className="flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium text-white bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group whitespace-nowrap cursor-pointer"
               title="Colar tabela do Excel ou mensagem do WhatsApp diretamente (Atalho: V)"
             >
-              <FileSpreadsheet className="w-4 h-4 text-[#C2DEEB] group-hover:scale-110 transition-transform duration-200" />
+              <FileSpreadsheet className="w-4 h-4 shrink-0 text-[#C2DEEB] group-hover:scale-110 transition-transform duration-200" />
               <span className="tracking-wide">COLAR TABELA</span>
-              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/20 text-white rounded border border-white/30">
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/20 text-white rounded border border-white/30">
                 V
               </kbd>
             </button>
@@ -533,12 +537,12 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenNewModal}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 bg-white hover:bg-white/95 border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_25px_rgba(255,255,255,0.35)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group"
+              className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 bg-white hover:bg-white/95 border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_25px_rgba(255,255,255,0.35)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group whitespace-nowrap cursor-pointer"
               title="Nova Solicitação com múltiplos seriais (Atalho: N)"
             >
-              <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 group-hover:rotate-90 transition-transform duration-300" />
+              <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 text-blue-600 group-hover:rotate-90 transition-transform duration-300" />
               <span className="tracking-wide">NOVA SOLICITAÇÃO</span>
-              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-700 rounded border border-slate-300">
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-700 rounded border border-slate-300">
                 N
               </kbd>
             </button>

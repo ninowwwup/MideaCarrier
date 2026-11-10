@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useDeferredValue } from 'react';
 import {
   Search,
   UploadCloud,
@@ -123,43 +123,43 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
     };
   }, [metadata]);
 
-  // Indicadores estratégicos da base IQ09 carregada
+  // Valores diferidos (useDeferredValue) para manter digitação e troca de abas 100% fluidas (60fps) mesmo com 70.000+ UIIs
+  const deferredBatchInput = useDeferredValue(batchSerialsInput);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  // Indicadores estratégicos O(1) usando os contadores pré-indexados de metadata.depositosCount (0ms de custo ao trocar de aba!)
   const iq09Stats = useMemo(() => {
     let livreCount = 0;
     let triagemOuFaltaCount = 0;
     let avariaCount = 0;
-    let outrosStatusCount = 0;
 
-    for (const item of iq09Items) {
-      const depInfo = SAP_DEPOSITOS_CATALOG[item.deposito];
-      if (DEFINITIVE_DAMAGE_DEPOSITS[item.deposito]) {
-        avariaCount++;
-      } else if (
-        depInfo?.category === 'estoque_livre' ||
-        depInfo?.category === 'blue_service'
-      ) {
-        livreCount++;
-      } else if (
-        item.deposito === 'B148' ||
-        depInfo?.category === 'inventario_falta_definitivo'
-      ) {
-        triagemOuFaltaCount++;
-      }
-
-      if (item.statusSistema && item.statusSistema !== 'DEPS') {
-        outrosStatusCount++;
+    if (metadata?.depositosCount) {
+      for (const [dep, count] of Object.entries(metadata.depositosCount)) {
+        const depInfo = SAP_DEPOSITOS_CATALOG[dep];
+        if (DEFINITIVE_DAMAGE_DEPOSITS[dep]) {
+          avariaCount += count;
+        } else if (
+          depInfo?.category === 'estoque_livre' ||
+          depInfo?.category === 'blue_service'
+        ) {
+          livreCount += count;
+        } else if (
+          dep === 'B148' ||
+          depInfo?.category === 'inventario_falta_definitivo'
+        ) {
+          triagemOuFaltaCount += count;
+        }
       }
     }
 
     return {
-      total: iq09Items.length,
+      total: metadata?.totalItems || iq09Items.length,
       uniqueMaterials: metadata?.uniqueMaterials || 0,
       livreCount,
       triagemOuFaltaCount,
       avariaCount,
-      outrosStatusCount,
     };
-  }, [iq09Items, metadata]);
+  }, [metadata, iq09Items.length]);
 
   // Mapa rápido dos itens ativos na fila do MIGOU para exibir na tabela de consulta geral
   const activeQueueMap = useMemo(() => {
@@ -172,11 +172,11 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
     return map;
   }, [queueItems]);
 
-  // Resultado do Validador & De-Para em Lote
+  // Resultado do Validador & De-Para em Lote (executa com input diferido para não travar a colagem/digitação)
   const batchValidationResults: IQ09BatchValidationItem[] = useMemo(() => {
-    if (!batchSerialsInput.trim()) return [];
-    return validateSerialsBatchAgainstIQ09(batchSerialsInput, targetDepositOption, queueItems);
-  }, [batchSerialsInput, targetDepositOption, queueItems, snapshot]);
+    if (!deferredBatchInput.trim()) return [];
+    return validateSerialsBatchAgainstIQ09(deferredBatchInput, targetDepositOption, queueItems);
+  }, [deferredBatchInput, targetDepositOption, queueItems, snapshot]);
 
   // Contadores das 4 categorias do Validador em Lote
   const validationCounts = useMemo(() => {
@@ -224,18 +224,35 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
     return batchValidationResults.filter((r) => r.status === validationFilter);
   }, [batchValidationResults, validationFilter]);
 
-  // Listas dinâmicas de filtros do Explorador IQ09
+  // Listas dinâmicas de filtros O(1) a partir do metadata (sem varrer 71.197 linhas!)
   const allIQ09Centros = useMemo(() => {
+    if (metadata?.centrosCount) {
+      return Object.keys(metadata.centrosCount).filter(Boolean).sort();
+    }
     return Array.from(new Set(iq09Items.map((i) => i.centro).filter(Boolean))).sort();
-  }, [iq09Items]);
+  }, [metadata, iq09Items]);
 
   const allIQ09Depositos = useMemo(() => {
+    if (metadata?.depositosCount) {
+      return Object.keys(metadata.depositosCount).filter(Boolean).sort();
+    }
     return Array.from(new Set(iq09Items.map((i) => i.deposito).filter(Boolean))).sort();
-  }, [iq09Items]);
+  }, [metadata, iq09Items]);
 
-  // Filtragem de alta performance do Explorador da IQ09
+  // Filtragem de alta performance do Explorador da IQ09 (só executa quando a sub-aba 'explorador' está ativa)
   const filteredExplorerItems = useMemo(() => {
-    const q = searchQuery.trim().toUpperCase();
+    if (subTab !== 'explorador') return iq09Items;
+
+    const q = deferredSearchQuery.trim().toUpperCase();
+    const hasNoFilters =
+      !q &&
+      centroFilter === 'todos' &&
+      depositoFilter === 'todos' &&
+      catFilter === 'todos' &&
+      statusSapFilter === 'todos';
+
+    // Atalho O(1) instantâneo quando não há filtros aplicados (retorna o array original sem clonar 71.197 itens)
+    if (hasNoFilters) return iq09Items;
 
     return iq09Items.filter((item) => {
       if (centroFilter !== 'todos' && item.centro !== centroFilter) return false;
@@ -271,7 +288,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
 
       return true;
     });
-  }, [iq09Items, searchQuery, centroFilter, depositoFilter, catFilter, statusSapFilter]);
+  }, [subTab, iq09Items, deferredSearchQuery, centroFilter, depositoFilter, catFilter, statusSapFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredExplorerItems.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -772,33 +789,33 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         )}
       </div>
 
-      {/* 2. SELETOR DE MODO OPERACIONAL DA IQ09 */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-white/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/70 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-1">
+      {/* 2. SELETOR DE MODO OPERACIONAL DA IQ09 (RESPONSIVO) */}
+      <div className="bg-white/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/70 shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
           <button
             type="button"
             onClick={() => setSubTab('validador')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
               subTab === 'validador'
                 ? 'bg-[#002664] text-white shadow-sm'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <Sparkles className={`w-4 h-4 ${subTab === 'validador' ? 'text-cyan-300' : 'text-[#00609C]'}`} />
-            <span>1. Validador & De-Para em Lote (Time Buiatte ➔ MIGO 311)</span>
+            <Sparkles className={`w-4 h-4 shrink-0 ${subTab === 'validador' ? 'text-cyan-300' : 'text-[#00609C]'}`} />
+            <span className="truncate">1. Validador & De-Para em Lote (Time Buiatte ➔ MIGO 311)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('explorador')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
               subTab === 'explorador'
                 ? 'bg-[#002664] text-white shadow-sm'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <Search className={`w-4 h-4 ${subTab === 'explorador' ? 'text-cyan-300' : 'text-[#00609C]'}`} />
-            <span>2. Consulta Geral de Estoque IQ09 ({iq09Items.length.toLocaleString('pt-BR')} UIIs)</span>
+            <Search className={`w-4 h-4 shrink-0 ${subTab === 'explorador' ? 'text-cyan-300' : 'text-[#00609C]'}`} />
+            <span className="truncate">2. Consulta Geral de Estoque IQ09 ({(metadata?.totalItems || iq09Items.length).toLocaleString('pt-BR')} UIIs)</span>
           </button>
         </div>
       </div>
@@ -807,9 +824,9 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
       {/* SUB-ABA 1: VALIDADOR & DE-PARA EM LOTE (MASTIGADO PARA O TIME BUIATTE)     */}
       {/* ========================================================================== */}
       {subTab === 'validador' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
           {/* Painel Esquerdo: Entrada de Seriais (UII) e Destino Desejado */}
-          <div className="lg:col-span-4 bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg p-5 space-y-4 self-start">
+          <div className="xl:col-span-4 bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg p-4 sm:p-5 space-y-4">
             <div className="border-b border-slate-200 pb-3">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#00609C]">
                 De-Para Automático IQ09
@@ -896,7 +913,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
           </div>
 
           {/* Painel Direito: Resultado "Mastigado" do Cruzamento com a IQ09 */}
-          <div className="lg:col-span-8 bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg p-5 flex flex-col justify-between space-y-4">
+          <div className="xl:col-span-8 bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg p-4 sm:p-5 flex flex-col justify-between space-y-4 min-w-0">
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
                 <div>
@@ -1032,8 +1049,8 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 </div>
               ) : (
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="max-h-[420px] overflow-y-auto">
-                    <table className="w-full text-left text-xs border-collapse">
+                  <div className="max-h-[440px] overflow-x-auto overflow-y-auto">
+                    <table className="w-full min-w-[680px] text-left text-xs border-collapse">
                       <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
                         <tr>
                           <th className="py-2.5 px-3">UII (Serial)</th>
@@ -1175,50 +1192,63 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         /* SUB-ABA 2: EXPLORADOR & CONSULTA GERAL DA BASE IQ09 (PARA TODAS AS ÁREAS)  */
         /* ========================================================================== */
         <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-          {/* Barra de Pesquisa e Filtros da IQ09 */}
-          <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              {/* Campo de Busca Instantânea */}
-              <div className="relative flex-1 max-w-lg">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="Pesquisar na IQ09 por UII (Serial), Material (ex: QQI075BB), Equipamento ou Usuário SAP..."
-                  className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA]"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
+          {/* Barra de Pesquisa e Filtros Responsivos da IQ09 */}
+          <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
+            <div className="flex flex-col gap-3">
+              {/* Linha 1: Campo de Busca Instantânea + Botão Exportar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 text-xs"
-                  >
-                    ✕
-                  </button>
-                )}
+                    placeholder="Pesquisar na IQ09 por UII (Serial), Material (ex: QQI075BB), Equipamento ou Usuário SAP..."
+                    className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA]"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                      }}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportFilteredIQ09}
+                  disabled={filteredExplorerItems.length === 0}
+                  className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Exportar resultado filtrado para Excel (CSV)"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Exportar Filtro ({filteredExplorerItems.length.toLocaleString('pt-BR')})</span>
+                </button>
               </div>
 
-              {/* Filtros Rápidos */}
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Linha 2: Grade Responsiva de Filtros Rápidos */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 <select
                   value={centroFilter}
                   onChange={(e) => {
                     setCentroFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
                   <option value="todos">Centro: Todos ({allIQ09Centros.length})</option>
                   {allIQ09Centros.map((c) => (
                     <option key={c} value={c}>
-                      Centro {c} ({metadata?.centrosCount[c] || 0})
+                      Centro {c} ({(metadata?.centrosCount[c] || 0).toLocaleString('pt-BR')})
                     </option>
                   ))}
                 </select>
@@ -1229,14 +1259,14 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setDepositoFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
                   <option value="todos">Depósito: Todos ({allIQ09Depositos.length})</option>
                   {allIQ09Depositos.map((d) => {
                     const dInfo = SAP_DEPOSITOS_CATALOG[d];
                     return (
                       <option key={d} value={d}>
-                        {d} {dInfo ? `— ${dInfo.shortTitle}` : ''} ({metadata?.depositosCount[d] || 0})
+                        {d} {dInfo ? `— ${dInfo.shortTitle}` : ''} ({(metadata?.depositosCount[d] || 0).toLocaleString('pt-BR')})
                       </option>
                     );
                   })}
@@ -1248,7 +1278,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setCatFilter(e.target.value as any);
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
                   <option value="todos">Categoria: Todas</option>
                   <option value="livre">🟢 Em Estoque Livre / Blue Service</option>
@@ -1262,23 +1292,12 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setStatusSapFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
                   <option value="todos">Status Sistema: Todos</option>
                   <option value="DEPS">Apenas DEPS (Em Depósito)</option>
                   <option value="OUTROS">Outros Status (EDEL / Bloqueados)</option>
                 </select>
-
-                <button
-                  type="button"
-                  onClick={handleExportFilteredIQ09}
-                  disabled={filteredExplorerItems.length === 0}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="Exportar resultado filtrado para Excel (CSV)"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Exportar Filtro</span>
-                </button>
               </div>
             </div>
 

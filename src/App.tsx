@@ -592,21 +592,21 @@ export default function App() {
       {/* Conteúdo Principal com Camadas Frosted Glass */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-5 relative z-10">
         {/* Barra de Abas Principais: Fila de Solicitações vs Consulta IQ09 vs Guia Interativo de Depósitos SAP */}
-        <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 figma-dark-pill backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-1">
+        <div className="mb-5 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5 figma-dark-pill backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:flex items-stretch xl:items-center gap-1.5 flex-1">
             <button
               type="button"
               onClick={() => setActiveMainTab('operacao')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer whitespace-nowrap ${
                 activeMainTab === 'operacao'
                   ? 'bg-white text-[#002664] shadow-md'
                   : 'text-white/90 hover:text-white hover:bg-white/10'
               }`}
             >
-              <ClipboardList className={`w-4 h-4 ${activeMainTab === 'operacao' ? 'text-[#00609C]' : 'text-cyan-200'}`} />
-              <span>Fila de Solicitações & Operação SAP</span>
+              <ClipboardList className={`w-4 h-4 shrink-0 ${activeMainTab === 'operacao' ? 'text-[#00609C]' : 'text-cyan-200'}`} />
+              <span className="truncate">Fila de Solicitações & Operação SAP</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
                   activeMainTab === 'operacao'
                     ? 'bg-blue-100 text-[#002664]'
                     : 'bg-white/20 text-white'
@@ -619,16 +619,16 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveMainTab('consulta_iq09')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer whitespace-nowrap ${
                 activeMainTab === 'consulta_iq09'
                   ? 'bg-white text-[#002664] shadow-md'
                   : 'text-white/90 hover:text-white hover:bg-white/10'
               }`}
             >
-              <Database className={`w-4 h-4 ${activeMainTab === 'consulta_iq09' ? 'text-cyan-600' : 'text-cyan-300'}`} />
-              <span>🔍 Consulta & Validador IQ09 (SAP)</span>
+              <Database className={`w-4 h-4 shrink-0 ${activeMainTab === 'consulta_iq09' ? 'text-cyan-600' : 'text-cyan-300'}`} />
+              <span className="truncate">🔍 Consulta & Validador IQ09 (SAP)</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
                   activeMainTab === 'consulta_iq09'
                     ? 'bg-cyan-100 text-[#002664]'
                     : (iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0) > 0
@@ -645,21 +645,21 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveMainTab('guia_depositos')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer whitespace-nowrap ${
                 activeMainTab === 'guia_depositos'
                   ? 'bg-white text-[#002664] shadow-md'
                   : 'text-white/90 hover:text-white hover:bg-white/10'
               }`}
             >
-              <Compass className={`w-4 h-4 ${activeMainTab === 'guia_depositos' ? 'text-emerald-600' : 'text-amber-300'}`} />
-              <span>Guia Interativo de Depósitos & Regras SAP</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-400/90 text-slate-950 shadow-2xs">
+              <Compass className={`w-4 h-4 shrink-0 ${activeMainTab === 'guia_depositos' ? 'text-emerald-600' : 'text-amber-300'}`} />
+              <span className="truncate">Guia Interativo de Depósitos & Regras SAP</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-400/90 text-slate-950 shadow-2xs shrink-0 hidden sm:inline-block">
                 Time Buiatte & Midea
               </span>
             </button>
           </div>
 
-          <div className="hidden xl:flex items-center gap-2 pr-3 text-[11px] text-white/90 font-medium">
+          <div className="hidden 2xl:flex items-center gap-2 pr-3 text-[11px] text-white/90 font-medium shrink-0">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/25 border border-emerald-300/40 text-emerald-100">
               🟢 Livre & Blue Service
             </span>
