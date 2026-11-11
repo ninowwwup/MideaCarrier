@@ -69,3 +69,30 @@ export interface IQ09BatchValidationItem {
   canCreateRequest: boolean;
 }
 
+export type IQ09MacroReadinessStatus =
+  | 'sem_base_iq09'
+  | 'pronto_macro_100'
+  | 'corrigivel_depara'
+  | 'ja_no_destino_sap'
+  | 'erro_critico_macro';
+
+export interface IQ09QueueItemAudit {
+  hasIQ09Base: boolean;
+  serialFound: boolean;
+  iq09Item?: IQ09Item;
+  materialMismatch: boolean;
+  centroMismatch: boolean;
+  origemMismatch: boolean;
+  hasAnyFieldMismatch: boolean;
+  alreadyAtDestination: boolean;
+  statusSapInvalid: boolean;
+  definitiveDamageBlocked: boolean;
+  macroStatus: IQ09MacroReadinessStatus;
+  canAutoFixDePara: boolean;
+  isReadyForMacroAfterDePara: boolean;
+  badgeLabel: string;
+  summaryMessage: string;
+  mismatchDetails: string[];
+}
+
+

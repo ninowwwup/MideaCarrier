@@ -3,6 +3,7 @@ import {
   IQ09Snapshot,
   IQ09SnapshotMetadata,
   IQ09BatchValidationItem,
+  IQ09QueueItemAudit,
 } from '../types/iq09';
 import { TransferItem } from '../types/transfer';
 import {
@@ -1209,6 +1210,209 @@ export function validateSerialsBatchAgainstIQ09(
     };
   });
 }
+
+// ============================================================================
+// BATIMENTO AUTOMÁTICO EM TEMPO REAL NA FILA SAP (DE-PARA & PRÉ-MACRO MIGO 311)
+// ============================================================================
+
+/**
+ * Audita instantaneamente (O(1)) uma solicitação da Fila SAP contra a Base IQ09 ativa.
+ * Verifica divergências de Material, Centro, Depósito de Origem, Status Sistema (DEPS)
+ * e Avaria Definitiva, preparando o registro para execução segura via Macro Excel / SAP Scripting.
+ */
+export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemAudit {
+  const hasBase = Boolean(memorySnapshot && memorySnapshot.items && memorySnapshot.items.length > 0);
+  if (!hasBase) {
+    return {
+      hasIQ09Base: false,
+      serialFound: false,
+      materialMismatch: false,
+      centroMismatch: false,
+      origemMismatch: false,
+      hasAnyFieldMismatch: false,
+      alreadyAtDestination: false,
+      statusSapInvalid: false,
+      definitiveDamageBlocked: false,
+      macroStatus: 'sem_base_iq09',
+      canAutoFixDePara: false,
+      isReadyForMacroAfterDePara: false,
+      badgeLabel: 'Aguardando IQ09',
+      summaryMessage: 'Importe a base IQ09 para habilitar o batimento automático.',
+      mismatchDetails: [],
+    };
+  }
+
+  const reqSerial = (item.serial || '').trim().toUpperCase();
+  const reqMaterial = (item.material || '').trim().toUpperCase();
+  const reqCentro = (item.centro || '').trim().toUpperCase();
+  const reqOrigem = (item.depositoOrigem || '').trim().toUpperCase();
+  const reqDestino = (item.depositoDestino || '').trim().toUpperCase();
+
+  const iq09 = lookupSerialInIQ09(reqSerial);
+
+  // 1. UII / Serial não encontrado na base IQ09
+  if (!iq09) {
+    return {
+      hasIQ09Base: true,
+      serialFound: false,
+      materialMismatch: false,
+      centroMismatch: false,
+      origemMismatch: false,
+      hasAnyFieldMismatch: false,
+      alreadyAtDestination: false,
+      statusSapInvalid: false,
+      definitiveDamageBlocked: false,
+      macroStatus: 'erro_critico_macro',
+      canAutoFixDePara: false,
+      isReadyForMacroAfterDePara: false,
+      badgeLabel: '🔴 S/ Saldo IQ09',
+      summaryMessage: `Serial (UII) ${reqSerial} não localizado na base IQ09 ativa. A Macro MIGO falhará por falta de equipamento/saldo no SAP.`,
+      mismatchDetails: [`Serial ${reqSerial} ausente na IQ09`],
+    };
+  }
+
+  const iqMaterial = (iq09.material || '').trim().toUpperCase();
+  const iqCentro = (iq09.centro || '').trim().toUpperCase();
+  const iqOrigem = (iq09.deposito || '').trim().toUpperCase();
+  const iqStatus = (iq09.statusSistema || 'DEPS').trim().toUpperCase();
+
+  const materialMismatch = Boolean(iqMaterial && reqMaterial !== iqMaterial);
+  const centroMismatch = Boolean(iqCentro && reqCentro !== iqCentro);
+  const origemMismatch = Boolean(iqOrigem && reqOrigem !== iqOrigem);
+  const hasAnyFieldMismatch = materialMismatch || centroMismatch || origemMismatch;
+
+  const mismatchDetails: string[] = [];
+  if (materialMismatch) {
+    mismatchDetails.push(`Material: ${reqMaterial} ➔ IQ09: ${iqMaterial}`);
+  }
+  if (centroMismatch) {
+    mismatchDetails.push(`Centro: ${reqCentro} ➔ IQ09: ${iqCentro}`);
+  }
+  if (origemMismatch) {
+    mismatchDetails.push(`Dep. Origem: ${reqOrigem} ➔ IQ09: ${iqOrigem}`);
+  }
+
+  // 2. Verifica se na IQ09 o serial JÁ ESTÁ no Depósito de Destino solicitado
+  const alreadyAtDestination = iqOrigem === reqDestino && (!centroMismatch || iqCentro === reqCentro);
+  if (alreadyAtDestination) {
+    return {
+      hasIQ09Base: true,
+      serialFound: true,
+      iq09Item: iq09,
+      materialMismatch,
+      centroMismatch,
+      origemMismatch,
+      hasAnyFieldMismatch,
+      alreadyAtDestination: true,
+      statusSapInvalid: false,
+      definitiveDamageBlocked: false,
+      macroStatus: 'ja_no_destino_sap',
+      canAutoFixDePara: false,
+      isReadyForMacroAfterDePara: false,
+      badgeLabel: `🔵 Já em ${iqOrigem} (IQ09)`,
+      summaryMessage: `Na IQ09 este serial já se encontra no depósito destino ${iqOrigem} (${iqCentro}). Não deve ser enviado para a Macro MIGO 311.`,
+      mismatchDetails,
+    };
+  }
+
+  // 3. Verifica se na IQ09 o serial está em Avaria Definitiva (B136, B149, B137) tentando sair para livre
+  const damageOriginInfo = DEFINITIVE_DAMAGE_DEPOSITS[iqOrigem];
+  const definitiveDamageBlocked = Boolean(damageOriginInfo && reqDestino !== iqOrigem && !DEFINITIVE_DAMAGE_DEPOSITS[reqDestino]);
+  if (definitiveDamageBlocked) {
+    return {
+      hasIQ09Base: true,
+      serialFound: true,
+      iq09Item: iq09,
+      materialMismatch,
+      centroMismatch,
+      origemMismatch,
+      hasAnyFieldMismatch,
+      alreadyAtDestination: false,
+      statusSapInvalid: false,
+      definitiveDamageBlocked: true,
+      macroStatus: 'erro_critico_macro',
+      canAutoFixDePara: false,
+      isReadyForMacroAfterDePara: false,
+      badgeLabel: `🛑 IQ09: Avaria ${iqOrigem}`,
+      summaryMessage: `Na IQ09 o serial está em ${iqOrigem} (${damageOriginInfo?.shortTitle}) — Avaria Definitiva bloqueada para retorno ao estoque livre.`,
+      mismatchDetails,
+    };
+  }
+
+  // 4. Verifica Status do Sistema SAP (EDEL, Ordem de Cliente, etc.)
+  const isBlockedByDeliveryOrStatus =
+    iqStatus.includes('EDEL') ||
+    iqStatus.includes('LKD') ||
+    iqStatus.includes('BLQ') ||
+    (!iqStatus.includes('DEPS') && !iqStatus.includes('ESTC') && !iqStatus.includes('AVLB')) ||
+    Boolean(iq09.ordemCliente);
+
+  if (isBlockedByDeliveryOrStatus) {
+    return {
+      hasIQ09Base: true,
+      serialFound: true,
+      iq09Item: iq09,
+      materialMismatch,
+      centroMismatch,
+      origemMismatch,
+      hasAnyFieldMismatch,
+      alreadyAtDestination: false,
+      statusSapInvalid: true,
+      definitiveDamageBlocked: false,
+      macroStatus: 'erro_critico_macro',
+      canAutoFixDePara: false,
+      isReadyForMacroAfterDePara: false,
+      badgeLabel: `🔴 Status SAP: ${iqStatus}`,
+      summaryMessage: iq09.ordemCliente
+        ? `Serial preso na Ordem de Cliente ${iq09.ordemCliente} (Status ${iqStatus}). A Macro MIGO recusará a transferência.`
+        : `Status SAP na IQ09 é "${iqStatus}" (diferente de DEPS). A Macro MIGO recusará a transferência.`,
+      mismatchDetails,
+    };
+  }
+
+  // 5. Possui divergência de Material, Centro ou Depósito de Origem em relação à IQ09 -> Corrigível via De-Para Automático!
+  if (hasAnyFieldMismatch) {
+    return {
+      hasIQ09Base: true,
+      serialFound: true,
+      iq09Item: iq09,
+      materialMismatch,
+      centroMismatch,
+      origemMismatch,
+      hasAnyFieldMismatch: true,
+      alreadyAtDestination: false,
+      statusSapInvalid: false,
+      definitiveDamageBlocked: false,
+      macroStatus: 'corrigivel_depara',
+      canAutoFixDePara: true,
+      isReadyForMacroAfterDePara: true,
+      badgeLabel: '🟠 De-Para IQ09',
+      summaryMessage: `Divergência detectada c/ IQ09 (${mismatchDetails.join(' • ')}). Clique em "Aplicar De-Para IQ09" para corrigir antes de rodar a Macro!`,
+      mismatchDetails,
+    };
+  }
+
+  // 6. 100% BATIDO COM A BASE IQ09 (Material, Serial/UII, Centro, Dep. Origem e Status DEPS) -> PRONTO PARA MACRO!
+  return {
+    hasIQ09Base: true,
+    serialFound: true,
+    iq09Item: iq09,
+    materialMismatch: false,
+    centroMismatch: false,
+    origemMismatch: false,
+    hasAnyFieldMismatch: false,
+    alreadyAtDestination: false,
+    statusSapInvalid: false,
+    definitiveDamageBlocked: false,
+    macroStatus: 'pronto_macro_100',
+    canAutoFixDePara: false,
+    isReadyForMacroAfterDePara: true,
+    badgeLabel: '🟢 IQ09 100% OK',
+    summaryMessage: `100% batido c/ IQ09: Material ${iqMaterial}, Centro ${iqCentro}, Origem ${iqOrigem} (Status ${iqStatus}). Pronto p/ Macro MIGO 311!`,
+    mismatchDetails: [],
+  };
+}
+
 
 // ============================================================================
 // AMOSTRA OFICIAL DA IQ09 (ESPELHO FIEL DO PRINT ENVIADO PELO USUÁRIO + CENÁRIOS)

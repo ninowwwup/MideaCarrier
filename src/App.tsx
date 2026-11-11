@@ -483,6 +483,55 @@ export default function App() {
     );
   };
 
+  // De-Para Automático IQ09 direto na Fila de Solicitações (corrige Material, Centro e Dep. Origem com 1 clique p/ não falhar na Macro MIGO)
+  const handleApplyIQ09DePara = async (
+    updates: Array<{
+      id: string;
+      material: string;
+      centro: string;
+      depositoOrigem: string;
+      observacoes?: string;
+    }>
+  ) => {
+    if (!updates || updates.length === 0) return;
+    const now = new Date().toISOString();
+    const updater =
+      currentUser?.teamName ||
+      (currentUser?.role === 'buiatte' ? 'Time Buiatte (Prod)' : 'Time Midea (SAP)');
+    const updatesMap = new Map(updates.map((u) => [u.id, u]));
+    const affectedItems: TransferItem[] = [];
+
+    const updated = items.map((item) => {
+      const fix = updatesMap.get(item.id);
+      if (fix) {
+        const up: TransferItem = {
+          ...item,
+          material: fix.material,
+          centro: fix.centro,
+          depositoOrigem: fix.depositoOrigem,
+          observacoes: fix.observacoes !== undefined ? fix.observacoes : item.observacoes,
+          atualizadoEm: now,
+          atualizadoPor: updater,
+        };
+        affectedItems.push(up);
+        return up;
+      }
+      return item;
+    });
+
+    setItems(updated);
+    if (sapModalItems) {
+      setSapModalItems((prev) =>
+        prev ? prev.map((it) => updatesMap.get(it.id) ? (updated.find((u) => u.id === it.id) || it) : it) : null
+      );
+    }
+    await updateSpecificTransferItems(affectedItems, updated);
+    showSuccessNotice(
+      'De-Para Automático IQ09 Aplicado!',
+      `${affectedItems.length} solicitação(ões) sincronizada(s) com Material, Centro e Dep. Origem reais da base IQ09 (100% prontas para a Macro MIGO).`
+    );
+  };
+
   // Resolução de Conclusão ou Divergência (Atualização cirúrgica em lote no Supabase)
   const handleResolutionSubmit = async (data: {
     sapDocNumber?: string;
@@ -741,6 +790,10 @@ export default function App() {
               }}
               onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
               onDeleteSelected={handleDeleteSelected}
+              iq09SnapshotVersion={iq09Snapshot?.metadata.snapshotId || null}
+              iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
+              onApplyIQ09DePara={handleApplyIQ09DePara}
+              onOpenIQ09Tab={() => setActiveMainTab('consulta_iq09')}
             />
           </>
         )}
@@ -811,6 +864,8 @@ export default function App() {
           isOpen={Boolean(sapModalItems)}
           items={sapModalItems}
           onClose={() => setSapModalItems(null)}
+          iq09SnapshotVersion={iq09Snapshot?.metadata.snapshotId || null}
+          onApplyIQ09DePara={handleApplyIQ09DePara}
         />
       )}
 

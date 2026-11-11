@@ -20,12 +20,17 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Trash2
+  Trash2,
+  Database,
+  Zap,
+  ShieldAlert
 } from 'lucide-react';
 import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/transfer';
 import { formatForSAPTable, formatSerialsForSAP, checkDefinitiveDamageOrigin, analyzeTransferRoute, SAP_DEPOSITOS_CATALOG } from '../utils/sapFormatter';
 import { LabelPhotoModal } from './LabelPhotoModal';
 import { compressImageFile } from '../utils/imageCompressor';
+import { IQ09MacroReadinessStatus, IQ09QueueItemAudit } from '../types/iq09';
+import { auditTransferItemAgainstIQ09 } from '../services/iq09Service';
 
 export type SortField = 'fifo' | 'material' | 'serial' | 'centro' | 'rota' | 'status' | 'docSap';
 export type SortDirection = 'asc' | 'desc';
@@ -49,6 +54,18 @@ interface TransferTableProps {
   onOpenNewModal?: () => void;
   onOpenBatchPaste?: () => void;
   onDeleteSelected?: (ids: string[]) => void | Promise<void>;
+  iq09SnapshotVersion?: string | null;
+  iq09TotalItems?: number;
+  onApplyIQ09DePara?: (
+    updates: Array<{
+      id: string;
+      material: string;
+      centro: string;
+      depositoOrigem: string;
+      observacoes?: string;
+    }>
+  ) => void | Promise<void>;
+  onOpenIQ09Tab?: () => void;
 }
 
 export type ColumnKey =
@@ -123,12 +140,20 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   onOpenNewModal,
   onOpenBatchPaste,
   onDeleteSelected,
+  iq09SnapshotVersion = null,
+  iq09TotalItems = 0,
+  onApplyIQ09DePara,
+  onOpenIQ09Tab,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedBatchNotice, setCopiedBatchNotice] = useState(false);
   const [viewingPhotoItem, setViewingPhotoItem] = useState<TransferItem | null>(null);
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
+
+  // Filtro rápido do batimento IQ09 direto na Fila de Solicitações & Operação SAP
+  const [iq09MacroFilter, setIq09MacroFilter] = useState<'todos' | IQ09MacroReadinessStatus>('todos');
+  const [isApplyingDePara, setIsApplyingDePara] = useState(false);
 
   // Estado de Ordenação e Agrupamento Interativo (por Material, Centro, Depósitos, FIFO, etc.)
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'fifo', direction: 'asc' });
@@ -185,9 +210,113 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     });
   };
 
+  // Mapa O(1) de auditoria automática de cada item da fila contra a Base IQ09 ativa
+  const iq09AuditMap = useMemo(() => {
+    const map = new Map<string, IQ09QueueItemAudit>();
+    for (const item of items) {
+      map.set(item.id, auditTransferItemAgainstIQ09(item));
+    }
+    return map;
+  }, [items, iq09SnapshotVersion, iq09TotalItems]);
+
+  // Resumo executivo do batimento IQ09 para os itens ativos na fila (Pendentes / Em Análise, ou todos se filtrando concluídos)
+  const iq09QueueSummary = useMemo(() => {
+    let prontosMacro = 0;
+    let corrigiveisDePara = 0;
+    let jaNoDestino = 0;
+    let errosCriticos = 0;
+    let hasBase = false;
+    const corrigiveisItems: Array<{ item: TransferItem; audit: IQ09QueueItemAudit }> = [];
+    const prontosItems: TransferItem[] = [];
+
+    const scopeItems = items.filter((i) =>
+      filters.status === 'concluido' ? i.status === 'concluido' : i.status !== 'concluido'
+    );
+
+    for (const item of scopeItems) {
+      const audit = iq09AuditMap.get(item.id);
+      if (!audit || !audit.hasIQ09Base) continue;
+      hasBase = true;
+
+      if (audit.macroStatus === 'pronto_macro_100') {
+        prontosMacro++;
+        prontosItems.push(item);
+      } else if (audit.macroStatus === 'corrigivel_depara') {
+        corrigiveisDePara++;
+        corrigiveisItems.push({ item, audit });
+      } else if (audit.macroStatus === 'ja_no_destino_sap') {
+        jaNoDestino++;
+      } else if (audit.macroStatus === 'erro_critico_macro') {
+        errosCriticos++;
+      }
+    }
+
+    return {
+      hasBase: hasBase || iq09TotalItems > 0,
+      totalAudited: scopeItems.length,
+      prontosMacro,
+      corrigiveisDePara,
+      jaNoDestino,
+      errosCriticos,
+      corrigiveisItems,
+      prontosItems,
+    };
+  }, [items, filters.status, iq09AuditMap, iq09TotalItems]);
+
+  // Aplicar De-Para Automático IQ09 em 1 linha específica
+  const handleFixSingleItemWithIQ09 = async (item: TransferItem, audit: IQ09QueueItemAudit) => {
+    if (!onApplyIQ09DePara || !audit.iq09Item) return;
+    const iq = audit.iq09Item;
+    const diffNotes = audit.mismatchDetails.join(', ');
+    const prefix = item.observacoes ? `${item.observacoes} | ` : '';
+    await onApplyIQ09DePara([
+      {
+        id: item.id,
+        material: iq.material,
+        centro: iq.centro,
+        depositoOrigem: iq.deposito,
+        observacoes: `${prefix}[De-Para IQ09: ${diffNotes}]`,
+      },
+    ]);
+  };
+
+  // Aplicar De-Para Automático IQ09 em lote para todas as solicitações divergentes na fila
+  const handleFixAllDeParaWithIQ09 = async () => {
+    if (!onApplyIQ09DePara || iq09QueueSummary.corrigiveisItems.length === 0) return;
+    setIsApplyingDePara(true);
+    try {
+      const payload = iq09QueueSummary.corrigiveisItems
+        .filter((entry) => Boolean(entry.audit.iq09Item))
+        .map(({ item, audit }) => {
+          const iq = audit.iq09Item!;
+          const diffNotes = audit.mismatchDetails.join(', ');
+          const prefix = item.observacoes ? `${item.observacoes} | ` : '';
+          return {
+            id: item.id,
+            material: iq.material,
+            centro: iq.centro,
+            depositoOrigem: iq.deposito,
+            observacoes: `${prefix}[De-Para IQ09: ${diffNotes}]`,
+          };
+        });
+      await onApplyIQ09DePara(payload);
+      if (iq09MacroFilter === 'corrigivel_depara') {
+        setIq09MacroFilter('todos');
+      }
+    } finally {
+      setIsApplyingDePara(false);
+    }
+  };
+
   // Itens filtrados, agrupados e ordenados
   const filteredItems = useMemo(() => {
     const list = items.filter((item) => {
+      // Filtro rápido do Batimento IQ09 / Macro MIGO
+      if (iq09MacroFilter !== 'todos') {
+        const audit = iq09AuditMap.get(item.id);
+        if (!audit || audit.macroStatus !== iq09MacroFilter) return false;
+      }
+
       // Busca geral
       if (filters.busca.trim()) {
         const query = filters.busca.toLowerCase();
@@ -276,7 +405,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
         }
       }
     });
-  }, [items, filters, sortConfig]);
+  }, [items, filters, sortConfig, iq09MacroFilter, iq09AuditMap]);
 
   // Contagem de solicitações flegadas com Origem em Depósito de Avaria Definitiva (B136, B149, B137)
   const flaggedDamageCount = useMemo(() => {
@@ -641,10 +770,12 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 filters.centro !== 'todos' ||
                 filters.depositoOrigem !== 'todos' ||
                 filters.depositoDestino !== 'todos' ||
-                filters.apenasDivergencias) && (
+                filters.apenasDivergencias ||
+                iq09MacroFilter !== 'todos') && (
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    setIq09MacroFilter('todos');
                     onFilterChange({
                       busca: '',
                       status: 'todos',
@@ -653,8 +784,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       depositoDestino: 'todos',
                       periodo: 'todos',
                       apenasDivergencias: false,
-                    })
-                  }
+                    });
+                  }}
                   className="px-2.5 py-1 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg font-medium transition-all duration-200 active:scale-95"
                 >
                   Limpar
@@ -662,6 +793,186 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               )}
             </div>
           </div>
+
+          {/* PAINEL DE BATIMENTO AUTOMÁTICO IQ09 ⟷ FILA SAP (DE-PARA EM TEMPO REAL & PRÉ-VALIDAÇÃO MACRO MIGO) */}
+          {iq09QueueSummary.hasBase ? (
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-[#002664] to-[#004488] text-white border border-cyan-400/30 shadow-md space-y-2.5">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-400/20 border border-cyan-300/40 text-cyan-200 text-[11px] font-extrabold tracking-wide">
+                    <Database className="w-3.5 h-3.5 text-cyan-300" />
+                    <span>BATIMENTO AUTOMÁTICO IQ09 ⟷ FILA SAP (PRÉ-MACRO MIGO)</span>
+                  </span>
+                  <span className="text-[11px] text-white/85 font-medium">
+                    Cruzamento instantâneo de <strong>Material</strong>, <strong>Serial (`UII`)</strong>, <strong>Centro</strong> e <strong>Dep. Origem</strong> direto na fila:
+                  </span>
+                </div>
+
+                {/* Botões de Automação De-Para e Seleção Pronta p/ Macro */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {iq09QueueSummary.corrigiveisDePara > 0 && onApplyIQ09DePara && (
+                    <button
+                      type="button"
+                      disabled={isApplyingDePara}
+                      onClick={handleFixAllDeParaWithIQ09}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                      title="Corrige automaticamente Material, Centro e Depósito de Origem de todas as solicitações divergentes para bater 100% com a IQ09"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                      <span>
+                        {isApplyingDePara
+                          ? 'Sincronizando De-Para...'
+                          : `⚡ Aplicar De-Para IQ09 em Todos (${iq09QueueSummary.corrigiveisDePara})`}
+                      </span>
+                    </button>
+                  )}
+
+                  {iq09QueueSummary.prontosMacro > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const readyIds = new Set(iq09QueueSummary.prontosItems.map((i) => i.id));
+                        setSelectedIds(readyIds);
+                        onOpenSAPModal(iq09QueueSummary.prontosItems);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                      title="Seleciona apenas os itens 100% batidos com a IQ09 e abre o Assistente para rodar a Macro MIGO sem erros"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                      <span>
+                        🚀 Assistente Macro 100% OK ({iq09QueueSummary.prontosMacro})
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 4 Semáforos Clicáveis de Filtro Rápido na Fila */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIq09MacroFilter(
+                      iq09MacroFilter === 'pronto_macro_100' ? 'todos' : 'pronto_macro_100'
+                    )
+                  }
+                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    iq09MacroFilter === 'pronto_macro_100'
+                      ? 'bg-emerald-400 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
+                      : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border-emerald-400/35'
+                  }`}
+                >
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
+                      🟢 100% OK p/ Macro MIGO
+                    </div>
+                    <div className="text-[10px] opacity-85">
+                      Material, Centro e Origem iguais à IQ09
+                    </div>
+                  </div>
+                  <span className="text-lg font-black font-mono px-2">
+                    {iq09QueueSummary.prontosMacro}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIq09MacroFilter(
+                      iq09MacroFilter === 'corrigivel_depara' ? 'todos' : 'corrigivel_depara'
+                    )
+                  }
+                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    iq09MacroFilter === 'corrigivel_depara'
+                      ? 'bg-amber-400 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
+                      : 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-100 border-amber-400/40'
+                  }`}
+                >
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
+                      🟠 Divergência De-Para IQ09
+                    </div>
+                    <div className="text-[10px] opacity-85">
+                      Material, Centro ou Origem ≠ IQ09
+                    </div>
+                  </div>
+                  <span className="text-lg font-black font-mono px-2">
+                    {iq09QueueSummary.corrigiveisDePara}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIq09MacroFilter(
+                      iq09MacroFilter === 'ja_no_destino_sap' ? 'todos' : 'ja_no_destino_sap'
+                    )
+                  }
+                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    iq09MacroFilter === 'ja_no_destino_sap'
+                      ? 'bg-sky-300 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
+                      : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-100 border-sky-300/35'
+                  }`}
+                >
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
+                      🔵 Já no Depósito Destino
+                    </div>
+                    <div className="text-[10px] opacity-85">
+                      Já consta no destino na IQ09
+                    </div>
+                  </div>
+                  <span className="text-lg font-black font-mono px-2">
+                    {iq09QueueSummary.jaNoDestino}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIq09MacroFilter(
+                      iq09MacroFilter === 'erro_critico_macro' ? 'todos' : 'erro_critico_macro'
+                    )
+                  }
+                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    iq09MacroFilter === 'erro_critico_macro'
+                      ? 'bg-rose-400 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
+                      : 'bg-rose-500/25 hover:bg-rose-500/35 text-rose-100 border-rose-400/40'
+                  }`}
+                >
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
+                      🔴 Sem Saldo / Impedido IQ09
+                    </div>
+                    <div className="text-[10px] opacity-85">
+                      Ausente na IQ09, Status ≠ DEPS ou Avaria
+                    </div>
+                  </div>
+                  <span className="text-lg font-black font-mono px-2">
+                    {iq09QueueSummary.errosCriticos}
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            onOpenIQ09Tab && (
+              <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-[#00609C]" />
+                  <span>
+                    <strong>Dica Key User SAP:</strong> Importe a planilha <strong>IQ09 (.xlsx)</strong> para ativar o <strong>De-Para e Batimento Automático</strong> de Material, Serial, Centro e Depósito direto nesta fila!
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenIQ09Tab}
+                  className="px-3 py-1 rounded-lg bg-[#002664] hover:bg-[#003380] text-white font-bold text-[11px] cursor-pointer"
+                >
+                  Importar Base IQ09 (.xlsx)
+                </button>
+              </div>
+            )
+          )}
 
           {/* Selected Rows Batch Action Bar - Botões Dinâmicos, Leves e Suaves */}
           {selectedItemsList.length > 0 && (
@@ -795,6 +1106,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               const isSelected = selectedIds.has(item.id);
               const damageCheck = checkDefinitiveDamageOrigin(item.depositoOrigem, item.depositoDestino);
               const isInvalidOrigin = damageCheck.isInvalidOrigin;
+              const iqAudit = iq09AuditMap.get(item.id);
 
               return (
                 <div
@@ -834,6 +1146,21 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       >
                         {item.material}
                       </span>
+                      {iqAudit?.hasIQ09Base && item.status !== 'concluido' && (
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                            iqAudit.macroStatus === 'pronto_macro_100'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : iqAudit.macroStatus === 'corrigivel_depara'
+                              ? 'bg-amber-100 text-amber-950 border-amber-400'
+                              : iqAudit.macroStatus === 'ja_no_destino_sap'
+                              ? 'bg-sky-100 text-sky-900 border-sky-300'
+                              : 'bg-rose-100 text-rose-900 border-rose-300'
+                          }`}
+                        >
+                          {iqAudit.badgeLabel}
+                        </span>
+                      )}
                       {isInvalidOrigin && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-extrabold shadow-2xs">
                           🚫 SOLICITAÇÃO INCORRETA • AVARIA DEFINITIVA
@@ -932,6 +1259,33 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     {isInvalidOrigin && damageCheck.originInfo && (
                       <div className="pt-1.5 border-t border-red-200 text-[11px] text-red-900 font-semibold leading-snug">
                         ❌ <strong>Origem {damageCheck.originInfo.code} ({damageCheck.originInfo.shortTitle}):</strong> Produto já avariado (Definitivo). Não deve ir para o estoque livre.
+                      </div>
+                    )}
+
+                    {/* Alerta e Botão De-Para IQ09 no Card Mobile */}
+                    {iqAudit?.hasIQ09Base && item.status !== 'concluido' && iqAudit.macroStatus !== 'pronto_macro_100' && (
+                      <div
+                        className={`pt-1.5 border-t text-[11px] font-semibold flex flex-col gap-1.5 ${
+                          iqAudit.macroStatus === 'corrigivel_depara'
+                            ? 'border-amber-200 text-amber-900'
+                            : iqAudit.macroStatus === 'ja_no_destino_sap'
+                            ? 'border-sky-200 text-sky-900'
+                            : 'border-rose-200 text-rose-900'
+                        }`}
+                      >
+                        <div>{iqAudit.summaryMessage}</div>
+                        {iqAudit.canAutoFixDePara && onApplyIQ09DePara && (
+                          <button
+                            type="button"
+                            onClick={() => handleFixSingleItemWithIQ09(item, iqAudit)}
+                            className="w-full py-1.5 px-2.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                          >
+                            <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                            <span>
+                              ⚡ Corrigir c/ IQ09 ({iqAudit.iq09Item?.material} • {iqAudit.iq09Item?.centro} • {iqAudit.iq09Item?.deposito})
+                            </span>
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1354,6 +1708,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                   const damageCheck = checkDefinitiveDamageOrigin(item.depositoOrigem, item.depositoDestino);
                   const routeAnalysis = analyzeTransferRoute(item.centro, item.depositoOrigem, item.depositoDestino);
                   const isInvalidOrigin = damageCheck.isInvalidOrigin;
+                  const iqAudit = iq09AuditMap.get(item.id);
+                  const showIQ09Diff = Boolean(iqAudit?.hasIQ09Base && item.status !== 'concluido');
 
                   return (
                     <tr
@@ -1361,6 +1717,12 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       className={`transition-colors ${
                         isInvalidOrigin
                           ? 'bg-red-100/90 hover:bg-red-100 border-l-4 border-l-red-600'
+                          : showIQ09Diff && iqAudit?.macroStatus === 'erro_critico_macro'
+                          ? 'bg-rose-50/70 hover:bg-rose-100/70 border-l-4 border-l-rose-500'
+                          : showIQ09Diff && iqAudit?.macroStatus === 'corrigivel_depara'
+                          ? 'bg-amber-50/60 hover:bg-amber-100/60 border-l-4 border-l-amber-500'
+                          : showIQ09Diff && iqAudit?.macroStatus === 'ja_no_destino_sap'
+                          ? 'bg-sky-50/60 hover:bg-sky-100/60 border-l-4 border-l-sky-500'
                           : isSelected
                           ? 'bg-blue-50/80 hover:bg-blue-50'
                           : item.status === 'divergencia'
@@ -1394,11 +1756,19 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </span>
                       </td>
 
-                      {/* 3. Material (Sem ocultar caracteres) */}
+                      {/* 3. Material (Com Batimento Automático IQ09) */}
                       <td className={`py-2 px-1.5 font-mono font-bold align-middle ${isInvalidOrigin ? 'text-red-950' : 'text-slate-900'}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-start justify-between gap-1">
-                            <span className="break-all leading-tight text-[11px]">{item.material}</span>
+                            <span
+                              className={`break-all leading-tight text-[11px] ${
+                                showIQ09Diff && iqAudit?.materialMismatch
+                                  ? 'text-amber-900 underline decoration-wavy decoration-amber-500'
+                                  : ''
+                              }`}
+                            >
+                              {item.material}
+                            </span>
                             <button
                               type="button"
                               onClick={() => {
@@ -1418,6 +1788,17 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               )}
                             </button>
                           </div>
+
+                          {/* Divergência de Material contra a Base IQ09 */}
+                          {showIQ09Diff && iqAudit?.materialMismatch && iqAudit.iq09Item && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-200/90 text-amber-950 border border-amber-400 text-[9px] font-mono font-extrabold leading-tight w-fit max-w-full"
+                              title={`Na base IQ09 este serial pertence ao Material ${iqAudit.iq09Item.material} (diferente de ${item.material})`}
+                            >
+                              ⚠️ IQ09: {iqAudit.iq09Item.material}
+                            </span>
+                          )}
+
                           {isInvalidOrigin && (
                             <span
                               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-sans font-extrabold leading-tight shadow-2xs w-fit max-w-full"
@@ -1429,53 +1810,96 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         </div>
                       </td>
 
-                      {/* 4. Serial (Sem ocultar dígitos) */}
+                      {/* 4. Serial / UII (Com Selo de Batimento IQ09 em Tempo Real) */}
                       <td className={`py-2 px-1.5 font-mono align-middle ${isInvalidOrigin ? 'text-red-950 font-semibold' : 'text-slate-700'}`}>
-                        <div className="flex items-start justify-between gap-1">
-                          <span
-                            className={`px-1.5 py-0.5 rounded border break-all leading-tight text-[11px] ${
-                              isInvalidOrigin
-                                ? 'bg-red-50/90 border-red-300 text-red-950'
-                                : 'bg-slate-50 border-slate-200'
-                            }`}
-                          >
-                            {item.serial}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(item.serial);
-                              setCopiedId(`ser-${item.id}`);
-                              setTimeout(() => setCopiedId(null), 1500);
-                            }}
-                            className={`${
-                              isInvalidOrigin ? 'text-red-500 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
-                            } transition-colors active:scale-90 shrink-0 mt-0.5`}
-                            title="Copiar serial"
-                          >
-                            {copiedId === `ser-${item.id}` ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-start justify-between gap-1">
+                            <span
+                              className={`px-1.5 py-0.5 rounded border break-all leading-tight text-[11px] ${
+                                isInvalidOrigin
+                                  ? 'bg-red-50/90 border-red-300 text-red-950'
+                                  : showIQ09Diff && !iqAudit?.serialFound
+                                  ? 'bg-rose-100 border-rose-400 text-rose-950 font-bold'
+                                  : showIQ09Diff && iqAudit?.macroStatus === 'pronto_macro_100'
+                                  ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold'
+                                  : 'bg-slate-50 border-slate-200'
+                              }`}
+                            >
+                              {item.serial}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(item.serial);
+                                setCopiedId(`ser-${item.id}`);
+                                setTimeout(() => setCopiedId(null), 1500);
+                              }}
+                              className={`${
+                                isInvalidOrigin ? 'text-red-500 hover:text-red-800' : 'text-slate-300 hover:text-slate-600'
+                              } transition-colors active:scale-90 shrink-0 mt-0.5`}
+                              title="Copiar serial"
+                            >
+                              {copiedId === `ser-${item.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Selo de Status do Cruzamento Automático IQ09 */}
+                          {iqAudit?.hasIQ09Base && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border ${
+                                  iqAudit.macroStatus === 'pronto_macro_100'
+                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                    : iqAudit.macroStatus === 'corrigivel_depara'
+                                    ? 'bg-amber-200 text-amber-950 border-amber-400'
+                                    : iqAudit.macroStatus === 'ja_no_destino_sap'
+                                    ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                    : 'bg-rose-600 text-white border-rose-700'
+                                }`}
+                                title={iqAudit.summaryMessage}
+                              >
+                                {iqAudit.badgeLabel}
+                              </span>
+                              {iqAudit.iq09Item?.equipamento && (
+                                <span className="text-[9px] text-slate-400 font-mono">
+                                  Eq.{iqAudit.iq09Item.equipamento}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </td>
 
-                      {/* 5. Centro */}
+                      {/* 5. Centro (Com Batimento Automático IQ09) */}
                       <td className="py-2 px-1 text-center align-middle">
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
-                            isInvalidOrigin
-                              ? 'bg-red-200 text-red-950 border-red-400'
-                              : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                          }`}
-                        >
-                          {item.centro}
-                        </span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                              isInvalidOrigin
+                                ? 'bg-red-200 text-red-950 border-red-400'
+                                : showIQ09Diff && iqAudit?.centroMismatch
+                                ? 'bg-amber-100 text-amber-950 border-amber-400 line-through'
+                                : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            }`}
+                          >
+                            {item.centro}
+                          </span>
+                          {showIQ09Diff && iqAudit?.centroMismatch && iqAudit.iq09Item && (
+                            <span
+                              className="inline-block px-1.5 py-0.5 rounded bg-amber-300 text-slate-950 font-mono font-extrabold text-[9px] border border-amber-500"
+                              title={`Na base IQ09 este serial está no Centro ${iqAudit.iq09Item.centro} (não em ${item.centro})`}
+                            >
+                              IQ09:{iqAudit.iq09Item.centro}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
-                      {/* 6. Depósito Origem -> Destino */}
+                      {/* 6. Depósito Origem -> Destino (Com Batimento Automático IQ09 e Botão 1 Clique De-Para) */}
                       <td className="py-2 px-1.5 font-mono align-middle">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex flex-wrap items-center gap-1 text-[11px]">
@@ -1485,6 +1909,13 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                                 title={damageCheck.originInfo?.definition}
                               >
                                 {item.depositoOrigem} ⚠️
+                              </span>
+                            ) : showIQ09Diff && iqAudit?.origemMismatch ? (
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-amber-200 text-amber-950 font-extrabold border border-amber-400 shrink-0 line-through"
+                                title={`Origem solicitada (${item.depositoOrigem}) difere do depósito atual na IQ09 (${iqAudit.iq09Item?.deposito})`}
+                              >
+                                {item.depositoOrigem}
                               </span>
                             ) : (
                               <span
@@ -1510,6 +1941,27 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               {item.depositoDestino}
                             </span>
                           </div>
+
+                          {/* Alerta de Depósito Origem Real na IQ09 */}
+                          {showIQ09Diff && iqAudit?.origemMismatch && iqAudit.iq09Item && (
+                            <span className="text-[9px] font-mono font-extrabold text-amber-900 bg-amber-100/90 px-1.5 py-0.5 rounded border border-amber-300 w-fit">
+                              ⚠️ IQ09 Origem: {iqAudit.iq09Item.deposito} ➔ {item.depositoDestino}
+                            </span>
+                          )}
+
+                          {/* Botão 1-Clique na Linha para Sincronizar De-Para com a IQ09 */}
+                          {showIQ09Diff && iqAudit?.canAutoFixDePara && onApplyIQ09DePara && (
+                            <button
+                              type="button"
+                              onClick={() => handleFixSingleItemWithIQ09(item, iqAudit)}
+                              className="mt-0.5 px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-sans font-extrabold text-[9px] inline-flex items-center gap-1 w-fit shadow-2xs transition-all cursor-pointer active:scale-95"
+                              title={`Substituir pelos dados da IQ09: Material ${iqAudit.iq09Item?.material}, Centro ${iqAudit.iq09Item?.centro}, Origem ${iqAudit.iq09Item?.deposito}`}
+                            >
+                              <Zap className="w-2.5 h-2.5 fill-slate-950 shrink-0" />
+                              <span>⚡ Corrigir c/ IQ09</span>
+                            </button>
+                          )}
+
                           {isInvalidOrigin ? (
                             <span className="text-[9px] font-sans font-extrabold text-red-800 leading-tight">
                               ❌ PROIBIDO VOLTAR P/ LIVRE
@@ -1619,7 +2071,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         )}
                       </td>
 
-                      {/* 9. Doc SAP / Observações (Texto completo sem ocultar informação) */}
+                      {/* 9. Doc SAP / Observações (Texto completo + Diagnóstico Automático IQ09) */}
                       <td className="py-2 px-1.5 align-middle">
                         {isInvalidOrigin && damageCheck.originInfo && (
                           <div
@@ -1627,6 +2079,21 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             title={`${damageCheck.originInfo.definition} — Produto avariado não deve voltar ao estoque livre.`}
                           >
                             🛑 {damageCheck.originInfo.shortTitle}: Proibido voltar p/ livre
+                          </div>
+                        )}
+                        {showIQ09Diff && iqAudit && iqAudit.macroStatus !== 'pronto_macro_100' && (
+                          <div
+                            className={`text-[10px] font-bold leading-tight mb-0.5 break-words whitespace-normal ${
+                              iqAudit.macroStatus === 'corrigivel_depara'
+                                ? 'text-amber-900'
+                                : iqAudit.macroStatus === 'ja_no_destino_sap'
+                                ? 'text-sky-800'
+                                : 'text-rose-800'
+                            }`}
+                          >
+                            {iqAudit.macroStatus === 'corrigivel_depara'
+                              ? `⚡ De-Para IQ09: ${iqAudit.mismatchDetails.join(' | ')}`
+                              : iqAudit.summaryMessage}
                           </div>
                         )}
                         {item.sapDocNumber ? (
