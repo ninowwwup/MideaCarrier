@@ -5,10 +5,9 @@ const STORAGE_SHEETS_URL_KEY = 'midea_transfer_google_sheets_url';
 export const DEFAULT_PRODUCTION_SHEETS_URL = 
   'https://script.google.com/macros/s/AKfycbzP1cmdZUfC508gitpJNNgQ_ehkatA3jl4At7ajinHdZmay-lKSzaOQlgoCLfuNt2trUQ/exec';
 
-// URL padrão configurada nas variáveis de ambiente da Vercel / Vite ou URL de produção fixa
+// URL padrão configurada via ambiente Vite ou URL de produção fixa
 const ENV_SHEETS_URL = 
   (import.meta as any).env?.VITE_GOOGLE_SHEETS_URL ||
-  (import.meta as any).env?.GOOGLE_SHEETS_URL ||
   DEFAULT_PRODUCTION_SHEETS_URL;
 
 /**

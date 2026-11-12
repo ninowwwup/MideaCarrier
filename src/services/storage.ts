@@ -1,5 +1,4 @@
 import { TransferItem, TransferStatus, NewTransferInput, KPIStats } from '../types/transfer';
-import { CURRENT_CLIENT_ID } from './supabaseClient';
 import { 
   getGoogleSheetsUrl, 
   fetchGoogleSheetsItems, 
@@ -108,28 +107,6 @@ export function getLocalCachedItems(): TransferItem[] {
   } catch (e) {
     return [];
   }
-}
-
-export const SHARED_CLOUD_STORE_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a14c0ecc5507d9';
-
-// Circuit breaker para proteger o Supabase de sobrecarga e timeouts contínuos
-let supabaseCircuitOpenUntil = 0;
-
-export function markSupabaseFailure() {
-  // Pausa chamadas ao Supabase por 25 segundos para evitar travamento da interface e loop de erros
-  supabaseCircuitOpenUntil = Date.now() + 25000;
-}
-
-export function isSupabaseCircuitOpen(): boolean {
-  return Date.now() < supabaseCircuitOpenUntil;
-}
-
-export async function fetchFromSharedCloudStore(): Promise<TransferItem[] | null> {
-  return null;
-}
-
-export async function saveToSharedCloudStore(_items: TransferItem[]): Promise<boolean> {
-  return false;
 }
 
 /**
@@ -454,7 +431,6 @@ export async function deleteSpecificTransferItems(
 export async function saveTransferItems(items: TransferItem[]): Promise<boolean> {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    saveToSharedCloudStore(items).catch(() => {});
   }
 
   let savedSuccessfully = false;
@@ -495,8 +471,6 @@ export async function clearAllTransferRecords(): Promise<boolean> {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
       localStorage.removeItem(ARCHIVE_KEY);
-      // Zera o Shared Cloud Store na nuvem
-      saveToSharedCloudStore([]).catch(() => {});
       anySuccess = true;
     } catch (e) {}
   }
@@ -812,51 +786,4 @@ export function computeKPIs(items: TransferItem[]): KPIStats {
     tempoMedioAtendimentoMin,
     maisAntigoPendenteMin,
   };
-}
-
-export function getSupabaseSQLSchema(): string {
-  return `-- SCRIPT SQL DDL DEFINITIVO PARA SUPABASE (PostgreSQL)
--- Execute no SQL Editor do seu projeto Supabase:
-
-create table if not exists public.transfer_requests (
-  id text primary key,
-  solicitation_code text not null,
-  material text not null,
-  serial text not null,
-  centro text not null,
-  deposito_origem text not null,
-  deposito_destino text not null,
-  status text not null default 'pendente' check (status in ('pendente', 'em_analise', 'concluido', 'divergencia')),
-  criado_em timestamptz not null default now(),
-  criado_por text not null default 'Time Buiatte (Sênior WMS)',
-  atualizado_em timestamptz not null default now(),
-  atualizado_por text,
-  sap_doc_number text,
-  observacoes text,
-  batch_id text,
-  label_photo_url text,
-  originator_client_id text
-);
-
--- Habilitar SUPABASE REALTIME para propagação instantânea entre computadores (estilo AppSheet)
-alter publication supabase_realtime add table public.transfer_requests;
-
--- Índices para performance máxima de buscas e filtros
-create index if not exists idx_transfer_requests_status on public.transfer_requests (status);
-create index if not exists idx_transfer_requests_criado_em on public.transfer_requests (criado_em);
-create index if not exists idx_transfer_requests_material on public.transfer_requests (material);
-create index if not exists idx_transfer_requests_serial on public.transfer_requests (serial);
-create index if not exists idx_transfer_requests_centro on public.transfer_requests (centro);
-
--- Habilitar Row Level Security (RLS)
-alter table public.transfer_requests enable row level security;
-
--- Política de leitura e escrita irrestrita para a aplicação compartilhada
-drop policy if exists "Acesso total aos times Midea e Buiatte" on public.transfer_requests;
-create policy "Acesso total aos times Midea e Buiatte"
-  on public.transfer_requests
-  for all
-  using (true)
-  with check (true);
-`;
 }

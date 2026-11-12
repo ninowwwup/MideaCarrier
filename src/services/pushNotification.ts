@@ -105,7 +105,7 @@ export async function unsubscribeFromPushNotifications(): Promise<boolean> {
 }
 
 /**
- * Dispara um teste de Notificação Desktop e Som de Alerta (100% local, sem consumir funções da Vercel)
+ * Dispara um teste de Notificação Desktop e Som de Alerta (100% local no navegador)
  */
 export async function triggerPushTest(): Promise<{ success: boolean; message: string }> {
   try {

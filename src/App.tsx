@@ -31,7 +31,7 @@ import { SoundSelectorModal } from './components/SoundSelectorModal';
 import { DepositsGuideTab } from './components/DepositsGuideTab';
 import { IQ09ConsultTab } from './components/IQ09ConsultTab';
 import { MigouLogo } from './components/MigouLogo';
-import { Check, X, Compass, ClipboardList, Database } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { IQ09Snapshot } from './types/iq09';
 import {
   loadIQ09SnapshotFromStorage,
@@ -80,7 +80,6 @@ import {
   setupServiceWorkerMessageListener,
   isPushSupported
 } from './services/pushNotification';
-import { getSupabaseConfig } from './services/supabaseClient';
 
 const BASE_PAGE_TITLE = 'MIGOU - Gestão de Transferências SAP';
 
@@ -101,26 +100,8 @@ export default function App() {
   const [isAudioActive, setIsAudioActive] = useState<boolean>(() => isAudioReady());
   const titleIntervalRef = useRef<any>(null);
 
-  // Modais Operacionais, Sidebar e Abas Principais
+  // Modais Operacionais e Abas Principais
   const [activeMainTab, setActiveMainTab] = useState<'operacao' | 'consulta_iq09' | 'guia_depositos'>('operacao');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('migou_sidebar_collapsed_v1') === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
-
-  const handleToggleSidebarCollapse = useCallback(() => {
-    setIsSidebarCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('migou_sidebar_collapsed_v1', String(next));
-      } catch {}
-      return next;
-    });
-  }, []);
   const [iq09Snapshot, setIq09Snapshot] = useState<IQ09Snapshot | null>(null);
   const [iq09CachedMeta, setIq09CachedMeta] = useState(() => getStoredIQ09Metadata());
   const [newRequestPreset, setNewRequestPreset] = useState<{
@@ -614,135 +595,50 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen figma-aurora-bg flex text-slate-800 relative overflow-x-hidden font-sans selection:bg-[#249ED5] selection:text-white">
-      {/* Gradiente Ambiental Otimizado para GPU (Zero Lag de Rolagem / 60fps) */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0"
-        style={{
-          background:
-            'radial-gradient(circle at 8% 8%, rgba(228,138,96,0.38) 0%, transparent 45%), radial-gradient(circle at 92% 10%, rgba(168,110,226,0.34) 0%, transparent 48%), radial-gradient(circle at 90% 92%, rgba(244,247,160,0.32) 0%, transparent 45%), radial-gradient(circle at 12% 55%, rgba(18,54,140,0.45) 0%, transparent 50%)',
-        }}
-      />
-
-      {/* Sidebar Corporativa Responsiva & Dinâmica (Desktop Colapsável + Gaveta Mobile) */}
+    <div className="min-h-screen figma-aurora-bg flex items-stretch text-slate-800 relative font-sans selection:bg-[#249ED5] selection:text-white">
+      {/* Sidebar Corporativa Fixa, Enxuta e Inteira até o Final da Página */}
       <Sidebar
         activeMainTab={activeMainTab}
         onSelectMainTab={setActiveMainTab}
         currentRole={currentRole}
         onSelectRole={setCurrentRole}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={handleToggleSidebarCollapse}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        onOpenNewModal={() => {
-          setNewRequestPreset(null);
-          setIsNewModalOpen(true);
-        }}
-        onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
-        onExportCSV={handleExportCSV}
         totalItemsCount={items.length}
         totalPending={kpis.pendentes}
         totalErrors={kpis.divergencias}
         iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
-        iq09UpdatedAt={iq09Snapshot?.metadata.updatedAt || iq09CachedMeta?.updatedAt || null}
-        isCloudConnected={isCloudConnected}
         currentUser={currentUser}
         onLogout={handleLogout}
       />
 
       {/* Coluna Principal de Trabalho */}
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
-        {/* Topbar Contextual com Paleta Midea e Glassmorphism */}
+        {/* Topbar Enxuta e Leve */}
         <Header
-          currentRole={currentRole}
-          onSelectRole={setCurrentRole}
           onOpenNewModal={() => {
             setNewRequestPreset(null);
             setIsNewModalOpen(true);
           }}
           onOpenBatchPaste={() => setIsBatchPasteOpen(true)}
           onExportCSV={handleExportCSV}
-          totalPending={kpis.pendentes}
-          totalErrors={kpis.divergencias}
           latestAlertCount={kpis.pendentes}
           onOpenLatestAlert={handleOpenLatestAlert}
-          isSoundEnabled={true}
-          onToggleSound={handleTestAlertSound}
           onTestAlertSound={handleTestAlertSound}
           currentAlertSound={currentAlertSound}
           onOpenSoundSelector={() => setIsSoundSelectorOpen(true)}
-          desktopNotifPermission={desktopNotifPermission}
-          onRequestDesktopPermission={handleRequestDesktopPermission}
           isPushSubscribed={isPushSubscribed}
           onEnablePushManager={handleEnablePushManager}
           onTestPush={handleTestPush}
-          autoPurgedCount={autoPurgedCount}
           isCloudConnected={isCloudConnected}
           onOpenDatabaseDiagnostic={() => setIsDiagnosticOpen(true)}
           currentUser={currentUser}
-          onLogout={handleLogout}
           activeMainTab={activeMainTab}
           onSelectMainTab={setActiveMainTab}
           iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
           iq09UpdatedAt={iq09Snapshot?.metadata.updatedAt || iq09CachedMeta?.updatedAt || null}
-          onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
-          isSidebarCollapsed={isSidebarCollapsed}
-          onToggleSidebarCollapse={handleToggleSidebarCollapse}
         />
 
-        {/* Conteúdo Principal com Camadas Frosted Glass */}
-        <main className="flex-1 max-w-[1680px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-4 sm:py-5 relative z-10">
-          {/* Barra Rápida de Abas (Exibida em Mobile/Tablet < lg para troca rápida com 1 toque; no Desktop a Sidebar controla a navegação) */}
-          <div className="lg:hidden mb-4 grid grid-cols-3 gap-1.5 figma-dark-pill backdrop-blur-2xl p-1.5 rounded-2xl border border-white/25">
-            <button
-              type="button"
-              onClick={() => setActiveMainTab('operacao')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer truncate ${
-                activeMainTab === 'operacao'
-                  ? 'bg-white text-[#002664] shadow-md'
-                  : 'text-white/90 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <ClipboardList className={`w-3.5 h-3.5 shrink-0 ${activeMainTab === 'operacao' ? 'text-[#00609C]' : 'text-cyan-200'}`} />
-              <span className="truncate">Fila SAP</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold shrink-0 ${
-                  activeMainTab === 'operacao'
-                    ? 'bg-blue-100 text-[#002664]'
-                    : 'bg-white/20 text-white'
-                }`}
-              >
-                {items.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMainTab('consulta_iq09')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer truncate ${
-                activeMainTab === 'consulta_iq09'
-                  ? 'bg-white text-[#002664] shadow-md'
-                  : 'text-white/90 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Database className={`w-3.5 h-3.5 shrink-0 ${activeMainTab === 'consulta_iq09' ? 'text-cyan-600' : 'text-cyan-300'}`} />
-              <span className="truncate">Base IQ09</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMainTab('guia_depositos')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer truncate ${
-                activeMainTab === 'guia_depositos'
-                  ? 'bg-white text-[#002664] shadow-md'
-                  : 'text-white/90 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Compass className={`w-3.5 h-3.5 shrink-0 ${activeMainTab === 'guia_depositos' ? 'text-emerald-600' : 'text-amber-300'}`} />
-              <span className="truncate">Depósitos</span>
-            </button>
-          </div>
-
+        {/* Conteúdo Principal */}
+        <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 lg:px-6 py-4 sm:py-5 relative z-10">
           {activeMainTab === 'guia_depositos' ? (
             <DepositsGuideTab
               onStartRequestWithRoute={(preset) => {

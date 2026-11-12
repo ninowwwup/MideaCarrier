@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v21-sidebar-layout';
+const CACHE_NAME = 'migou-pwa-v22-clean-sidebar';
 const STATIC_ASSETS = [
   './manifest.json',
   './icon.svg',
