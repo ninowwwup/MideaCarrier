@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "MIGOU - Gestão de Transferências SAP & WMS",
+  "short_name": "MIGOU",
+  "description": "Plataforma de transferências de depósitos entre Time Buiatte e Time Midea com suporte a múltiplos seriais e SAP MIGO.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0083CA",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
