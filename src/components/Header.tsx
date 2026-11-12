@@ -1,26 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Boxes,
   PlusCircle,
   FileSpreadsheet,
-  Download,
   Layers,
   Users,
   Sparkles,
   BellRing,
-  Volume2,
-  VolumeX,
   Menu,
-  X,
   Radio,
-  CalendarCheck2,
-  Droplets,
   Bell,
   ShieldCheck,
-  Truck,
-  LogOut,
   Compass,
-  Database
+  Database,
+  ClipboardList,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 import { AuthUser } from '../types/auth';
@@ -57,6 +51,9 @@ interface HeaderProps {
   onSelectMainTab?: (tab: 'operacao' | 'consulta_iq09' | 'guia_depositos') => void;
   iq09TotalItems?: number;
   iq09UpdatedAt?: string | null;
+  onOpenMobileSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebarCollapse?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -69,67 +66,158 @@ export const Header: React.FC<HeaderProps> = ({
   totalErrors,
   latestAlertCount,
   onOpenLatestAlert,
-  isSoundEnabled,
-  onToggleSound,
   onTestAlertSound,
   currentAlertSound,
   onOpenSoundSelector,
-  desktopNotifPermission,
-  onRequestDesktopPermission,
   isPushSubscribed,
   onEnablePushManager,
   onTestPush,
-  autoPurgedCount = 0,
   isCloudConnected,
   onOpenDatabaseDiagnostic,
   currentUser,
-  onLogout,
   activeMainTab = 'operacao',
   onSelectMainTab,
   iq09TotalItems = 0,
   iq09UpdatedAt = null,
+  onOpenMobileSidebar,
+  isSidebarCollapsed = false,
+  onToggleSidebarCollapse,
 }) => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const activeSound = ALERT_SOUND_OPTIONS.find((s) => s.id === (currentAlertSound || getSavedAlertSound())) || ALERT_SOUND_OPTIONS[0];
+  const activeSound =
+    ALERT_SOUND_OPTIONS.find((s) => s.id === (currentAlertSound || getSavedAlertSound())) ||
+    ALERT_SOUND_OPTIONS[0];
+
+  const moduleMeta = {
+    operacao: {
+      title: 'Fila de Solicitações & Operação SAP',
+      subtitle: 'Movimentação MIGO 311 • De-Para Automático IQ09 em Tempo Real',
+      icon: ClipboardList,
+      badgeText: 'MIGO 311',
+      badgeColor: 'from-cyan-300/95 to-sky-400/95 text-slate-950',
+    },
+    consulta_iq09: {
+      title: 'Central Base IQ09 & Validador De-Para',
+      subtitle: 'Consulta Instantânea de Estoque e Seriais SAP (UII = Serial)',
+      icon: Database,
+      badgeText: 'UII = SERIAL',
+      badgeColor: 'from-emerald-300/95 to-teal-400/95 text-slate-950',
+    },
+    guia_depositos: {
+      title: 'Guia Interativo de Depósitos & Regras SAP',
+      subtitle: 'Rotas Oficiais B179/B170 • Livre, Contagem, Faltas e Avarias',
+      icon: Compass,
+      badgeText: 'REGRAS SAP',
+      badgeColor: 'from-amber-300/95 to-orange-400/95 text-slate-950',
+    },
+  }[activeMainTab];
+
+  const ActiveModuleIcon = moduleMeta.icon;
 
   return (
-    <header className="bg-white/10 backdrop-blur-2xl border-b border-white/20 sticky top-0 z-30 shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all">
-      {/* Top Navbar */}
-      <div className="max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6">
-        <div className="flex items-center justify-between py-3 gap-3">
-          {/* Logo & Brand Identity com o Passarinho Azul Oficial */}
-          <div className="flex items-center gap-3">
-            <MigouLogo
-              size="md"
-              animated
-              onClick={() => onSelectMainTab && onSelectMainTab('operacao')}
-            />
-            <div>
+    <header className="bg-slate-950/25 backdrop-blur-2xl border-b border-white/20 sticky top-0 z-30 shadow-[0_6px_24px_rgba(0,0,0,0.14)] transition-all">
+      <div className="max-w-[1680px] mx-auto px-2.5 sm:px-4 lg:px-6">
+        <div className="flex items-center justify-between py-2.5 gap-2.5">
+          {/* Esquerda: Botão Menu Mobile / Toggle Sidebar + Contexto do Módulo Ativo */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Botão Hamburger Mobile (< lg) */}
+            {onOpenMobileSidebar && (
+              <button
+                type="button"
+                onClick={onOpenMobileSidebar}
+                className="lg:hidden p-2 rounded-xl border border-white/25 bg-white/15 text-white hover:bg-white/25 active:scale-95 transition-all cursor-pointer shrink-0 shadow-xs"
+                title="Abrir Menu Lateral MIGOU"
+                aria-label="Abrir Menu Lateral"
+              >
+                <Menu className="w-5 h-5 text-cyan-200" />
+              </button>
+            )}
+
+            {/* Toggle rápido da Sidebar no Desktop (opcional para quem gosta de atalho no topo) */}
+            {onToggleSidebarCollapse && (
+              <button
+                type="button"
+                onClick={onToggleSidebarCollapse}
+                className="hidden lg:flex p-2 rounded-xl border border-white/20 bg-white/10 text-white/80 hover:text-white hover:bg-white/20 active:scale-95 transition-all cursor-pointer shrink-0"
+                title={isSidebarCollapsed ? 'Expandir Menu Lateral' : 'Recolher Menu Lateral'}
+                aria-label="Alternar Menu Lateral"
+              >
+                {isSidebarCollapsed ? (
+                  <PanelLeftOpen className="w-4 h-4 text-cyan-300" />
+                ) : (
+                  <PanelLeftClose className="w-4 h-4 text-white/80" />
+                )}
+              </button>
+            )}
+
+            {/* Logo Mobile (< lg) */}
+            <div className="lg:hidden shrink-0">
+              <MigouLogo
+                size="sm"
+                animated={false}
+                onClick={() => onSelectMainTab && onSelectMainTab('operacao')}
+              />
+            </div>
+
+            {/* Título Contextual da Tela Ativa */}
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xl sm:text-2xl tracking-tight text-white drop-shadow-sm">
-                  MIGOU
+                <ActiveModuleIcon className="w-4 h-4 text-cyan-300 hidden sm:block shrink-0" />
+                <h1 className="font-extrabold text-sm sm:text-base lg:text-lg tracking-tight text-white truncate drop-shadow-xs">
+                  {moduleMeta.title}
+                </h1>
+                <span
+                  className={`hidden md:inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r ${moduleMeta.badgeColor} border border-white/40 shadow-2xs shrink-0`}
+                >
+                  {moduleMeta.badgeText}
                 </span>
-                <span className="text-[10px] font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-cyan-300/90 to-sky-400/90 text-slate-950 border border-white/40 shadow-xs">
-                  SAP MIGO
-                </span>
+
+                {/* Pill Status IQ09 em Tempo Real */}
+                {iq09TotalItems > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSelectMainTab &&
+                      onSelectMainTab(activeMainTab === 'consulta_iq09' ? 'operacao' : 'consulta_iq09')
+                    }
+                    className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-400/20 hover:bg-emerald-400/35 border border-emerald-300/50 text-emerald-100 text-[11px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                    title={
+                      iq09UpdatedAt
+                        ? `Base IQ09 atualizada em ${new Date(iq09UpdatedAt).toLocaleString('pt-BR')} — Clique para alternar`
+                        : 'Base IQ09 ativa — Clique para consultar'
+                    }
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                    <span>IQ09: {iq09TotalItems.toLocaleString('pt-BR')} UIIs</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
+                    className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 text-white/80 text-[10px] font-semibold transition-all cursor-pointer shrink-0"
+                    title="Clique para importar a planilha IQ09 do SAP"
+                  >
+                    <Database className="w-3 h-3 text-cyan-300" />
+                    <span>Importar IQ09</span>
+                  </button>
+                )}
               </div>
-              <p className="text-[11px] sm:text-xs text-cyan-50/85 font-medium hidden sm:block">
-                Gestão de Transferências SAP & WMS • Time Buiatte ⟷ Time Midea
+              <p className="text-[11px] text-cyan-50/80 font-medium truncate hidden sm:block">
+                {moduleMeta.subtitle}
               </p>
             </div>
           </div>
 
-          {/* Perspective Selector (Desktop) - Estilo Segmented Control Figma */}
-          <div className="hidden lg:flex items-center bg-black/20 backdrop-blur-xl p-1 rounded-2xl border border-white/20 shadow-inner gap-1">
+          {/* Centro-Direita: Seletor Rápido de Visão (Desktop XL+) */}
+          <div className="hidden 2xl:flex items-center bg-black/25 backdrop-blur-xl p-1 rounded-xl border border-white/20 shadow-inner gap-1 shrink-0">
             <button
               type="button"
               onClick={() => onSelectRole('ambos')}
-              className={`px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${currentRole === 'ambos'
-                  ? 'bg-white text-slate-900 shadow-sm font-semibold'
+              className={`px-2.5 py-1 rounded-lg text-[11px] transition-all duration-200 active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                currentRole === 'ambos'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
                   : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
-                }`}
+              }`}
               title="Espelho Geral: Visualizar todas as solicitações de todos os centros"
-              aria-label="Espelho Geral"
             >
               <Layers className={`w-3.5 h-3.5 ${currentRole === 'ambos' ? 'text-blue-600' : 'text-white/80'}`} />
               <span>Espelho Geral</span>
@@ -137,128 +225,114 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => onSelectRole('buiatte')}
-              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${currentRole === 'buiatte'
-                  ? 'bg-white text-slate-900 shadow-sm font-semibold'
+              className={`relative px-2.5 py-1 rounded-lg text-[11px] transition-all duration-200 active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                currentRole === 'buiatte'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
                   : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
-                }`}
+              }`}
               title="Visão Time Buiatte (WMS Sênior - Solicitações e Divergências)"
-              aria-label="Time Buiatte"
             >
               <Users className={`w-3.5 h-3.5 ${currentRole === 'buiatte' ? 'text-blue-600' : 'text-white/80'}`} />
               <span>Time Buiatte</span>
-              {totalErrors > 0 && (
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse ml-0.5" />
-              )}
+              {totalErrors > 0 && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
             </button>
             <button
               type="button"
               onClick={() => onSelectRole('midea')}
-              className={`relative px-3 py-1.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5 ${currentRole === 'midea'
-                  ? 'bg-white text-slate-900 shadow-sm font-semibold'
+              className={`relative px-2.5 py-1 rounded-lg text-[11px] transition-all duration-200 active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                currentRole === 'midea'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
                   : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
-                }`}
+              }`}
               title="Visão Time Midea (SAP MIGO - Fila FIFO e Atendimento)"
-              aria-label="Time Midea"
             >
               <Sparkles className={`w-3.5 h-3.5 ${currentRole === 'midea' ? 'text-blue-600' : 'text-white/80'}`} />
               <span>Time Midea</span>
               {totalPending > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-bold shadow-xs ml-0.5">
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-amber-950 font-black">
                   {totalPending}
                 </span>
               )}
             </button>
           </div>
 
-          {/* Quick Tools & Indicators - Botões Dinâmicos, Leves e Suaves (Figma Style) */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* User Session Badge & Logout */}
-            {currentUser && (
-              <div className="flex items-center gap-2 bg-black/25 backdrop-blur-xl px-2.5 py-1.5 rounded-2xl border border-white/20 text-xs shadow-inner">
-                <div
-                  className={`w-6 h-6 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
-                    }`}
-                  title={`${currentUser.displayName} (${currentUser.username})`}
-                >
-                  {currentUser.role === 'midea' ? (
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  ) : (
-                    <Truck className="w-3.5 h-3.5" />
-                  )}
-                </div>
-                <div className="text-left leading-none hidden sm:block">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white text-[12px]">{currentUser.username}</span>
-                    <span
-                      className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full ${currentUser.role === 'midea'
-                          ? 'bg-cyan-400 text-slate-950'
-                          : 'bg-emerald-400 text-slate-950'
-                        }`}
-                    >
-                      {currentUser.role === 'midea' ? 'Admin' : 'Prod'}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-white/70 font-normal mt-0.5">
-                    {currentUser.role === 'midea' ? 'Time Midea (SAP)' : 'Time Buiatte (WMS)'}
-                  </div>
-                </div>
-                {onLogout && (
-                  <button
-                    type="button"
-                    onClick={onLogout}
-                    className="ml-0.5 p-1.5 rounded-xl bg-white/10 hover:bg-rose-500/80 text-white/80 hover:text-white transition-all duration-200 active:scale-90 cursor-pointer"
-                    title="Sair / Trocar Usuário"
-                    aria-label="Sair do usuário"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
+          {/* Direita: CTAs de Ação Rápida + Ferramentas de Sistema */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Botão Colar Tabela */}
+            <button
+              type="button"
+              onClick={onOpenBatchPaste}
+              className="hidden md:flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-md shadow-xs hover:-translate-y-0.5 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              title="Colar tabela do Excel ou mensagem do WhatsApp diretamente (Atalho: V)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-200 shrink-0" />
+              <span>Colar Tabela</span>
+              <kbd className="hidden xl:inline-block px-1 py-0.2 text-[9px] font-mono bg-white/20 text-white rounded border border-white/30">
+                V
+              </kbd>
+            </button>
 
-            {/* Status Indicativo Silencioso / Diagnóstico Supabase & Nuvem (Apenas Admin Midea) */}
+            {/* Botão Nova Solicitação */}
+            <button
+              type="button"
+              onClick={onOpenNewModal}
+              className="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-extrabold text-slate-900 bg-white hover:bg-white/95 border border-white/80 shadow-[0_4px_15px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:scale-95 transition-all cursor-pointer whitespace-nowrap group"
+              title="Nova Solicitação com múltiplos seriais (Atalho: N)"
+            >
+              <PlusCircle className="w-4 h-4 text-blue-600 group-hover:rotate-90 transition-transform duration-300 shrink-0" />
+              <span className="hidden sm:inline">Nova Solicitação</span>
+              <span className="sm:hidden">Nova</span>
+              <kbd className="hidden xl:inline-block px-1 py-0.2 text-[9px] font-mono bg-slate-100 text-slate-700 rounded border border-slate-300">
+                N
+              </kbd>
+            </button>
+
+            <div className="h-5 w-px bg-white/20 hidden sm:block mx-0.5" />
+
+            {/* Diagnóstico Nuvem (Admin Midea) */}
             {currentUser?.role !== 'buiatte' && onOpenDatabaseDiagnostic && (
               <button
                 type="button"
                 onClick={onOpenDatabaseDiagnostic}
-                className={`p-2.5 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 ${isCloudConnected
+                className={`p-2 rounded-xl text-xs font-semibold border backdrop-blur-md shadow-xs flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-90 cursor-pointer ${
+                  isCloudConnected
                     ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
                     : 'bg-white/15 text-white border-white/25 hover:bg-white/25'
-                  }`}
+                }`}
                 title={
                   isCloudConnected
-                    ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico e Conexão com Google Planilhas)'
-                    : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico e Conexão com Google Planilhas)'
+                    ? 'Nuvem Conectada em Tempo Real (Clique para ver Diagnóstico)'
+                    : 'Sincronização em Tempo Real Ativa (Clique para ver Diagnóstico)'
                 }
-                aria-label="Diagnóstico do Banco de Dados e Google Planilhas"
+                aria-label="Diagnóstico do Banco de Dados"
               >
                 <Radio className="w-4 h-4 text-emerald-300 animate-pulse" />
               </button>
             )}
 
-            {/* PWA Install Button (Apenas Ícone) */}
+            {/* PWA Install Button */}
             <PWAInstallButton />
 
-            {/* Alerta Sonoro Personalizável (Gota d'Água, Sapo, Bolhas, Gato, Rebound) */}
+            {/* Alerta Sonoro Personalizável */}
             <button
               type="button"
               onClick={onOpenSoundSelector || onTestAlertSound}
-              className="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs flex items-center gap-1.5 cursor-pointer"
-              title={`Som de Alerta Ativo: ${activeSound.name} • Clique para alterar o som ou ouvir amostras`}
+              className="p-2 sm:px-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs flex items-center gap-1 cursor-pointer"
+              title={`Som de Alerta Ativo: ${activeSound.name} • Clique para alterar`}
               aria-label={`Som de Alerta Ativo: ${activeSound.name}`}
             >
               <span className="text-sm shrink-0">{activeSound.icon}</span>
-              <span className="hidden sm:inline text-[11px] text-cyan-100 font-medium truncate max-w-[85px]">
+              <span className="hidden lg:inline text-[11px] text-cyan-100 font-medium truncate max-w-[75px]">
                 {activeSound.shortName}
               </span>
             </button>
 
-            {/* Controle do Push Manager (Service Worker) - Apenas Ícone */}
+            {/* Push Manager */}
             {isPushSubscribed ? (
               <button
                 type="button"
                 onClick={onTestPush}
-                className="p-2.5 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/30 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs"
+                className="p-2 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/30 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs cursor-pointer"
                 title="Push Manager Ativo! Clique para testar notificação nativa"
                 aria-label="Testar Notificação Push"
               >
@@ -268,7 +342,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onEnablePushManager}
-                className="p-2.5 rounded-xl text-xs font-semibold text-white bg-amber-500/30 hover:bg-amber-500/40 border border-amber-300/50 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs animate-pulse"
+                className="p-2 rounded-xl text-xs font-semibold text-white bg-amber-500/30 hover:bg-amber-500/40 border border-amber-300/50 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs animate-pulse cursor-pointer"
                 title="Ativar Service Worker Push Manager para receber notificações em segundo plano"
                 aria-label="Ativar Push Manager"
               >
@@ -276,275 +350,35 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Sino de Alertas Time Midea - Apenas Ícone */}
+            {/* Sino de Alertas Time Midea */}
             <button
               type="button"
               onClick={onOpenLatestAlert}
-              className="relative p-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs"
-              title="Ver alertas em tempo real estilo Outlook"
-              aria-label="Ver alertas estilo Outlook"
+              className="relative p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs cursor-pointer"
+              title="Focar solicitações pendentes do Time Midea"
+              aria-label="Ver solicitações pendentes"
             >
-              <BellRing className={`w-4 h-4 ${latestAlertCount > 0 ? 'animate-bounce text-amber-300' : 'text-white/80'}`} />
+              <BellRing
+                className={`w-4 h-4 ${
+                  latestAlertCount > 0 ? 'animate-bounce text-amber-300' : 'text-white/80'
+                }`}
+              />
               {latestAlertCount > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500 text-white shadow-xs">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-500 text-white shadow-xs">
                   {latestAlertCount}
                 </span>
               )}
             </button>
 
-            {/* Baixar Base em Excel - Apenas Ícone do Excel */}
+            {/* Exportar Excel */}
             <button
               type="button"
               onClick={onExportCSV}
-              className="p-2.5 rounded-xl text-white bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs group"
+              className="hidden sm:flex p-2 rounded-xl text-white bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 active:scale-90 shadow-xs group cursor-pointer"
               title="Baixar base completa em formato Excel / CSV para indicadores"
               aria-label="Baixar planilha Excel"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-300 group-hover:scale-110 transition-transform duration-200" />
-            </button>
-
-            {/* Menu Mobile Toggle */}
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2.5 rounded-xl border border-white/25 bg-white/15 text-white hover:bg-white/25 transition-all duration-200"
-              title="Menu de navegação"
-              aria-label="Menu"
-            >
-              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Expanded Menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden py-3 border-t border-white/15 space-y-3 animate-in fade-in duration-150">
-            {currentUser && (
-              <div className="p-3 rounded-2xl bg-black/30 border border-white/20 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white shadow-xs ${currentUser.role === 'midea' ? 'bg-blue-600' : 'bg-emerald-600'
-                      }`}
-                  >
-                    {currentUser.role === 'midea' ? (
-                      <ShieldCheck className="w-4 h-4" />
-                    ) : (
-                      <Truck className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white text-xs flex items-center gap-1.5">
-                      <span>{currentUser.displayName}</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/20 text-cyan-200 uppercase font-black">
-                        {currentUser.username}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-white/70">{currentUser.subtitle}</div>
-                  </div>
-                </div>
-                {onLogout && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      onLogout();
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-rose-500/80 text-white text-xs font-bold flex items-center gap-1 hover:bg-rose-600 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sair</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="text-xs font-semibold text-white/70 uppercase tracking-wider px-1">
-              Alternar Modo de Visualização
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectRole('ambos');
-                  setMobileMenuOpen(false);
-                }}
-                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${currentRole === 'ambos'
-                    ? 'bg-white text-slate-900 border-white shadow-xs'
-                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                  }`}
-              >
-                Espelho Geral
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectRole('buiatte');
-                  setMobileMenuOpen(false);
-                }}
-                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${currentRole === 'buiatte'
-                    ? 'bg-white text-[#00609C] border-white shadow-xs'
-                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                  }`}
-              >
-                Time Buiatte
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectRole('midea');
-                  setMobileMenuOpen(false);
-                }}
-                className={`py-2 text-xs rounded-xl font-semibold border transition-all duration-200 ${currentRole === 'midea'
-                    ? 'bg-white text-[#002664] border-white shadow-xs'
-                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                  }`}
-              >
-                Time Midea
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                onExportCSV();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
-              <span>Exportar Base em Excel (CSV)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenSoundSelector) {
-                  onOpenSoundSelector();
-                } else {
-                  onTestAlertSound();
-                }
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200 cursor-pointer"
-            >
-              <span className="text-sm">{activeSound.icon}</span>
-              <span>Personalizar Som de Alerta ({activeSound.shortName})</span>
-            </button>
-
-            {onOpenDatabaseDiagnostic && (
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenDatabaseDiagnostic();
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl transition-all duration-200"
-              >
-                <Radio className="w-4 h-4 text-emerald-400" />
-                <span>Diagnóstico do Banco & Google Planilhas</span>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* HERO ACTION BAR: Translucent Glass Integrado ao Gradiente */}
-      <div className="bg-black/15 backdrop-blur-xl border-t border-white/10 border-b border-white/20 px-2 sm:px-4 lg:px-6 py-2">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-          {/* Status Rápido da Base IQ09 (Sem frase redundante de sincronização) */}
-          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 text-xs text-white/90 font-medium">
-            {iq09TotalItems > 0 ? (
-              <button
-                type="button"
-                onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 hover:bg-emerald-400/35 border border-emerald-300/50 text-emerald-100 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                title={
-                  iq09UpdatedAt
-                    ? `Base IQ09 atualizada em ${new Date(iq09UpdatedAt).toLocaleString('pt-BR')} — Clique para consultar`
-                    : 'Base IQ09 ativa — Clique para consultar'
-                }
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-                <span>IQ09 Ativa: {iq09TotalItems.toLocaleString('pt-BR')} UIIs</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 text-white/80 text-[11px] font-semibold transition-all cursor-pointer"
-                title="Clique para importar a planilha IQ09 do SAP"
-              >
-                <Database className="w-3.5 h-3.5 text-cyan-300" />
-                <span>Base IQ09 SAP: Aguardando carga (.xlsx)</span>
-              </button>
-            )}
-          </div>
-
-          {/* BOTÕES DINÂMICOS E RESPONSIVOS (GRID EM TELAS MENORES / FLEX NO DESKTOP) */}
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-end gap-2 w-full md:w-auto">
-            {/* BOTÃO CENTRAL IQ09 SAP */}
-            {onSelectMainTab && (
-              <button
-                type="button"
-                onClick={() => onSelectMainTab(activeMainTab === 'consulta_iq09' ? 'operacao' : 'consulta_iq09')}
-                className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap ${
-                  activeMainTab === 'consulta_iq09'
-                    ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-[0_4px_20px_rgba(16,185,129,0.35)]'
-                    : 'bg-emerald-500/25 hover:bg-emerald-500/35 text-white border-emerald-300/40'
-                }`}
-                title="Abrir Central de Consulta e De-Para da Base IQ09 SAP (UII = Serial)"
-              >
-                <Database className={`w-4 h-4 shrink-0 ${activeMainTab === 'consulta_iq09' ? 'text-slate-950' : 'text-emerald-200'}`} />
-                <span className="tracking-wide">
-                  {activeMainTab === 'consulta_iq09' ? 'VOLTAR À FILA SAP' : 'BASE IQ09 SAP'}
-                </span>
-              </button>
-            )}
-
-            {/* BOTÃO GUIA DE DEPÓSITOS SAP */}
-            {onSelectMainTab && (
-              <button
-                type="button"
-                onClick={() => onSelectMainTab(activeMainTab === 'guia_depositos' ? 'operacao' : 'guia_depositos')}
-                className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold border backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap ${activeMainTab === 'guia_depositos'
-                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_4px_20px_rgba(251,191,36,0.35)]'
-                    : 'bg-cyan-500/25 hover:bg-cyan-500/35 text-white border-cyan-300/40'
-                  }`}
-                title="Abrir Guia Interativo de Depósitos SAP (Estoque Livre, Contagem/Faltas e Avarias)"
-              >
-                <Compass className={`w-4 h-4 shrink-0 ${activeMainTab === 'guia_depositos' ? 'text-slate-950' : 'text-cyan-200'}`} />
-                <span className="tracking-wide">
-                  {activeMainTab === 'guia_depositos' ? 'VOLTAR À FILA SAP' : 'GUIA DE DEPÓSITOS'}
-                </span>
-              </button>
-            )}
-
-            {/* BOTÃO COLAR TABELA */}
-            <button
-              type="button"
-              onClick={onOpenBatchPaste}
-              className="flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium text-white bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-md shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group whitespace-nowrap cursor-pointer"
-              title="Colar tabela do Excel ou mensagem do WhatsApp diretamente (Atalho: V)"
-            >
-              <FileSpreadsheet className="w-4 h-4 shrink-0 text-[#C2DEEB] group-hover:scale-110 transition-transform duration-200" />
-              <span className="tracking-wide">COLAR TABELA</span>
-              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/20 text-white rounded border border-white/30">
-                V
-              </kbd>
-            </button>
-
-            {/* BOTÃO NOVA SOLICITAÇÃO */}
-            <button
-              type="button"
-              onClick={onOpenNewModal}
-              className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 bg-white hover:bg-white/95 border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_25px_rgba(255,255,255,0.35)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 ease-out group whitespace-nowrap cursor-pointer"
-              title="Nova Solicitação com múltiplos seriais (Atalho: N)"
-            >
-              <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 text-blue-600 group-hover:rotate-90 transition-transform duration-300" />
-              <span className="tracking-wide">NOVA SOLICITAÇÃO</span>
-              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-700 rounded border border-slate-300">
-                N
-              </kbd>
             </button>
           </div>
         </div>

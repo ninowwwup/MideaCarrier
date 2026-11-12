@@ -64,6 +64,15 @@
     0 8px 24px -6px rgba(0, 0, 0, 0.28);
 }
 
+/* Sidebar Profissional Glassmorphism Midea Carrier */
+.migou-sidebar-glass {
+  background: linear-gradient(185deg, rgba(5, 22, 58, 0.90) 0%, rgba(3, 14, 38, 0.95) 60%, rgba(2, 10, 28, 0.97) 100%);
+  box-shadow:
+    inset -1px 0 0 0 rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    12px 0 36px -8px rgba(0, 8, 28, 0.42);
+}
+
 @keyframes migouFloat {
   0%, 100% {
     transform: translateY(0px) rotate(0deg);
