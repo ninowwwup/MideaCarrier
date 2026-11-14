@@ -13,7 +13,9 @@ import { TransferItem } from '../types/transfer';
 import { parsePastedTable, checkDefinitiveDamageOrigin, analyzeTransferRoute } from '../utils/sapFormatter';
 import { BROWSER_CLIENT_ID } from '../services/storage';
 import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
+import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
 import { lookupSerialInIQ09 } from '../services/iq09Service';
+import { evaluateWMSBreakerForTransfer } from '../services/wmsBatimentoService';
 
 interface BatchPasteModalProps {
   isOpen: boolean;
@@ -21,6 +23,7 @@ interface BatchPasteModalProps {
   onImportItems: (items: TransferItem[]) => void;
   currentCount: number;
   defaultSolicitante?: string;
+  currentRole?: string;
 }
 
 export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
@@ -29,10 +32,12 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
   onImportItems,
   currentCount,
   defaultSolicitante = 'Time Buiatte (Prod)',
+  currentRole = 'buiatte',
 }) => {
   const [pastedText, setPastedText] = useState('');
   const [solicitante, setSolicitante] = useState(defaultSolicitante);
   const [isDamageWarningOpen, setIsDamageWarningOpen] = useState(false);
+  const [isWmsBreakerWarningOpen, setIsWmsBreakerWarningOpen] = useState(false);
 
   useEffect(() => {
     if (!solicitante || solicitante === 'Time Buiatte (Prod)') {
@@ -63,16 +68,57 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [parsedRows]);
 
+  // Avaliação de cada linha contra a Base de Batimento Sênior WMS x SAP (Trava Breaker)
+  const wmsEvaluation = useMemo(() => {
+    const rowVerdicts = parsedRows.map((r) => {
+      const iq09Match = lookupSerialInIQ09(r.serial);
+      return evaluateWMSBreakerForTransfer({
+        serial: r.serial,
+        material: r.material,
+        centro: r.centro,
+        depositoOrigem: r.depositoOrigem,
+        depositoDestino: r.depositoDestino,
+        iq09Item: iq09Match,
+      });
+    });
+
+    const blockedAttempts: BlockedTransferAttempt[] = [];
+    const validRowIndices: number[] = [];
+
+    parsedRows.forEach((r, idx) => {
+      const verdict = rowVerdicts[idx];
+      if (!verdict.allowed) {
+        blockedAttempts.push({
+          serial: r.serial.trim().toUpperCase(),
+          material: r.material.trim().toUpperCase(),
+          centro: r.centro.trim().toUpperCase(),
+          depositoOrigem: r.depositoOrigem.trim().toUpperCase(),
+          depositoDestino: r.depositoDestino.trim().toUpperCase(),
+          verdict,
+        });
+      } else {
+        validRowIndices.push(idx);
+      }
+    });
+
+    return {
+      rowVerdicts,
+      blockedAttempts,
+      validRowIndices,
+    };
+  }, [parsedRows]);
+
   if (!isOpen) return null;
 
-  const executeImport = () => {
-    if (parsedRows.length === 0) return;
+  const executeImport = (rowsSubset?: typeof parsedRows, obsOverride?: string) => {
+    const targetRows = rowsSubset || parsedRows;
+    if (targetRows.length === 0) return;
 
     const finalSolicitante = solicitante.trim() || defaultSolicitante;
     const now = new Date().toISOString();
     const batchId = `BATCH-${Date.now().toString().slice(-4)}`;
 
-    const newItems: TransferItem[] = parsedRows.map((row, idx) => ({
+    const newItems: TransferItem[] = targetRows.map((row, idx) => ({
       id: `batch-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
       solicitationCode: `SOL-${1000 + currentCount + idx + 1}`,
       material: row.material.trim().toUpperCase(),
@@ -87,12 +133,14 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
       prioridadeFifo: currentCount + idx + 1,
       slaStatus: 'no_prazo',
       batchId,
+      observacoes: obsOverride,
       originatorClientId: BROWSER_CLIENT_ID,
     }));
 
     onImportItems(newItems);
     setPastedText('');
     setIsDamageWarningOpen(false);
+    setIsWmsBreakerWarningOpen(false);
     onClose();
   };
 
@@ -104,19 +152,30 @@ export const BatchPasteModal: React.FC<BatchPasteModalProps> = ({
       return;
     }
 
+    if (wmsEvaluation.blockedAttempts.length > 0) {
+      setIsWmsBreakerWarningOpen(true);
+      return;
+    }
+
     executeImport();
+  };
+
+  const handleRemoveBlockedWmsRows = () => {
+    const validRows = wmsEvaluation.validRowIndices.map((idx) => parsedRows[idx]);
+    const nextText = validRows
+      .map((r) => `${r.material}\t${r.serial}\t${r.centro}\t${r.depositoOrigem}\t${r.depositoDestino}`)
+      .join('\n');
+    setPastedText(nextText);
   };
 
   const handleLoadSample = () => {
     const sample = `Material\tSerial\tCentro\tDeposito de Origem\tDeposito de Destino
+38TAVCB18M5\tS3026B22437213\tB124\tB111\tB110
+42AFVCI09S5\tS2226B21902264\tB124\tB110\tB111
 MDWTF08B1\t541760002ZGB4133400502\tB124\tB148\tB110
 MDWTF08B1\t541760002ZGB4133400533\tB124\tB148\tB110
-TSM62\t541711001X9B6233500679\tB124\tB148\tB111
-PP5MS1\tPS142600024\tB124\tB110\tB111
-38TAVCB18M5\tS3226B22695419\tB123\tB110\tB111
-QCL108BB\tS1326B21294802\tB179\tB111\tB413
-QCL108BB\tS1326B21294807\tB158\tB111\tB114
-QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
+38TFCA22S5\tS0726B20996678\tB124\tB111\tB110
+QCL108BB\tS1326B21294802\tB179\tB111\tB413`;
     setPastedText(sample);
   };
 
@@ -217,18 +276,57 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                 </div>
               )}
 
+              {/* Banner de Alerta da Trava Sênior WMS x SAP */}
+              {wmsEvaluation.blockedAttempts.length > 0 && (
+                <div className="bg-red-50 border-2 border-red-500 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+                  <div className="flex items-start gap-2.5 text-xs text-red-950">
+                    <span className="text-lg leading-none">🛑</span>
+                    <div className="space-y-1">
+                      <div className="font-extrabold text-red-900">
+                        Trava Breaker Sênior WMS x SAP: {wmsEvaluation.blockedAttempts.length} de {parsedRows.length} linha(s) BLOQUEADA(S)!
+                      </div>
+                      <p className="text-red-800 leading-relaxed">
+                        {wmsEvaluation.blockedAttempts[0].verdict.whyItIsInvalid}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {wmsEvaluation.validRowIndices.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveBlockedWmsRows}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        Manter apenas {wmsEvaluation.validRowIndices.length} linha(s) apta(s)
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsWmsBreakerWarningOpen(true)}
+                      className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Ver Diagnóstico & Ação Buiatte
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between text-xs">
+                <div className="px-4 py-2 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-slate-700">
-                    {parsedRows.length} linhas reconhecidas prontas para importação
+                    {parsedRows.length} linhas reconhecidas prontas para validação
                   </span>
                   {invalidOriginRows.length > 0 ? (
                     <span className="text-red-700 bg-red-100 px-2.5 py-0.5 rounded-full font-bold border border-red-300 flex items-center gap-1">
                       🚫 {invalidOriginRows.length} Solicitação(ões) com Origem de Avaria Definitiva
                     </span>
+                  ) : wmsEvaluation.blockedAttempts.length > 0 ? (
+                    <span className="text-red-700 bg-red-100 px-2.5 py-0.5 rounded-full font-bold border border-red-300 flex items-center gap-1">
+                      🛑 {wmsEvaluation.blockedAttempts.length} Bloqueada(s) no Batimento Sênior WMS
+                    </span>
                   ) : (
                     <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium border border-emerald-200 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Formato Válido
+                      <Check className="w-3 h-3" /> Formato e Batimento WMS Válidos
                     </span>
                   )}
                 </div>
@@ -242,7 +340,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                         <th className="py-2 px-3">Centro</th>
                         <th className="py-2 px-3">Dep. Origem</th>
                         <th className="py-2 px-3">Dep. Destino</th>
-                        <th className="py-2 px-3">Validação de Regra</th>
+                        <th className="py-2 px-3">Validação SAP (IQ09) & Sênior WMS</th>
                         <th className="py-2 px-3">Solicitante</th>
                       </tr>
                     </thead>
@@ -251,13 +349,15 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                         const rowCheck = checkDefinitiveDamageOrigin(r.depositoOrigem, r.depositoDestino);
                         const routeAnalysis = analyzeTransferRoute(r.centro, r.depositoOrigem, r.depositoDestino);
                         const iq09Match = lookupSerialInIQ09(r.serial);
+                        const wmsVerdict = wmsEvaluation.rowVerdicts[i];
+                        const isBlockedByWms = wmsVerdict && !wmsVerdict.allowed;
                         const isAlreadyInDestIQ09 =
                           iq09Match && iq09Match.deposito === r.depositoDestino.trim().toUpperCase();
                         const isOriginDiffInIQ09 =
                           iq09Match &&
                           !isAlreadyInDestIQ09 &&
                           iq09Match.deposito !== r.depositoOrigem.trim().toUpperCase();
-                        const isRowInvalid = rowCheck.isInvalidOrigin;
+                        const isRowInvalid = rowCheck.isInvalidOrigin || isBlockedByWms;
                         const hasWarning = !isRowInvalid && (routeAnalysis.hasCenterMismatch || routeAnalysis.hasApplicationMismatch);
                         const warningText = routeAnalysis.warnings.join(' ');
                         return (
@@ -327,10 +427,23 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                               )}
                             </td>
                             <td className="py-1.5 px-3 font-sans">
-                              {isRowInvalid && rowCheck.originInfo ? (
+                              {rowCheck.isInvalidOrigin && rowCheck.originInfo ? (
                                 <span className="text-red-800 font-extrabold">
                                   🚫 ERRO: {rowCheck.originInfo.code} ({rowCheck.originInfo.shortTitle}) não pode ir para estoque livre!
                                 </span>
+                              ) : isBlockedByWms ? (
+                                <div className="space-y-0.5">
+                                  <div className="text-red-800 font-extrabold">
+                                    {wmsVerdict.badgeLabel} — {wmsVerdict.title}
+                                  </div>
+                                  {wmsVerdict.wmsItem && (
+                                    <div className="text-[10px] text-red-700">
+                                      Sênior WMS: Dep. <strong>{wmsVerdict.wmsItem.depositoWms || 'S/ Saldo'}</strong> • Local{' '}
+                                      <strong>{wmsVerdict.wmsItem.localWms || '—'}</strong> • Análise:{' '}
+                                      <strong>{wmsVerdict.wmsItem.analise}</strong>
+                                    </div>
+                                  )}
+                                </div>
                               ) : isAlreadyInDestIQ09 ? (
                                 <span className="text-blue-800 font-extrabold">
                                   🔵 IQ09: Este UII já consta no depósito destino {iq09Match.deposito} no SAP!
@@ -349,7 +462,7 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
                                 </span>
                               ) : (
                                 <span className="text-emerald-700 font-medium">
-                                  ✅ {routeAnalysis.routeExplanation || 'Rota SAP Válida'}
+                                  ✅ {wmsVerdict?.wmsItem ? `${wmsVerdict.badgeLabel} (${wmsVerdict.wmsItem.localWms || 'WMS'})` : routeAnalysis.routeExplanation || 'Rota SAP Válida'}
                                   {iq09Match && ' • Confirmado na IQ09'}
                                 </span>
                               )}
@@ -417,8 +530,36 @@ QCL108BB\tS1326B21294814\tB158\tB111\tB114`;
         isOpen={isDamageWarningOpen}
         invalidRoutes={invalidOriginRows}
         onCancelAndFix={() => setIsDamageWarningOpen(false)}
-        onConfirmAnyway={executeImport}
+        onConfirmAnyway={() => executeImport()}
       />
+
+      {/* Modal Hard-Breaker: Trava de Batimento Sênior WMS x SAP */}
+      {wmsEvaluation.blockedAttempts.length > 0 && (
+        <WMSBreakerWarningModal
+          isOpen={isWmsBreakerWarningOpen}
+          blockedAttempts={wmsEvaluation.blockedAttempts}
+          totalSerialsCount={parsedRows.length}
+          validSerialsCount={wmsEvaluation.validRowIndices.length}
+          onCloseAndFix={() => setIsWmsBreakerWarningOpen(false)}
+          onProceedOnlyWithValid={
+            wmsEvaluation.validRowIndices.length > 0
+              ? () => {
+                  const validRows = wmsEvaluation.validRowIndices.map((idx) => parsedRows[idx]);
+                  executeImport(validRows);
+                }
+              : undefined
+          }
+          onAdminForceOverride={
+            currentRole === 'admin'
+              ? () =>
+                  executeImport(
+                    undefined,
+                    '[EXCEÇÃO GESTOR: Lote submetido com alerta no Batimento Sênior WMS]'
+                  )
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 };

@@ -28,6 +28,7 @@ import {
 import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/transfer';
 import { formatForSAPTable, formatSerialsForSAP, checkDefinitiveDamageOrigin, analyzeTransferRoute, SAP_DEPOSITOS_CATALOG } from '../utils/sapFormatter';
 import { LabelPhotoModal } from './LabelPhotoModal';
+import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
 import { compressImageFile } from '../utils/imageCompressor';
 import { IQ09MacroReadinessStatus, IQ09QueueItemAudit } from '../types/iq09';
 import { auditTransferItemAgainstIQ09 } from '../services/iq09Service';
@@ -56,6 +57,7 @@ interface TransferTableProps {
   onDeleteSelected?: (ids: string[]) => void | Promise<void>;
   iq09SnapshotVersion?: string | null;
   iq09TotalItems?: number;
+  wmsSnapshotVersion?: string | null;
   onApplyIQ09DePara?: (
     updates: Array<{
       id: string;
@@ -142,6 +144,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   onDeleteSelected,
   iq09SnapshotVersion = null,
   iq09TotalItems = 0,
+  wmsSnapshotVersion = null,
   onApplyIQ09DePara,
   onOpenIQ09Tab,
 }) => {
@@ -150,6 +153,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   const [copiedBatchNotice, setCopiedBatchNotice] = useState(false);
   const [viewingPhotoItem, setViewingPhotoItem] = useState<TransferItem | null>(null);
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
+  const [selectedBlockedWmsAttempt, setSelectedBlockedWmsAttempt] = useState<BlockedTransferAttempt | null>(null);
 
   // Filtro rápido do batimento IQ09 direto na Fila de Solicitações & Operação SAP
   const [iq09MacroFilter, setIq09MacroFilter] = useState<'todos' | IQ09MacroReadinessStatus>('todos');
@@ -210,14 +214,14 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     });
   };
 
-  // Mapa O(1) de auditoria automática de cada item da fila contra a Base IQ09 ativa
+  // Mapa O(1) de auditoria automática de cada item da fila contra a Base IQ09 ativa e Batimento Sênior WMS
   const iq09AuditMap = useMemo(() => {
     const map = new Map<string, IQ09QueueItemAudit>();
     for (const item of items) {
       map.set(item.id, auditTransferItemAgainstIQ09(item));
     }
     return map;
-  }, [items, iq09SnapshotVersion, iq09TotalItems]);
+  }, [items, iq09SnapshotVersion, iq09TotalItems, wmsSnapshotVersion]);
 
   // Resumo executivo do batimento IQ09 para os itens ativos na fila (Pendentes / Em Análise, ou todos se filtrando concluídos)
   const iq09QueueSummary = useMemo(() => {
@@ -1847,24 +1851,56 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             </button>
                           </div>
 
-                          {/* Selo de Status do Cruzamento Automático IQ09 */}
-                          {iqAudit?.hasIQ09Base && (
+                          {/* Selo de Status do Cruzamento Automático IQ09 + Sênior WMS */}
+                          {(iqAudit?.hasIQ09Base || iqAudit?.wmsVerdict) && (
                             <div className="flex flex-wrap items-center gap-1">
-                              <span
-                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border ${
-                                  iqAudit.macroStatus === 'pronto_macro_100'
-                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                    : iqAudit.macroStatus === 'corrigivel_depara'
-                                    ? 'bg-amber-200 text-amber-950 border-amber-400'
-                                    : iqAudit.macroStatus === 'ja_no_destino_sap'
-                                    ? 'bg-sky-100 text-sky-900 border-sky-300'
-                                    : 'bg-rose-600 text-white border-rose-700'
-                                }`}
-                                title={iqAudit.summaryMessage}
-                              >
-                                {iqAudit.badgeLabel}
-                              </span>
-                              {iqAudit.iq09Item?.equipamento && (
+                              {iqAudit?.hasIQ09Base && (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border ${
+                                    iqAudit.macroStatus === 'pronto_macro_100'
+                                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                      : iqAudit.macroStatus === 'corrigivel_depara'
+                                      ? 'bg-amber-200 text-amber-950 border-amber-400'
+                                      : iqAudit.macroStatus === 'ja_no_destino_sap'
+                                      ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                      : 'bg-rose-600 text-white border-rose-700'
+                                  }`}
+                                  title={iqAudit.summaryMessage}
+                                >
+                                  {iqAudit.badgeLabel}
+                                </span>
+                              )}
+
+                              {iqAudit?.wmsVerdict && iqAudit.wmsVerdict.code !== 'NO_WMS_BASE' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!iqAudit.wmsVerdict) return;
+                                    setSelectedBlockedWmsAttempt({
+                                      serial: item.serial,
+                                      material: item.material,
+                                      centro: item.centro,
+                                      depositoOrigem: item.depositoOrigem,
+                                      depositoDestino: item.depositoDestino,
+                                      verdict: iqAudit.wmsVerdict,
+                                    });
+                                  }}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border cursor-pointer transition-colors ${
+                                    !iqAudit.wmsVerdict.allowed
+                                      ? 'bg-red-700 hover:bg-red-800 text-white border-red-800'
+                                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200'
+                                  }`}
+                                  title={`${iqAudit.wmsVerdict.title}${
+                                    iqAudit.wmsVerdict.wmsItem?.localWms
+                                      ? ` • Endereço WMS: ${iqAudit.wmsVerdict.wmsItem.localWms}`
+                                      : ''
+                                  } — Clique para ver detalhes`}
+                                >
+                                  <span>{iqAudit.wmsVerdict.badgeLabel}</span>
+                                </button>
+                              )}
+
+                              {iqAudit?.iq09Item?.equipamento && (
                                 <span className="text-[9px] text-slate-400 font-mono">
                                   Eq.{iqAudit.iq09Item.equipamento}
                                 </span>
@@ -2406,6 +2442,17 @@ export const TransferTable: React.FC<TransferTableProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Diagnóstico Sênior WMS x SAP na Fila FIFO */}
+      {selectedBlockedWmsAttempt && (
+        <WMSBreakerWarningModal
+          isOpen={Boolean(selectedBlockedWmsAttempt)}
+          blockedAttempts={[selectedBlockedWmsAttempt]}
+          totalSerialsCount={1}
+          validSerialsCount={selectedBlockedWmsAttempt.verdict.allowed ? 1 : 0}
+          onCloseAndFix={() => setSelectedBlockedWmsAttempt(null)}
+        />
       )}
     </>
   );

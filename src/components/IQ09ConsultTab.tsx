@@ -23,6 +23,8 @@ import {
   User,
   Info,
   X,
+  ShieldCheck,
+  MapPin,
 } from 'lucide-react';
 import {
   IQ09Item,
@@ -30,6 +32,7 @@ import {
   IQ09BatchValidationItem,
   IQ09CrossCheckStatus,
 } from '../types/iq09';
+import { WMSBatimentoSnapshot } from '../types/wmsBatimento';
 import { TransferItem } from '../types/transfer';
 import {
   parseIQ09File,
@@ -37,7 +40,15 @@ import {
   saveAndActivateIQ09Snapshot,
   clearIQ09Snapshot,
   validateSerialsBatchAgainstIQ09,
+  lookupSerialInIQ09,
 } from '../services/iq09Service';
+import {
+  parseAndMergeWMSFiles,
+  saveAndActivateWMSBatimento,
+  clearWMSBatimentoSnapshot,
+  lookupSerialInWMSBatimento,
+} from '../services/wmsBatimentoService';
+import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
 import {
   SAP_CENTROS_CATALOG,
   SAP_DEPOSITOS_CATALOG,
@@ -47,6 +58,7 @@ import { CURRENT_SESSION_ID } from '../services/storage';
 
 interface IQ09ConsultTabProps {
   snapshot: IQ09Snapshot | null;
+  wmsSnapshot?: WMSBatimentoSnapshot | null;
   queueItems: TransferItem[];
   defaultSolicitante: string;
   currentRole: string;
@@ -65,6 +77,7 @@ const PAGE_SIZE = 100;
 
 export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   snapshot,
+  wmsSnapshot = null,
   queueItems,
   defaultSolicitante,
   currentRole,
@@ -84,6 +97,16 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Estados do Painel de Upload do Batimento Sênior WMS x SAP (Opção B: Batimento.xlsx OU 2 bases brutas do Sênior WMS)
+  const [isWmsImporterOpen, setIsWmsImporterOpen] = useState<boolean>(false);
+  const [isParsingWmsFiles, setIsParsingWmsFiles] = useState<boolean>(false);
+  const [wmsImportError, setWmsImportError] = useState<string | null>(null);
+  const wmsFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Modal de Diagnóstico Breaker para seriais bloqueados no Validador
+  const [selectedBlockedAttemptsForModal, setSelectedBlockedAttemptsForModal] = useState<BlockedTransferAttempt[]>([]);
+  const [isBreakerModalOpen, setIsBreakerModalOpen] = useState<boolean>(false);
+
   // Estados do Validador e De-Para em Lote (Sub-aba 1)
   const [batchSerialsInput, setBatchSerialsInput] = useState<string>('');
   const [targetDepositOption, setTargetDepositOption] = useState<string>('AUTO_LIVRE');
@@ -91,17 +114,21 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   const [validationFilter, setValidationFilter] = useState<'todos' | IQ09CrossCheckStatus>('todos');
   const [isSubmittingAptos, setIsSubmittingAptos] = useState<boolean>(false);
 
-  // Estados do Explorador de Consulta Geral da IQ09 (Sub-aba 2)
+  // Estados do Explorador de Consulta Geral da IQ09 + Sênior WMS (Sub-aba 2)
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [centroFilter, setCentroFilter] = useState<string>('todos');
   const [depositoFilter, setDepositoFilter] = useState<string>('todos');
   const [catFilter, setCatFilter] = useState<'todos' | 'livre' | 'triagem_falta' | 'avaria'>('todos');
   const [statusSapFilter, setStatusSapFilter] = useState<string>('todos');
+  const [wmsStatusFilter, setWmsStatusFilter] = useState<
+    'todos' | 'ok' | 'b111_bloqueado_falta' | 'mover_b111' | 'validar_fisico' | 'divergencia_wms'
+  >('todos');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selectedExplorerSerials, setSelectedExplorerSerials] = useState<Set<string>>(new Set());
 
   const iq09Items = snapshot?.items || [];
   const metadata = snapshot?.metadata || null;
+  const wmsMetadata = wmsSnapshot?.metadata || null;
 
   // Cálculo de frescor da base IQ09 (verde até 3h, amarelo > 3h)
   const snapshotFreshness = useMemo(() => {
@@ -176,14 +203,15 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   const batchValidationResults: IQ09BatchValidationItem[] = useMemo(() => {
     if (!deferredBatchInput.trim()) return [];
     return validateSerialsBatchAgainstIQ09(deferredBatchInput, targetDepositOption, queueItems);
-  }, [deferredBatchInput, targetDepositOption, queueItems, snapshot]);
+  }, [deferredBatchInput, targetDepositOption, queueItems, snapshot, wmsSnapshot]);
 
-  // Contadores das 4 categorias do Validador em Lote
+  // Contadores das categorias do Validador em Lote (incluindo bloqueios do Breaker Sênior WMS)
   const validationCounts = useMemo(() => {
     let aptos = 0;
     let jaNoDestino = 0;
     let jaNaFila = 0;
     let impedidos = 0;
+    let bloqueadosWms = 0;
 
     for (const r of batchValidationResults) {
       if (r.status === 'apto_transferir' || r.status === 'divergencia_rota_centro') {
@@ -194,6 +222,9 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         jaNaFila++;
       } else {
         impedidos++;
+        if (r.status === 'bloqueado_wms_batimento' || r.wmsBreakerBlocked) {
+          bloqueadosWms++;
+        }
       }
     }
 
@@ -203,6 +234,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
       jaNoDestino,
       jaNaFila,
       impedidos,
+      bloqueadosWms,
     };
   }, [batchValidationResults]);
 
@@ -218,7 +250,8 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         (r) =>
           r.status === 'nao_encontrado_iq09' ||
           r.status === 'bloqueado_avaria_origem' ||
-          r.status === 'bloqueado_status_sap'
+          r.status === 'bloqueado_status_sap' ||
+          r.status === 'bloqueado_wms_batimento'
       );
     }
     return batchValidationResults.filter((r) => r.status === validationFilter);
@@ -239,7 +272,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
     return Array.from(new Set(iq09Items.map((i) => i.deposito).filter(Boolean))).sort();
   }, [metadata, iq09Items]);
 
-  // Filtragem de alta performance do Explorador da IQ09 (só executa quando a sub-aba 'explorador' está ativa)
+  // Filtragem de alta performance do Explorador da IQ09 + Sênior WMS (só executa quando a sub-aba 'explorador' está ativa)
   const filteredExplorerItems = useMemo(() => {
     if (subTab !== 'explorador') return iq09Items;
 
@@ -249,7 +282,8 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
       centroFilter === 'todos' &&
       depositoFilter === 'todos' &&
       catFilter === 'todos' &&
-      statusSapFilter === 'todos';
+      statusSapFilter === 'todos' &&
+      wmsStatusFilter === 'todos';
 
     // Atalho O(1) instantâneo quando não há filtros aplicados (retorna o array original sem clonar 71.197 itens)
     if (hasNoFilters) return iq09Items;
@@ -275,6 +309,45 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         if (catFilter === 'avaria' && !isAvaria) return false;
       }
 
+      const wmsItem = lookupSerialInWMSBatimento(item.serial);
+
+      if (wmsStatusFilter !== 'todos') {
+        if (!wmsItem) return false;
+        const anUpper = wmsItem.analise.toUpperCase();
+        const depWms = wmsItem.depositoWms.toUpperCase();
+        if (wmsStatusFilter === 'ok' && anUpper !== 'OK') return false;
+        if (
+          wmsStatusFilter === 'b111_bloqueado_falta' &&
+          !(
+            (item.deposito === 'B111' || item.deposito === 'B152') &&
+            (anUpper.includes('FALTA - DESCONSIDERAR') ||
+              anUpper.includes('EXISTE APENAS NO SAP') ||
+              depWms === 'FALTA' ||
+              depWms === 'SOBRA/FALTA' ||
+              !depWms)
+          )
+        ) {
+          return false;
+        }
+        if (wmsStatusFilter === 'mover_b111' && !anUpper.includes('MOVER NO SAP PARA B111')) {
+          return false;
+        }
+        if (wmsStatusFilter === 'validar_fisico' && !anUpper.includes('VALIDAR NO')) {
+          return false;
+        }
+        if (
+          wmsStatusFilter === 'divergencia_wms' &&
+          !(
+            anUpper.includes('DESBLOQUEAR') ||
+            anUpper.includes('MOVIMENTAR DEPOSITO') ||
+            anUpper.includes('MATERIAL DIFERENTE') ||
+            anUpper.includes('EXISTE APENAS NO WMS')
+          )
+        ) {
+          return false;
+        }
+      }
+
       if (q) {
         const match =
           item.serial.includes(q) ||
@@ -282,13 +355,28 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
           item.centro.includes(q) ||
           item.deposito.includes(q) ||
           (item.equipamento && item.equipamento.includes(q)) ||
-          (item.modificadoPor && item.modificadoPor.includes(q));
+          (item.modificadoPor && item.modificadoPor.includes(q)) ||
+          (wmsItem &&
+            (wmsItem.localWms.toUpperCase().includes(q) ||
+              wmsItem.depositoWms.toUpperCase().includes(q) ||
+              wmsItem.loteWms.toUpperCase().includes(q) ||
+              wmsItem.analise.toUpperCase().includes(q)));
         if (!match) return false;
       }
 
       return true;
     });
-  }, [subTab, iq09Items, deferredSearchQuery, centroFilter, depositoFilter, catFilter, statusSapFilter]);
+  }, [
+    subTab,
+    iq09Items,
+    deferredSearchQuery,
+    centroFilter,
+    depositoFilter,
+    catFilter,
+    statusSapFilter,
+    wmsStatusFilter,
+    wmsSnapshot,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filteredExplorerItems.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -298,8 +386,45 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   }, [filteredExplorerItems, safePage]);
 
   // ============================================================================
-  // HANDLERS DE IMPORTAÇÃO DO SNAPSHOT IQ09
+  // HANDLERS DE IMPORTAÇÃO DO SNAPSHOT IQ09 E DO BATIMENTO SÊNIOR WMS
   // ============================================================================
+
+  const handleWmsFilesUpload = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    setIsParsingWmsFiles(true);
+    setWmsImportError(null);
+    setImportSuccessMsg(null);
+
+    try {
+      const result = await parseAndMergeWMSFiles(files, lookupSerialInIQ09);
+      if (result.items.length === 0) {
+        setWmsImportError(
+          'Nenhum serial válido foi localizado nos arquivos enviados. Suba a planilha "Batimento_Estoque.xlsx" (aba Analise) ou os arquivos "Gerenciador de informações específicas.xlsx" / "Estoque local por lote.csv" do Sênior WMS.'
+        );
+        return;
+      }
+
+      const snap = await saveAndActivateWMSBatimento(result.items, {
+        updatedBy: defaultSolicitante || 'Supervisor WMS / SAP',
+        fileNames: result.fileNames,
+        sourceMode: result.sourceMode,
+      });
+
+      setImportSuccessMsg(
+        `Trava Sênior WMS x SAP atualizada (${result.fileNames.join(' + ')})! ${snap.metadata.totalSerials.toLocaleString('pt-BR')} seriais auditados (${snap.metadata.b111InFaltaWmsCount.toLocaleString('pt-BR')} B111 em FALTA bloqueados e ${snap.metadata.moverParaB111Count.toLocaleString('pt-BR')} pendentes de baixa para B111).`
+      );
+      setIsWmsImporterOpen(false);
+    } catch (err: any) {
+      setWmsImportError(
+        String(err?.message || 'Erro ao processar os arquivos do Batimento / Sênior WMS.')
+      );
+    } finally {
+      setIsParsingWmsFiles(false);
+      if (wmsFileInputRef.current) wmsFileInputRef.current.value = '';
+    }
+  };
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -481,14 +606,14 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      {/* 1. CABEÇALHO DA FOTOGRAFIA ATUAL DO ESTOQUE SAP (SNAPSHOT IQ09) */}
+      {/* 1. CABEÇALHO DA FOTOGRAFIA ATUAL DO ESTOQUE SAP (SNAPSHOT IQ09) + TRAVA SÊNIOR WMS */}
       <div className="bg-white/95 backdrop-blur-2xl rounded-2xl border border-white/70 shadow-[0_18px_50px_rgba(0,0,0,0.14)] p-4 sm:p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#002664] text-white text-xs font-extrabold tracking-wide">
                 <Database className="w-3.5 h-3.5 text-cyan-300" />
-                <span>CENTRAL SAP IQ09 • SNAPSHOT EM TEMPO REAL</span>
+                <span>CENTRAL SAP IQ09 + BATIMENTO SÊNIOR WMS</span>
               </span>
 
               {metadata ? (
@@ -505,7 +630,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     }`}
                   />
                   <span>
-                    {snapshotFreshness.isStale ? '🟡 Atenção: Base com +3h' : '🟢 Base IQ09 Ativa'} ({snapshotFreshness.ageText})
+                    {snapshotFreshness.isStale ? '🟡 Base IQ09 +3h' : '🟢 Base IQ09 Ativa'} ({snapshotFreshness.ageText})
                   </span>
                 </span>
               ) : (
@@ -513,40 +638,77 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   ⚪ Aguardando Importação da Base IQ09
                 </span>
               )}
+
+              {wmsMetadata ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100 text-indigo-950 border border-indigo-300 text-xs font-extrabold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
+                  <span>
+                    🛡️ Trava Sênior WMS Ativa ({wmsMetadata.totalSerials.toLocaleString('pt-BR')} seriais)
+                  </span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-xs font-bold">
+                  ⚠️ Sem Batimento Sênior WMS carregado
+                </span>
+              )}
             </div>
 
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
-              Consulta & Validador Inteligente de Seriais (`UII`) — Base `IQ09` SAP
+              2º WMS & Trava Breaker de Estoque — Cruzamento `SAP IQ09 ⟷ Sênior WMS`
             </h2>
 
             {metadata ? (
               <p className="text-xs text-slate-600">
-                Última carga em{' '}
-                <strong className="text-slate-900">
-                  {new Date(metadata.updatedAt).toLocaleString('pt-BR')}
-                </strong>{' '}
-                por <strong className="text-[#00609C]">{metadata.updatedBy}</strong> • Arquivo:{' '}
+                <strong>SAP IQ09:</strong>{' '}
                 <code className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11px]">
                   {metadata.fileName}
                 </code>{' '}
-                • Substituição limpa (sem acúmulo de bases antigas).
+                ({new Date(metadata.updatedAt).toLocaleString('pt-BR')})
+                {wmsMetadata && (
+                  <>
+                    {' '}• <strong>Sênior WMS / Batimento:</strong>{' '}
+                    <code className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-900 font-mono text-[11px]">
+                      {wmsMetadata.fileNames.join(' + ')}
+                    </code>{' '}
+                    ({wmsMetadata.b111InFaltaWmsCount.toLocaleString('pt-BR')} B111 em FALTA travados)
+                  </>
+                )}
               </p>
             ) : (
               <p className="text-xs text-slate-600">
-                Suba o arquivo <strong className="text-slate-800">.xlsx</strong> ou <strong className="text-slate-800">.csv</strong> baixado direto da transação <strong>IQ09 do SAP</strong> (sem precisar tratar colunas). A coluna <strong>UII</strong> é reconhecida nativamente como o Serial!
+                Suba a planilha <strong>IQ09 do SAP</strong> e o <strong>Batimento de Estoque / Bases do Sênior WMS</strong> para ativar a Trava Breaker contra solicitações indevidas de `B111`.
               </p>
             )}
           </div>
 
-          {/* Botões de Ação do Snapshot */}
+          {/* Botões de Ação dos Snapshots (SAP IQ09 + Sênior WMS) */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => setIsImporterOpen((prev) => !prev)}
-              className="px-4 py-2.5 rounded-xl bg-[#002664] hover:bg-[#003380] text-white font-extrabold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+              onClick={() => {
+                setIsWmsImporterOpen((prev) => !prev);
+                setIsImporterOpen(false);
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+            >
+              <ShieldCheck className="w-4 h-4 text-indigo-200" />
+              <span>
+                {wmsMetadata
+                  ? 'Atualizar Batimento / Sênior WMS'
+                  : 'Importar Batimento / Sênior WMS'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsImporterOpen((prev) => !prev);
+                setIsWmsImporterOpen(false);
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-[#002664] hover:bg-[#003380] text-white font-extrabold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
             >
               <UploadCloud className="w-4 h-4 text-cyan-300" />
-              <span>{metadata ? 'Atualizar Base IQ09 (.xlsx / Colar)' : 'Importar Base IQ09 (.xlsx / Colar)'}</span>
+              <span>{metadata ? 'Atualizar Base IQ09 (.xlsx)' : 'Importar Base IQ09 (.xlsx)'}</span>
             </button>
 
             {metadata && currentRole !== 'buiatte' && (
@@ -593,7 +755,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-4 pt-4 border-t border-slate-200/80">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/90">
               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                Total UIIs (Seriais)
+                Total UIIs (SAP IQ09)
               </div>
               <div className="text-xl font-black text-slate-900 tabular-nums mt-0.5">
                 {iq09Stats.total.toLocaleString('pt-BR')}
@@ -633,7 +795,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 {iq09Stats.triagemOuFaltaCount.toLocaleString('pt-BR')}
               </div>
               <div className="text-[11px] text-amber-900/80">
-                Elegíveis p/ liberação ao Livre
+                Auditados pela Trava Sênior WMS
               </div>
             </div>
 
@@ -647,6 +809,251 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
               <div className="text-[11px] text-rose-800/80">
                 Saída bloqueada p/ Estoque Livre
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cards Resumo do Batimento Sênior WMS x SAP (Filtros Rápidos em 1 Clique) */}
+        {wmsMetadata && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setSubTab('explorador');
+                setWmsStatusFilter(wmsStatusFilter === 'ok' ? 'todos' : 'ok');
+                setCurrentPage(1);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                subTab === 'explorador' && wmsStatusFilter === 'ok'
+                  ? 'bg-emerald-100 border-emerald-500 ring-2 ring-emerald-400/50'
+                  : 'bg-emerald-50/50 border-emerald-200 hover:bg-emerald-50'
+              }`}
+            >
+              <div className="text-[10px] font-extrabold uppercase text-emerald-900">
+                ✅ Alinhados (SAP = WMS)
+              </div>
+              <div className="text-lg font-black text-emerald-700 tabular-nums">
+                {wmsMetadata.okCount.toLocaleString('pt-BR')}
+              </div>
+              <div className="text-[10px] text-emerald-800">Análise: OK</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubTab('explorador');
+                setWmsStatusFilter(
+                  wmsStatusFilter === 'b111_bloqueado_falta' ? 'todos' : 'b111_bloqueado_falta'
+                );
+                setCurrentPage(1);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                subTab === 'explorador' && wmsStatusFilter === 'b111_bloqueado_falta'
+                  ? 'bg-red-100 border-red-500 ring-2 ring-red-400/50'
+                  : 'bg-red-50/60 border-red-200 hover:bg-red-50'
+              }`}
+            >
+              <div className="text-[10px] font-extrabold uppercase text-red-900">
+                🛑 Trava B111 (Falta WMS / Só SAP)
+              </div>
+              <div className="text-lg font-black text-red-700 tabular-nums">
+                {(wmsMetadata.b111InFaltaWmsCount + wmsMetadata.apenasNoSapCount).toLocaleString('pt-BR')}
+              </div>
+              <div className="text-[10px] text-red-800">
+                {wmsMetadata.b111InFaltaWmsCount} em FALTA • {wmsMetadata.apenasNoSapCount} só SAP
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubTab('explorador');
+                setWmsStatusFilter(wmsStatusFilter === 'mover_b111' ? 'todos' : 'mover_b111');
+                setCurrentPage(1);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                subTab === 'explorador' && wmsStatusFilter === 'mover_b111'
+                  ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-400/50'
+                  : 'bg-amber-50/60 border-amber-200 hover:bg-amber-50'
+              }`}
+            >
+              <div className="text-[10px] font-extrabold uppercase text-amber-900">
+                ⚠️ Mover no SAP p/ B111
+              </div>
+              <div className="text-lg font-black text-amber-700 tabular-nums">
+                {wmsMetadata.moverParaB111Count.toLocaleString('pt-BR')}
+              </div>
+              <div className="text-[10px] text-amber-800">
+                Em FALTA no WMS mas Livre no SAP
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubTab('explorador');
+                setWmsStatusFilter(
+                  wmsStatusFilter === 'validar_fisico' ? 'todos' : 'validar_fisico'
+                );
+                setCurrentPage(1);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                subTab === 'explorador' && wmsStatusFilter === 'validar_fisico'
+                  ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-400/50'
+                  : 'bg-blue-50/60 border-blue-200 hover:bg-blue-50'
+              }`}
+            >
+              <div className="text-[10px] font-extrabold uppercase text-blue-900">
+                🔎 B111 c/ Saldo Físico WMS
+              </div>
+              <div className="text-lg font-black text-blue-700 tabular-nums">
+                {wmsMetadata.validarFisicoCount.toLocaleString('pt-BR')}
+              </div>
+              <div className="text-[10px] text-blue-800">
+                Liberados p/ retornar ao Livre
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubTab('explorador');
+                setWmsStatusFilter(
+                  wmsStatusFilter === 'divergencia_wms' ? 'todos' : 'divergencia_wms'
+                );
+                setCurrentPage(1);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer col-span-2 sm:col-span-1 ${
+                subTab === 'explorador' && wmsStatusFilter === 'divergencia_wms'
+                  ? 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-400/50'
+                  : 'bg-indigo-50/60 border-indigo-200 hover:bg-indigo-50'
+              }`}
+            >
+              <div className="text-[10px] font-extrabold uppercase text-indigo-900">
+                🟠 Divergência no Sênior WMS
+              </div>
+              <div className="text-lg font-black text-indigo-700 tabular-nums">
+                {wmsMetadata.divergenciaWmsCount.toLocaleString('pt-BR')}
+              </div>
+              <div className="text-[10px] text-indigo-800">
+                Desbloquear Lote / Mover Dep. WMS
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* PAINEL EXPANSÍVEL DE UPLOAD DO BATIMENTO SÊNIOR WMS x SAP (OPÇÃO B) */}
+        {isWmsImporterOpen && (
+          <div className="mt-4 pt-4 border-t-2 border-dashed border-indigo-200 bg-indigo-50/40 rounded-2xl p-4 space-y-4 animate-in slide-in-from-top-2 duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-extrabold text-indigo-950 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                  <span>
+                    Importar Batimento de Estoque ou Bases Brutas do Sênior WMS (Trava Breaker)
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Você pode subir a planilha pronta{' '}
+                  <strong className="text-indigo-900">Batimento_Estoque.xlsx</strong> (aba{' '}
+                  <code>Analise</code>) <u>OU</u> selecionar os 2 arquivos brutos do Sênior WMS juntos (
+                  <strong className="text-indigo-900">
+                    Gerenciador de informações específicas.xlsx
+                  </strong>{' '}
+                  + <strong className="text-indigo-900">Estoque local por lote.csv</strong>).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {wmsMetadata && currentRole !== 'buiatte' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        window.confirm(
+                          'Deseja limpar a base de Batimento Sênior WMS atual da memória?'
+                        )
+                      ) {
+                        await clearWMSBatimentoSnapshot();
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold cursor-pointer"
+                  >
+                    Limpar Base WMS
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsWmsImporterOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white"
+                  title="Fechar importador WMS"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {wmsImportError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs font-semibold flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{wmsImportError}</span>
+              </div>
+            )}
+
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleWmsFilesUpload(e.dataTransfer.files);
+                }
+              }}
+              className="border-2 border-dashed border-indigo-400/70 hover:border-indigo-700 bg-white rounded-2xl p-6 text-center transition-all"
+            >
+              {isParsingWmsFiles ? (
+                <div className="py-4 flex flex-col items-center justify-center gap-2 text-indigo-950">
+                  <RefreshCw className="w-7 h-7 animate-spin text-indigo-600" />
+                  <span className="text-sm font-extrabold">
+                    Processando e cruzando Sênior WMS ⟷ SAP IQ09 em alta velocidade...
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Mapeando Serial, Depósito WMS, Local/Endereço, Lote Liberado e Regras de Trava B111.
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center mx-auto shadow-2xs">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-extrabold text-slate-800">
+                      Arraste aqui o <span className="text-indigo-700">Batimento_Estoque.xlsx</span> ou os{' '}
+                      <span className="text-indigo-700">arquivos do Sênior WMS (.xlsx / .csv)</span>
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Suporta seleção múltipla! O MIGOU faz o cruzamento automático em memória (O(1)) sem travar o navegador.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                    <label className="cursor-pointer px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs inline-flex items-center gap-2 shadow-sm transition-all active:scale-95">
+                      <FileSpreadsheet className="w-4 h-4 text-indigo-200" />
+                      <span>Selecionar Batimento (.xlsx) ou Bases Sênior WMS</span>
+                      <input
+                        ref={wmsFileInputRef}
+                        type="file"
+                        multiple
+                        accept=".xlsx,.csv,.txt,.tsv,.xls"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleWmsFilesUpload(e.target.files);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1025,13 +1432,15 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   }`}
                 >
                   <div className="text-[10px] font-extrabold uppercase text-rose-900">
-                    🔴 4. Impedidos / S/ Saldo
+                    🛑 4. Trava WMS / Impedidos
                   </div>
                   <div className="text-2xl font-black text-rose-700 tabular-nums mt-0.5">
                     {validationCounts.impedidos}
                   </div>
                   <div className="text-[10px] text-rose-800 font-medium">
-                    Avaria B136/149/137 ou S/ IQ09
+                    {validationCounts.bloqueadosWms > 0
+                      ? `${validationCounts.bloqueadosWms} travado(s) Sênior WMS`
+                      : 'Falta WMS, Avaria ou S/ IQ09'}
                   </div>
                 </button>
               </div>
@@ -1041,24 +1450,24 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/60 space-y-2">
                   <Database className="w-8 h-8 text-slate-400 mx-auto" />
                   <div className="text-sm font-extrabold text-slate-700">
-                    Cole os seriais (`UII`) no quadro ao lado para validar na `IQ09`
+                    Cole os seriais (`UII`) no quadro ao lado para validar na `IQ09` e no `Sênior WMS`
                   </div>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    O MIGOU vai puxar automaticamente o <strong>Material</strong>, o <strong>Centro</strong>, o <strong>Depósito Atual</strong> e o <strong>Status Sistema (`DEPS`)</strong> de cada `UII` e liberar o botão de solicitação em 1 clique apenas para os seriais que realmente precisam de movimentação.
+                    O MIGOU vai puxar automaticamente o <strong>Material</strong>, o <strong>Centro</strong>, o <strong>Depósito Atual SAP</strong>, a <strong>Posição Física/Sistêmica no Sênior WMS</strong> e travar solicitações indevidas de `B111` que ainda estejam em `FALTA`.
                   </p>
                 </div>
               ) : (
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                   <div className="max-h-[440px] overflow-x-auto overflow-y-auto">
-                    <table className="w-full min-w-[680px] text-left text-xs border-collapse">
+                    <table className="w-full min-w-[780px] text-left text-xs border-collapse">
                       <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
                         <tr>
                           <th className="py-2.5 px-3">UII (Serial)</th>
-                          <th className="py-2.5 px-2.5">Material (IQ09)</th>
+                          <th className="py-2.5 px-2.5">Material</th>
                           <th className="py-2.5 px-2">Centro</th>
-                          <th className="py-2.5 px-3">Dep. IQ09 ➔ Destino</th>
-                          <th className="py-2.5 px-2.5">Status SAP</th>
-                          <th className="py-2.5 px-3">Diagnóstico Mastigado</th>
+                          <th className="py-2.5 px-3">Rota SAP (IQ09 ➔ Dest)</th>
+                          <th className="py-2.5 px-3">Posição Sênior WMS</th>
+                          <th className="py-2.5 px-3">Diagnóstico & Trava Breaker</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200/80">
@@ -1067,6 +1476,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                             item.status === 'apto_transferir' || item.status === 'divergencia_rota_centro';
                           const isJaNoDestino = item.status === 'ja_no_destino';
                           const isJaNaFila = item.status === 'ja_na_fila_migou';
+                          const wmsIt = item.wmsVerdict?.wmsItem;
 
                           return (
                             <tr
@@ -1099,48 +1509,65 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                               </td>
 
                               <td className="py-2.5 px-3 font-mono">
-                                {item.iq09Item ? (
-                                  <div className="inline-flex items-center gap-1.5">
-                                    <span className="px-1.5 py-0.5 rounded bg-white border border-slate-300 font-bold text-slate-800">
-                                      {item.suggestedOrigem}
-                                    </span>
-                                    <ArrowRight className="w-3 h-3 text-slate-400" />
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded font-bold border ${
-                                        isJaNoDestino
-                                          ? 'bg-blue-100 text-blue-900 border-blue-300'
-                                          : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                      }`}
-                                    >
-                                      {item.suggestedDestino}
-                                    </span>
+                                {item.iq09Item || item.suggestedOrigem ? (
+                                  <div className="space-y-1">
+                                    <div className="inline-flex items-center gap-1.5">
+                                      <span className="px-1.5 py-0.5 rounded bg-white border border-slate-300 font-bold text-slate-800">
+                                        {item.suggestedOrigem || '—'}
+                                      </span>
+                                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded font-bold border ${
+                                          isJaNoDestino
+                                            ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                            : item.wmsBreakerBlocked
+                                            ? 'bg-red-100 text-red-900 border-red-300'
+                                            : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                        }`}
+                                      >
+                                        {item.suggestedDestino || '—'}
+                                      </span>
+                                    </div>
+                                    {item.iq09Item && (
+                                      <div className="text-[10px] text-slate-500 font-sans">
+                                        SAP: <strong>{item.iq09Item.statusSistema}</strong> • Tp.{item.iq09Item.tipoEstoque}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <span className="text-slate-400">—</span>
                                 )}
                               </td>
 
-                              <td className="py-2.5 px-2.5">
-                                {item.iq09Item ? (
+                              <td className="py-2.5 px-3">
+                                {wmsIt ? (
                                   <div className="space-y-0.5">
-                                    <span
-                                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold ${
-                                        item.iq09Item.statusSistema === 'DEPS'
-                                          ? 'bg-emerald-100 text-emerald-900'
-                                          : 'bg-rose-100 text-rose-900'
-                                      }`}
-                                    >
-                                      {item.iq09Item.statusSistema} • Tp.{item.iq09Item.tipoEstoque}
-                                    </span>
-                                    {item.iq09Item.modificadoEm && (
-                                      <div className="text-[10px] text-slate-500">
-                                        {item.iq09Item.modificadoEm}{' '}
-                                        {item.iq09Item.modificadoPor ? `(${item.iq09Item.modificadoPor})` : ''}
-                                      </div>
-                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold border ${
+                                          !wmsIt.depositoWms ||
+                                          wmsIt.depositoWms === 'FALTA' ||
+                                          wmsIt.depositoWms === 'SOBRA/FALTA' ||
+                                          wmsIt.depositoWms.includes('INVENTARIO')
+                                            ? 'bg-red-100 text-red-900 border-red-300'
+                                            : 'bg-indigo-50 text-indigo-950 border-indigo-200'
+                                        }`}
+                                      >
+                                        WMS: {wmsIt.depositoWms || 'S/ SALDO'}
+                                      </span>
+                                      {wmsIt.localWms && (
+                                        <span className="text-[10px] font-mono font-bold text-slate-700">
+                                          {wmsIt.localWms}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500">
+                                      {wmsIt.loteWms ? `Lote ${wmsIt.loteWms} (${wmsIt.loteLiberado === 'Não' ? '🔒 Bloq' : 'Liberado'}) • ` : ''}
+                                      <strong className="text-slate-700">{wmsIt.analise}</strong>
+                                    </div>
                                   </div>
                                 ) : (
-                                  <span className="text-rose-600 font-bold text-[10px]">S/ Registro</span>
+                                  <span className="text-[10px] text-slate-400">Sem registro no Batimento</span>
                                 )}
                               </td>
 
@@ -1159,12 +1586,34 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                                   {isApto && '🟢 '}
                                   {isJaNoDestino && '🔵 '}
                                   {isJaNaFila && '🟡 '}
-                                  {!isApto && !isJaNoDestino && !isJaNaFila && '🔴 '}
+                                  {!isApto && !isJaNoDestino && !isJaNaFila && '🛑 '}
                                   {item.statusTitle}
                                 </div>
                                 <div className="text-[11px] text-slate-600 leading-snug mt-0.5">
                                   {item.statusDetail}
                                 </div>
+                                {item.wmsBreakerBlocked && item.wmsVerdict && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedBlockedAttemptsForModal([
+                                        {
+                                          serial: item.inputSerial,
+                                          material: item.suggestedMaterial || 'S/M',
+                                          centro: item.suggestedCentro || 'B124',
+                                          depositoOrigem: item.suggestedOrigem || 'B111',
+                                          depositoDestino: item.suggestedDestino || 'B110',
+                                          verdict: item.wmsVerdict!,
+                                        },
+                                      ]);
+                                      setIsBreakerModalOpen(true);
+                                    }}
+                                    className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-[10px] transition-colors cursor-pointer"
+                                  >
+                                    <ShieldAlert className="w-3 h-3" />
+                                    <span>Ver Por Que é Indevida & Ação Buiatte</span>
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -1181,7 +1630,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-[#00609C] shrink-0" />
                 <span>
-                  <strong>Inteligência anti-retrabalho:</strong> Seriais que já constam no depósito de destino na `IQ09` (azul) ou que já estão na fila do MIGOU (amarelo) são automaticamente filtrados para evitar pedidos duplicados ao Time Midea.
+                  <strong>Trava Sênior WMS x SAP ativa:</strong> Seriais que estão em `B111` no SAP mas continuam em `FALTA` (`F0003001011`), `SOBRA/FALTA` ou `Sem Saldo` no Sênior WMS são bloqueados automaticamente e exibem o plano de ação para o Time Buiatte.
                 </span>
               </div>
             </div>
@@ -1189,10 +1638,10 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         </div>
       ) : (
         /* ========================================================================== */
-        /* SUB-ABA 2: EXPLORADOR & CONSULTA GERAL DA BASE IQ09 (PARA TODAS AS ÁREAS)  */
+        /* SUB-ABA 2: EXPLORADOR & CONSULTA GERAL DA BASE IQ09 + SÊNIOR WMS           */
         /* ========================================================================== */
         <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-          {/* Barra de Pesquisa e Filtros Responsivos da IQ09 */}
+          {/* Barra de Pesquisa e Filtros Responsivos da IQ09 + Sênior WMS */}
           <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
             <div className="flex flex-col gap-3">
               {/* Linha 1: Campo de Busca Instantânea + Botão Exportar */}
@@ -1206,7 +1655,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                       setSearchQuery(e.target.value);
                       setCurrentPage(1);
                     }}
-                    placeholder="Pesquisar na IQ09 por UII (Serial), Material (ex: QQI075BB), Equipamento ou Usuário SAP..."
+                    placeholder="Pesquisar por UII (Serial), Material, Endereço WMS (ex: F0003001011, R12), Lote ou Análise..."
                     className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA]"
                   />
                   {searchQuery && (
@@ -1235,8 +1684,8 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 </button>
               </div>
 
-              {/* Linha 2: Grade Responsiva de Filtros Rápidos */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              {/* Linha 2: Grade Responsiva de Filtros Rápidos (Incluindo Filtro do Batimento Sênior WMS) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                 <select
                   value={centroFilter}
                   onChange={(e) => {
@@ -1245,7 +1694,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   }}
                   className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
-                  <option value="todos">Centro: Todos ({allIQ09Centros.length})</option>
+                  <option value="todos">Centro SAP: Todos ({allIQ09Centros.length})</option>
                   {allIQ09Centros.map((c) => (
                     <option key={c} value={c}>
                       Centro {c} ({(metadata?.centrosCount[c] || 0).toLocaleString('pt-BR')})
@@ -1261,7 +1710,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   }}
                   className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
-                  <option value="todos">Depósito: Todos ({allIQ09Depositos.length})</option>
+                  <option value="todos">Depósito SAP: Todos ({allIQ09Depositos.length})</option>
                   {allIQ09Depositos.map((d) => {
                     const dInfo = SAP_DEPOSITOS_CATALOG[d];
                     return (
@@ -1273,6 +1722,22 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 </select>
 
                 <select
+                  value={wmsStatusFilter}
+                  onChange={(e) => {
+                    setWmsStatusFilter(e.target.value as any);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full px-2.5 py-2 text-xs font-bold bg-indigo-50/80 border border-indigo-300 rounded-xl text-indigo-950"
+                >
+                  <option value="todos">🛡️ Batimento Sênior WMS: Todos</option>
+                  <option value="ok">✅ Alinhados (SAP = Sênior WMS)</option>
+                  <option value="b111_bloqueado_falta">🛑 B111 Bloqueados (Em FALTA no WMS ou Só SAP)</option>
+                  <option value="mover_b111">⚠️ Mover no SAP p/ B111 (Em FALTA no WMS)</option>
+                  <option value="validar_fisico">🔎 B111 c/ Saldo Físico no WMS (Validar)</option>
+                  <option value="divergencia_wms">🟠 Divergência no WMS (Lote Bloq / Dep. Diferente)</option>
+                </select>
+
+                <select
                   value={catFilter}
                   onChange={(e) => {
                     setCatFilter(e.target.value as any);
@@ -1280,7 +1745,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   }}
                   className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
                 >
-                  <option value="todos">Categoria: Todas</option>
+                  <option value="todos">Categoria SAP: Todas</option>
                   <option value="livre">🟢 Em Estoque Livre / Blue Service</option>
                   <option value="triagem_falta">🟡 Em Triagem (B148) ou Falta (B111/B152)</option>
                   <option value="avaria">🛑 Em Avaria Definitiva (B136/B149/B137)</option>
@@ -1331,7 +1796,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
             )}
           </div>
 
-          {/* Tabela da IQ09 (Paginada para Performance 60fps mesmo com 50.000 linhas) */}
+          {/* Tabela da IQ09 + Sênior WMS (Paginada para Performance 60fps mesmo com 72.000 linhas) */}
           {filteredExplorerItems.length === 0 ? (
             <div className="p-12 text-center text-slate-500 space-y-2">
               <Filter className="w-8 h-8 text-slate-300 mx-auto" />
@@ -1370,10 +1835,9 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                       <th className="py-2.5 px-3">UII (Serial)</th>
                       <th className="py-2.5 px-2.5">Centro</th>
                       <th className="py-2.5 px-3">Depósito Atual (SAP)</th>
-                      <th className="py-2.5 px-2.5 text-center">Tp. Estoque</th>
-                      <th className="py-2.5 px-2.5 text-center">Status Sistema</th>
+                      <th className="py-2.5 px-3">Posição Sênior WMS & Batimento</th>
+                      <th className="py-2.5 px-2.5 text-center">Status SAP</th>
                       <th className="py-2.5 px-3">Modificado em / por</th>
-                      <th className="py-2.5 px-3">Equipamento</th>
                       <th className="py-2.5 px-3">Status Fila MIGOU</th>
                       <th className="py-2.5 px-3 text-right">Ação Rápida</th>
                     </tr>
@@ -1386,6 +1850,15 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                         depInfo?.category === 'estoque_livre' || depInfo?.category === 'blue_service';
                       const queueReq = activeQueueMap.get(item.serial);
                       const isSelected = selectedExplorerSerials.has(item.serial);
+                      const wmsIt = lookupSerialInWMSBatimento(item.serial);
+                      const isWmsFaltaOrOnlySap =
+                        wmsIt &&
+                        (!wmsIt.depositoWms ||
+                          wmsIt.depositoWms === 'FALTA' ||
+                          wmsIt.depositoWms === 'SOBRA/FALTA' ||
+                          wmsIt.depositoWms.includes('INVENTARIO') ||
+                          wmsIt.analise.toUpperCase().includes('FALTA - DESCONSIDERAR') ||
+                          wmsIt.analise.toUpperCase().includes('EXISTE APENAS NO SAP'));
 
                       return (
                         <tr
@@ -1438,15 +1911,44 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                                 {item.deposito}
                               </span>
                               {depInfo && (
-                                <span className="text-[10px] text-slate-500 font-medium truncate max-w-[150px]">
+                                <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]">
                                   {depInfo.shortTitle}
                                 </span>
                               )}
                             </div>
                           </td>
 
-                          <td className="py-2 px-2.5 text-center font-bold text-slate-700">
-                            {item.tipoEstoque}
+                          <td className="py-2 px-3 font-sans">
+                            {wmsIt ? (
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span
+                                    className={`font-mono font-extrabold px-1.5 py-0.5 rounded text-[10px] border ${
+                                      isWmsFaltaOrOnlySap
+                                        ? 'bg-red-100 text-red-900 border-red-300'
+                                        : wmsIt.analise.toUpperCase() === 'OK'
+                                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                        : 'bg-indigo-100 text-indigo-950 border-indigo-300'
+                                    }`}
+                                  >
+                                    WMS: {wmsIt.depositoWms || 'S/ SALDO'}
+                                  </span>
+                                  {wmsIt.localWms && (
+                                    <span className="text-[10px] font-mono font-bold text-slate-700">
+                                      <MapPin className="w-2.5 h-2.5 inline mr-0.5 text-slate-400" />
+                                      {wmsIt.localWms}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-600">
+                                  <strong>{wmsIt.analise}</strong>
+                                  {wmsIt.ondeAgir ? ` • Agir: ${wmsIt.ondeAgir}` : ''}
+                                  {wmsIt.loteWms ? ` • Lote ${wmsIt.loteWms}` : ''}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Não mapeado no Batimento</span>
+                            )}
                           </td>
 
                           <td className="py-2 px-2.5 text-center">
@@ -1457,7 +1959,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                                   : 'bg-rose-100 text-rose-800'
                               }`}
                             >
-                              {item.statusSistema}
+                              {item.statusSistema} • Tp.{item.tipoEstoque}
                             </span>
                           </td>
 
@@ -1474,10 +1976,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}
-                          </td>
-
-                          <td className="py-2 px-3 text-slate-600">
-                            {item.equipamento || '—'}
                           </td>
 
                           <td className="py-2 px-3 font-sans">
@@ -1504,12 +2002,18 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                                 onClick={() => {
                                   const cInfo = SAP_CENTROS_CATALOG[item.centro];
                                   const recFree = cInfo?.freeStockProductDeposit || 'B110';
+                                  const suggestedDest =
+                                    wmsIt?.analise.toUpperCase().includes('MOVER NO SAP PARA B111')
+                                      ? 'B111'
+                                      : item.deposito === recFree
+                                      ? 'B111'
+                                      : recFree;
                                   onOpenNewRequestWithPreset({
                                     material: item.material,
                                     seriais: [item.serial],
                                     centro: item.centro,
                                     depositoOrigem: item.deposito,
-                                    depositoDestino: item.deposito === recFree ? 'B111' : recFree,
+                                    depositoDestino: suggestedDest,
                                   });
                                 }}
                                 className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-[#002664] text-[#002664] hover:text-white border border-blue-200 font-bold text-[10px] transition-colors cursor-pointer"
@@ -1561,6 +2065,17 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
             </>
           )}
         </div>
+      )}
+
+      {/* Modal de Diagnóstico Detalhado da Trava Sênior WMS x SAP */}
+      {selectedBlockedAttemptsForModal.length > 0 && (
+        <WMSBreakerWarningModal
+          isOpen={isBreakerModalOpen}
+          blockedAttempts={selectedBlockedAttemptsForModal}
+          totalSerialsCount={selectedBlockedAttemptsForModal.length}
+          validSerialsCount={0}
+          onCloseAndFix={() => setIsBreakerModalOpen(false)}
+        />
       )}
     </div>
   );

@@ -17,6 +17,10 @@ import {
   insertGoogleSheetsItems,
   deleteGoogleSheetsItems,
 } from './googleSheetsClient';
+import {
+  evaluateWMSBreakerForTransfer,
+  lookupSerialInWMSBatimento,
+} from './wmsBatimentoService';
 
 const IDB_NAME = 'migou_iq09_database_v1';
 const IDB_STORE = 'iq09_snapshot_store';
@@ -1053,21 +1057,38 @@ export function validateSerialsBatchAgainstIQ09(
 
   return inputSerials.map((rawSn) => {
     const cleanSn = rawSn.trim().toUpperCase();
-    const iq09 = lookupSerialInIQ09(cleanSn);
+    let iq09 = lookupSerialInIQ09(cleanSn);
+    const wmsMatch = lookupSerialInWMSBatimento(cleanSn);
     const activeReq = activeQueueBySerial.get(cleanSn);
 
-    // 1. Não localizado na Base IQ09
+    // Se o serial não estiver na IQ09 isolada mas estiver na base de Batimento de Estoque (com dados SAP), aproveita o espelho SAP!
+    if (!iq09 && wmsMatch && wmsMatch.materialSap && wmsMatch.depositoSap) {
+      iq09 = {
+        serial: cleanSn,
+        material: wmsMatch.materialSap,
+        centro: wmsMatch.centroSap || 'B124',
+        deposito: wmsMatch.depositoSap,
+        tipoEstoque: '01',
+        statusSistema: 'DEPS',
+      };
+    }
+
+    // 1. Não localizado na Base IQ09 (nem com saldo SAP no Batimento)
     if (!iq09) {
+      const wmsOnlyDetail =
+        wmsMatch && wmsMatch.depositoWms
+          ? `Este serial consta apenas no Sênior WMS (${wmsMatch.centroWms}/${wmsMatch.depositoWms} • Local ${wmsMatch.localWms || '-'} • Diagnóstico: "${wmsMatch.analise}"), mas não possui saldo SAP na IQ09.`
+          : 'Este UII (Serial) não consta na fotografia atual da IQ09 nem com saldo SAP no Batimento.';
+
       return {
         inputSerial: cleanSn,
         status: 'nao_encontrado_iq09',
-        suggestedMaterial: '',
-        suggestedCentro: '',
+        suggestedMaterial: wmsMatch?.materialWms || '',
+        suggestedCentro: wmsMatch?.centroWms || '',
         suggestedOrigem: '',
         suggestedDestino: '',
-        statusTitle: 'Não Localizado na Base IQ09',
-        statusDetail:
-          'Este UII (Serial) não consta na fotografia atual da IQ09. Verifique se foi digitado corretamente ou se está em outro centro.',
+        statusTitle: wmsMatch ? `Apenas no WMS (${wmsMatch.depositoWms}) — Sem Saldo SAP` : 'Não Localizado na Base IQ09 / SAP',
+        statusDetail: wmsOnlyDetail,
         canCreateRequest: false,
       };
     }
@@ -1093,6 +1114,15 @@ export function validateSerialsBatchAgainstIQ09(
 
     const destDepositInfo = SAP_DEPOSITOS_CATALOG[resolvedDestino];
 
+    // Avalia a trava Hard-Breaker do Sênior WMS (Batimento de Estoque)
+    const wmsVerdict = evaluateWMSBreakerForTransfer({
+      serial: cleanSn,
+      material: iq09.material,
+      centro: iq09.centro,
+      depositoOrigem: iq09.deposito,
+      depositoDestino: resolvedDestino,
+    });
+
     // 2. Já está no Depósito de Destino na própria IQ09! (Evita solicitação redundante)
     if (iq09.deposito === resolvedDestino) {
       const modInfo = iq09.modificadoEm
@@ -1102,6 +1132,7 @@ export function validateSerialsBatchAgainstIQ09(
         inputSerial: cleanSn,
         status: 'ja_no_destino',
         iq09Item: iq09,
+        wmsVerdict,
         suggestedMaterial: iq09.material,
         suggestedCentro: iq09.centro,
         suggestedOrigem: iq09.deposito,
@@ -1118,6 +1149,7 @@ export function validateSerialsBatchAgainstIQ09(
         inputSerial: cleanSn,
         status: 'ja_na_fila_migou',
         iq09Item: iq09,
+        wmsVerdict,
         existingQueueItem: {
           solicitationCode: activeReq.solicitationCode,
           status: activeReq.status,
@@ -1142,6 +1174,7 @@ export function validateSerialsBatchAgainstIQ09(
         inputSerial: cleanSn,
         status: 'bloqueado_avaria_origem',
         iq09Item: iq09,
+        wmsVerdict,
         suggestedMaterial: iq09.material,
         suggestedCentro: iq09.centro,
         suggestedOrigem: iq09.deposito,
@@ -1168,12 +1201,31 @@ export function validateSerialsBatchAgainstIQ09(
         inputSerial: cleanSn,
         status: 'bloqueado_status_sap',
         iq09Item: iq09,
+        wmsVerdict,
         suggestedMaterial: iq09.material,
         suggestedCentro: iq09.centro,
         suggestedOrigem: iq09.deposito,
         suggestedDestino: resolvedDestino,
         statusTitle: `Impedimento Status SAP (${iq09.statusSistema})`,
         statusDetail: `${reason}. A MIGO 311 pode ser recusada pelo SAP até a liberação do status.`,
+        canCreateRequest: false,
+      };
+    }
+
+    // 5.5 TRAVA "HARD-BREAKER" DO SÊNIOR WMS (BATIMENTO DE ESTOQUE)!
+    // Só permite solicitar movimentação se no Sênior WMS o serial estiver de fato alinhado com o destino (ex: pedindo B111 -> B110 exige WMS = B110)
+    if (wmsVerdict.hasWmsBase && !wmsVerdict.isAllowed) {
+      return {
+        inputSerial: cleanSn,
+        status: 'bloqueado_wms_batimento',
+        iq09Item: iq09,
+        wmsVerdict,
+        suggestedMaterial: iq09.material,
+        suggestedCentro: iq09.centro,
+        suggestedOrigem: iq09.deposito,
+        suggestedDestino: resolvedDestino,
+        statusTitle: `🛑 Breaker WMS: ${wmsVerdict.title}`,
+        statusDetail: `${wmsVerdict.whyExplanation} • Ação Buiatte: ${wmsVerdict.buiatteActionPlan[0] || ''}`,
         canCreateRequest: false,
       };
     }
@@ -1185,6 +1237,7 @@ export function validateSerialsBatchAgainstIQ09(
         inputSerial: cleanSn,
         status: 'divergencia_rota_centro',
         iq09Item: iq09,
+        wmsVerdict,
         suggestedMaterial: iq09.material,
         suggestedCentro: iq09.centro,
         suggestedOrigem: iq09.deposito,
@@ -1195,17 +1248,23 @@ export function validateSerialsBatchAgainstIQ09(
       };
     }
 
-    // 7. 100% APTO PARA TRANSFERÊNCIA!
+    // 7. 100% APTO PARA TRANSFERÊNCIA (IQ09 + SÊNIOR WMS VALIDADOS)!
+    const wmsExtra =
+      wmsVerdict.foundInWmsBase && wmsVerdict.wmsItem
+        ? ` • Confirmado no Sênior WMS em ${wmsVerdict.wmsItem.depositoWms} (Local: ${wmsVerdict.wmsItem.localWms || '-'}, Lote: ${wmsVerdict.wmsItem.lote || '-'})`
+        : '';
+
     return {
       inputSerial: cleanSn,
       status: 'apto_transferir',
       iq09Item: iq09,
+      wmsVerdict,
       suggestedMaterial: iq09.material,
       suggestedCentro: iq09.centro,
       suggestedOrigem: iq09.deposito,
       suggestedDestino: resolvedDestino,
       statusTitle: `Apto: ${iq09.deposito} ➔ ${resolvedDestino} (${iq09.centro})`,
-      statusDetail: `Material ${iq09.material} localizado em ${iq09.deposito} com status ${iq09.statusSistema} (Tp. Estoque ${iq09.tipoEstoque}). Pronto para MIGO 311!`,
+      statusDetail: `Material ${iq09.material} localizado em ${iq09.deposito} com status ${iq09.statusSistema}${wmsExtra}. Pronto para MIGO 311!`,
       canCreateRequest: true,
     };
   });
@@ -1221,7 +1280,24 @@ export function validateSerialsBatchAgainstIQ09(
  * e Avaria Definitiva, preparando o registro para execução segura via Macro Excel / SAP Scripting.
  */
 export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemAudit {
-  const hasBase = Boolean(memorySnapshot && memorySnapshot.items && memorySnapshot.items.length > 0);
+  const reqSerial = (item.serial || '').trim().toUpperCase();
+  const reqMaterial = (item.material || '').trim().toUpperCase();
+  const reqCentro = (item.centro || '').trim().toUpperCase();
+  const reqOrigem = (item.depositoOrigem || '').trim().toUpperCase();
+  const reqDestino = (item.depositoDestino || '').trim().toUpperCase();
+
+  const wmsVerdict = evaluateWMSBreakerForTransfer({
+    serial: reqSerial,
+    material: reqMaterial,
+    centro: reqCentro,
+    depositoOrigem: reqOrigem,
+    depositoDestino: reqDestino,
+  });
+
+  const hasBase = Boolean(
+    (memorySnapshot && memorySnapshot.items && memorySnapshot.items.length > 0) ||
+      wmsVerdict.hasWmsBase
+  );
   if (!hasBase) {
     return {
       hasIQ09Base: false,
@@ -1233,28 +1309,34 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       alreadyAtDestination: false,
       statusSapInvalid: false,
       definitiveDamageBlocked: false,
+      wmsBreakerBlocked: false,
       macroStatus: 'sem_base_iq09',
       canAutoFixDePara: false,
       isReadyForMacroAfterDePara: false,
       badgeLabel: 'Aguardando IQ09',
-      summaryMessage: 'Importe a base IQ09 para habilitar o batimento automático.',
+      summaryMessage: 'Importe a base IQ09 ou Batimento para habilitar o batimento automático.',
       mismatchDetails: [],
     };
   }
 
-  const reqSerial = (item.serial || '').trim().toUpperCase();
-  const reqMaterial = (item.material || '').trim().toUpperCase();
-  const reqCentro = (item.centro || '').trim().toUpperCase();
-  const reqOrigem = (item.depositoOrigem || '').trim().toUpperCase();
-  const reqDestino = (item.depositoDestino || '').trim().toUpperCase();
-
-  const iq09 = lookupSerialInIQ09(reqSerial);
+  let iq09 = lookupSerialInIQ09(reqSerial);
+  if (!iq09 && wmsVerdict.wmsItem && wmsVerdict.wmsItem.materialSap && wmsVerdict.wmsItem.depositoSap) {
+    iq09 = {
+      serial: reqSerial,
+      material: wmsVerdict.wmsItem.materialSap,
+      centro: wmsVerdict.wmsItem.centroSap || reqCentro || 'B124',
+      deposito: wmsVerdict.wmsItem.depositoSap,
+      tipoEstoque: '01',
+      statusSistema: 'DEPS',
+    };
+  }
 
   // 1. UII / Serial não encontrado na base IQ09
   if (!iq09) {
     return {
       hasIQ09Base: true,
       serialFound: false,
+      wmsVerdict,
       materialMismatch: false,
       centroMismatch: false,
       origemMismatch: false,
@@ -1262,6 +1344,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       alreadyAtDestination: false,
       statusSapInvalid: false,
       definitiveDamageBlocked: false,
+      wmsBreakerBlocked: Boolean(wmsVerdict.hasWmsBase && !wmsVerdict.isAllowed),
       macroStatus: 'erro_critico_macro',
       canAutoFixDePara: false,
       isReadyForMacroAfterDePara: false,
@@ -1299,6 +1382,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       hasIQ09Base: true,
       serialFound: true,
       iq09Item: iq09,
+      wmsVerdict,
       materialMismatch,
       centroMismatch,
       origemMismatch,
@@ -1306,6 +1390,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       alreadyAtDestination: true,
       statusSapInvalid: false,
       definitiveDamageBlocked: false,
+      wmsBreakerBlocked: false,
       macroStatus: 'ja_no_destino_sap',
       canAutoFixDePara: false,
       isReadyForMacroAfterDePara: false,
@@ -1323,6 +1408,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       hasIQ09Base: true,
       serialFound: true,
       iq09Item: iq09,
+      wmsVerdict,
       materialMismatch,
       centroMismatch,
       origemMismatch,
@@ -1330,6 +1416,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       alreadyAtDestination: false,
       statusSapInvalid: false,
       definitiveDamageBlocked: true,
+      wmsBreakerBlocked: true,
       macroStatus: 'erro_critico_macro',
       canAutoFixDePara: false,
       isReadyForMacroAfterDePara: false,
@@ -1352,6 +1439,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       hasIQ09Base: true,
       serialFound: true,
       iq09Item: iq09,
+      wmsVerdict,
       materialMismatch,
       centroMismatch,
       origemMismatch,
@@ -1359,6 +1447,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       alreadyAtDestination: false,
       statusSapInvalid: true,
       definitiveDamageBlocked: false,
+      wmsBreakerBlocked: false,
       macroStatus: 'erro_critico_macro',
       canAutoFixDePara: false,
       isReadyForMacroAfterDePara: false,
@@ -1370,12 +1459,37 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
     };
   }
 
+  // 4.5 Verifica se a Trava Sênior WMS (Batimento de Estoque) bloqueia a transferência
+  if (wmsVerdict.hasWmsBase && wmsVerdict.foundInWmsBase && !wmsVerdict.isAllowed) {
+    return {
+      hasIQ09Base: true,
+      serialFound: true,
+      iq09Item: iq09,
+      wmsVerdict,
+      materialMismatch,
+      centroMismatch,
+      origemMismatch,
+      hasAnyFieldMismatch,
+      alreadyAtDestination: false,
+      statusSapInvalid: false,
+      definitiveDamageBlocked: false,
+      wmsBreakerBlocked: true,
+      macroStatus: 'erro_critico_macro',
+      canAutoFixDePara: false,
+      isReadyForMacroAfterDePara: false,
+      badgeLabel: wmsVerdict.badgeLabel,
+      summaryMessage: `${wmsVerdict.title} — ${wmsVerdict.whyExplanation}`,
+      mismatchDetails: [...mismatchDetails, wmsVerdict.badgeLabel],
+    };
+  }
+
   // 5. Possui divergência de Material, Centro ou Depósito de Origem em relação à IQ09 -> Corrigível via De-Para Automático!
   if (hasAnyFieldMismatch) {
     return {
       hasIQ09Base: true,
       serialFound: true,
       iq09Item: iq09,
+      wmsVerdict,
       materialMismatch,
       centroMismatch,
       origemMismatch,
@@ -1383,6 +1497,7 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
       alreadyAtDestination: false,
       statusSapInvalid: false,
       definitiveDamageBlocked: false,
+      wmsBreakerBlocked: false,
       macroStatus: 'corrigivel_depara',
       canAutoFixDePara: true,
       isReadyForMacroAfterDePara: true,
@@ -1392,11 +1507,17 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
     };
   }
 
-  // 6. 100% BATIDO COM A BASE IQ09 (Material, Serial/UII, Centro, Dep. Origem e Status DEPS) -> PRONTO PARA MACRO!
+  // 6. 100% BATIDO COM A BASE IQ09 E SÊNIOR WMS -> PRONTO PARA MACRO!
+  const wmsOkNote =
+    wmsVerdict.foundInWmsBase && wmsVerdict.wmsItem
+      ? ` • WMS Confirmado: ${wmsVerdict.wmsItem.depositoWms} (${wmsVerdict.wmsItem.localWms || 'Ativo'})`
+      : '';
+
   return {
     hasIQ09Base: true,
     serialFound: true,
     iq09Item: iq09,
+    wmsVerdict,
     materialMismatch: false,
     centroMismatch: false,
     origemMismatch: false,
@@ -1404,11 +1525,12 @@ export function auditTransferItemAgainstIQ09(item: TransferItem): IQ09QueueItemA
     alreadyAtDestination: false,
     statusSapInvalid: false,
     definitiveDamageBlocked: false,
+    wmsBreakerBlocked: false,
     macroStatus: 'pronto_macro_100',
     canAutoFixDePara: false,
     isReadyForMacroAfterDePara: true,
-    badgeLabel: '🟢 IQ09 100% OK',
-    summaryMessage: `100% batido c/ IQ09: Material ${iqMaterial}, Centro ${iqCentro}, Origem ${iqOrigem} (Status ${iqStatus}). Pronto p/ Macro MIGO 311!`,
+    badgeLabel: wmsVerdict.foundInWmsBase ? '🟢 SAP & WMS 100%' : '🟢 IQ09 100% OK',
+    summaryMessage: `100% batido c/ IQ09: Material ${iqMaterial}, Centro ${iqCentro}, Origem ${iqOrigem} (Status ${iqStatus})${wmsOkNote}. Pronto p/ Macro MIGO 311!`,
     mismatchDetails: [],
   };
 }
@@ -1444,6 +1566,18 @@ export function getOfficialSampleIQ09Items(): IQ09Item[] {
     { material: 'MDWTF08B1', serial: '541760002ZGB4133400533', centro: 'B124', deposito: 'B148', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '06/11/2026', modificadoPor: 'APEREIRA', equipamento: '51090102' },
     { material: 'QCL108BB', serial: 'S1326B21294802', centro: 'B179', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '06/11/2026', modificadoPor: 'FPIRES', equipamento: '51090205' },
     { material: 'QCL108BB', serial: 'S1326B21294807', centro: 'B158', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '06/11/2026', modificadoPor: 'FPIRES', equipamento: '51090206' },
+    // Exemplos reais do Batimento_Estoque: B111 no SAP e B110/B413 no Sênior WMS (Liberados pelo Breaker!)
+    { material: 'MDRD142FGD303', serial: '541310A084AB7041060377', centro: 'B124', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '10/11/2026', modificadoPor: 'FPIRES', equipamento: '51090401' },
+    { material: '38EZVCC12M5', serial: 'S3226B22654424', centro: 'B179', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '10/11/2026', modificadoPor: 'FPIRES', equipamento: '51090402' },
+    // Exemplos reais do Batimento_Estoque: B111 no SAP mas em FALTA (F0003001011) no Sênior WMS (Bloqueados pelo Breaker!)
+    { material: 'MDRD142FGD303', serial: '541310A084AB6171050187', centro: 'B124', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '09/11/2026', modificadoPor: 'FPIRES', equipamento: '51090403' },
+    { material: 'MDRT533EVD012', serial: '511310A08E3B3190521163', centro: 'B123', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '09/11/2026', modificadoPor: 'FPIRES', equipamento: '51090404' },
+    { material: '40KWFLB', serial: '5400W60300166190170170', centro: 'B158', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '09/11/2026', modificadoPor: 'FPIRES', equipamento: '51090405' },
+    // Exemplos reais: B110 no SAP, mas já em SOBRA/FALTA (F0002001011) no Sênior WMS ("Mover no SAP para B111")
+    { material: 'MDRD142FGD303', serial: '541310A084AB6151060003', centro: 'B124', deposito: 'B110', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '08/11/2026', modificadoPor: 'APEREIRA', equipamento: '51090406' },
+    { material: '42EFVCB12M5', serial: 'S3626B23073126', centro: 'B123', deposito: 'B110', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '08/11/2026', modificadoPor: 'APEREIRA', equipamento: '51090407' },
+    // Exemplo real: Serial existe apenas no SAP em B111 (sem saldo no Sênior WMS)
+    { material: 'PP5MS1', serial: '5416110005FB1241600777', centro: 'B124', deposito: 'B111', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '07/11/2026', modificadoPor: 'FPIRES', equipamento: '51090408' },
     // Exemplo em Avaria Definitiva (B136) para demonstrar o bloqueio inteligente
     { material: 'TSM62', serial: '541711001X9B6233500679', centro: 'B124', deposito: 'B136', tipoEstoque: '01', statusSistema: 'DEPS', modificadoEm: '05/11/2026', modificadoPor: 'APEREIRA', equipamento: '51090399' },
   ];

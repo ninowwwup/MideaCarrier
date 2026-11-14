@@ -24,13 +24,21 @@ import {
 } from '../utils/sapFormatter';
 import { compressImageFile } from '../utils/imageCompressor';
 import { DefinitiveDamageWarningModal } from './DefinitiveDamageWarningModal';
+import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
 import { lookupSerialInIQ09, getMemoryIQ09Snapshot } from '../services/iq09Service';
+import {
+  evaluateWMSBreakerForTransfer,
+  lookupSerialInWMSBatimento,
+  hasActiveWMSBatimentoBase,
+} from '../services/wmsBatimentoService';
+import { WMSBreakerVerdict } from '../types/wmsBatimento';
 
 interface NewRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: NewTransferInput) => void;
   defaultSolicitante?: string;
+  currentRole?: string;
   initialPreset?: {
     material?: string;
     seriais?: string[];
@@ -48,6 +56,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   onClose,
   onSubmit,
   defaultSolicitante = 'Time Buiatte (Prod)',
+  currentRole = 'buiatte',
   initialPreset = null,
   onOpenDepositsGuide,
 }) => {
@@ -61,6 +70,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [labelPhotoUrl, setLabelPhotoUrl] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [isDamageWarningOpen, setIsDamageWarningOpen] = useState(false);
+  const [isWmsBreakerWarningOpen, setIsWmsBreakerWarningOpen] = useState(false);
 
   // Aplica preset vindo do Simulador Interativo de Depósitos ou da Consulta IQ09
   useEffect(() => {
@@ -164,6 +174,68 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     };
   }, [parsedSerials, material, centro, depositoOrigem, depositoDestino]);
 
+  // Cruzamento em tempo real com a Base de Batimento Sênior WMS x SAP (Trava Breaker)
+  const wmsBreakerCheck = useMemo(() => {
+    const hasWMS = hasActiveWMSBatimentoBase();
+    if (!hasWMS || parsedSerials.length === 0) return null;
+
+    const verdictBySerial = new Map<string, WMSBreakerVerdict>();
+    const blockedAttempts: BlockedTransferAttempt[] = [];
+    const approvedSerials: string[] = [];
+    let matchedInWmsCount = 0;
+    let firstWmsItem: NonNullable<ReturnType<typeof lookupSerialInWMSBatimento>> | null = null;
+
+    for (const sn of parsedSerials) {
+      const upper = sn.trim().toUpperCase();
+      const iq09Match = lookupSerialInIQ09(upper);
+      const wmsMatch = lookupSerialInWMSBatimento(upper);
+      if (wmsMatch && !firstWmsItem) {
+        firstWmsItem = wmsMatch;
+      }
+      if (wmsMatch && wmsMatch.depositoWms) {
+        matchedInWmsCount++;
+      }
+
+      const effectiveMat = material.trim().toUpperCase() || iq09Match?.material || wmsMatch?.materialSap || wmsMatch?.materialWms || '';
+      const effectiveCen = centro.trim().toUpperCase() || iq09Match?.centro || wmsMatch?.centroSap || wmsMatch?.centroWms || 'B124';
+      const effectiveOrig = depositoOrigem.trim().toUpperCase() || iq09Match?.deposito || wmsMatch?.depositoSap || 'B148';
+      const effectiveDest = depositoDestino.trim().toUpperCase() || 'B110';
+
+      const verdict = evaluateWMSBreakerForTransfer({
+        serial: upper,
+        material: effectiveMat,
+        centro: effectiveCen,
+        depositoOrigem: effectiveOrig,
+        depositoDestino: effectiveDest,
+        iq09Item: iq09Match,
+      });
+
+      verdictBySerial.set(upper, verdict);
+
+      if (!verdict.allowed) {
+        blockedAttempts.push({
+          serial: upper,
+          material: effectiveMat,
+          centro: effectiveCen,
+          depositoOrigem: effectiveOrig,
+          depositoDestino: effectiveDest,
+          verdict,
+        });
+      } else {
+        approvedSerials.push(sn);
+      }
+    }
+
+    return {
+      hasWMS: true,
+      matchedInWmsCount,
+      verdictBySerial,
+      blockedAttempts,
+      approvedSerials,
+      firstWmsItem,
+    };
+  }, [parsedSerials, material, centro, depositoOrigem, depositoDestino]);
+
   // Auto-preenche Material, Centro e Dep. Origem quando o usuário cola um UII e o Material ainda está em branco
   useEffect(() => {
     if (
@@ -183,8 +255,28 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
       if (iq09Check.dominantOrigem && iq09Check.dominantOrigem !== depositoDestino) {
         setDepositoOrigem(iq09Check.dominantOrigem);
       }
+    } else if (
+      wmsBreakerCheck?.firstWmsItem &&
+      !material.trim() &&
+      (wmsBreakerCheck.firstWmsItem.materialSap || wmsBreakerCheck.firstWmsItem.materialWms)
+    ) {
+      const wmsIt = wmsBreakerCheck.firstWmsItem;
+      const mat = wmsIt.materialSap || wmsIt.materialWms;
+      const cen = wmsIt.centroSap || wmsIt.centroWms;
+      const orig = wmsIt.depositoSap;
+      if (mat) setMaterial(mat);
+      if (cen) {
+        setCentro(cen);
+        const cInfo = SAP_CENTROS_CATALOG[cen];
+        if (cInfo && orig !== cInfo.freeStockProductDeposit) {
+          setDepositoDestino(cInfo.freeStockProductDeposit);
+        }
+      }
+      if (orig && orig !== depositoDestino) {
+        setDepositoOrigem(orig);
+      }
     }
-  }, [iq09Check, material]);
+  }, [iq09Check, wmsBreakerCheck, material]);
 
   if (!isOpen) return null;
 
@@ -207,8 +299,15 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     }
   };
 
-  const executeSubmit = () => {
-    const finalSerials = parsedSerials.length > 0 ? parsedSerials : ['S/N'];
+  const executeSubmit = (overrideSerials?: string[], overrideObsSuffix?: string) => {
+    const finalSerials =
+      overrideSerials && overrideSerials.length > 0
+        ? overrideSerials
+        : parsedSerials.length > 0
+        ? parsedSerials
+        : ['S/N'];
+
+    const combinedObs = [observacoes.trim(), overrideObsSuffix].filter(Boolean).join(' • ');
 
     onSubmit({
       material: material.trim().toUpperCase(),
@@ -216,7 +315,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
       centro: centro.trim().toUpperCase(),
       depositoOrigem: depositoOrigem.trim().toUpperCase(),
       depositoDestino: depositoDestino.trim().toUpperCase(),
-      observacoes: observacoes.trim(),
+      observacoes: combinedObs,
       solicitante: solicitante.trim(),
       labelPhotoUrl: labelPhotoUrl || undefined,
     });
@@ -227,6 +326,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     setObservacoes('');
     setLabelPhotoUrl(null);
     setIsDamageWarningOpen(false);
+    setIsWmsBreakerWarningOpen(false);
     onClose();
   };
 
@@ -254,6 +354,12 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     // Se o depósito de ORIGEM for de Avaria Definitiva (B136, B149 ou B137), abre a tela de aviso educativo
     if (damageCheck.isInvalidOrigin && damageCheck.originInfo) {
       setIsDamageWarningOpen(true);
+      return;
+    }
+
+    // TRAVA BREAKER SÊNIOR WMS x SAP: Bloqueia seriais com divergência física/sistêmica no Sênior WMS
+    if (wmsBreakerCheck && wmsBreakerCheck.blockedAttempts.length > 0) {
+      setIsWmsBreakerWarningOpen(true);
       return;
     }
 
@@ -647,6 +753,62 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               </div>
             )}
 
+            {/* Trava Sênior WMS x SAP (Batimento de Estoque em Tempo Real) */}
+            {wmsBreakerCheck && (
+              <div
+                className={`mt-2.5 p-3 rounded-xl border space-y-2 text-xs transition-all ${
+                  wmsBreakerCheck.blockedAttempts.length > 0
+                    ? 'bg-red-50/90 border-2 border-red-400 text-red-950'
+                    : 'bg-emerald-50/70 border border-emerald-300 text-emerald-950'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-extrabold">
+                    <span>
+                      {wmsBreakerCheck.blockedAttempts.length > 0 ? '🛑' : '✅'}
+                    </span>
+                    <span>
+                      {wmsBreakerCheck.blockedAttempts.length > 0
+                        ? `Trava Sênior WMS x SAP: ${wmsBreakerCheck.blockedAttempts.length} de ${parsedSerials.length} serial(is) BLOQUEADO(S)!`
+                        : `Batimento Sênior WMS x SAP: ${wmsBreakerCheck.approvedSerials.length} serial(is) validado(s) p/ ${depositoOrigem} ➔ ${depositoDestino}`}
+                    </span>
+                  </div>
+
+                  {wmsBreakerCheck.blockedAttempts.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {wmsBreakerCheck.approvedSerials.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setRawSerials(wmsBreakerCheck.approvedSerials.join('\n'))}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors cursor-pointer"
+                        >
+                          Manter apenas {wmsBreakerCheck.approvedSerials.length} serial(is) apto(s)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsWmsBreakerWarningOpen(true)}
+                        className="px-2.5 py-1 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-[11px] transition-colors cursor-pointer"
+                      >
+                        Ver Diagnóstico & Ação Buiatte
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {wmsBreakerCheck.blockedAttempts.length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-white/95 border border-red-200 space-y-1">
+                    <div className="font-bold text-red-800 text-[11px]">
+                      Por que é uma solicitação indevida ({wmsBreakerCheck.blockedAttempts[0].verdict.title}):
+                    </div>
+                    <p className="text-[11px] text-slate-700 leading-relaxed">
+                      {wmsBreakerCheck.blockedAttempts[0].verdict.whyItIsInvalid}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Tags de Seriais Detectados */}
             {parsedSerials.length > 0 && (
               <div className="mt-3">
@@ -660,23 +822,49 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                     <Trash2 className="w-3 h-3" /> Limpar seriais
                   </button>
                 </div>
-                <div className="max-h-24 overflow-y-auto flex flex-wrap gap-1.5 p-2 bg-white rounded-lg border border-slate-200">
-                  {parsedSerials.map((s, idx) => (
-                    <span
-                      key={`${s}-${idx}`}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700"
-                    >
-                      <span>{s}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSingleSerial(idx)}
-                        className="text-slate-400 hover:text-rose-600"
-                        title="Remover este serial"
+                <div className="max-h-28 overflow-y-auto flex flex-wrap gap-1.5 p-2 bg-white rounded-lg border border-slate-200">
+                  {parsedSerials.map((s, idx) => {
+                    const verdict = wmsBreakerCheck?.verdictBySerial.get(s.toUpperCase());
+                    const isBlocked = verdict && !verdict.allowed;
+                    const isAllowedWithWms = verdict && verdict.allowed && verdict.wmsItem;
+                    return (
+                      <span
+                        key={`${s}-${idx}`}
+                        title={
+                          verdict
+                            ? `${verdict.badgeLabel}${
+                                verdict.wmsItem?.localWms ? ` • Endereço WMS: ${verdict.wmsItem.localWms}` : ''
+                              }`
+                            : s
+                        }
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-mono ${
+                          isBlocked
+                            ? 'bg-red-100 border-red-300 text-red-900 font-bold'
+                            : isAllowedWithWms
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
+                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                        }`}
                       >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
+                        <span>
+                          {isBlocked ? '🛑 ' : isAllowedWithWms ? '✅ ' : ''}
+                          {s}
+                        </span>
+                        {verdict?.wmsItem?.depositoWms && (
+                          <span className="text-[9px] px-1 rounded bg-white/80 text-slate-600 font-sans">
+                            WMS:{verdict.wmsItem.depositoWms}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSingleSerial(idx)}
+                          className="text-slate-400 hover:text-rose-600"
+                          title="Remover este serial"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -858,7 +1046,38 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             },
           ]}
           onCancelAndFix={() => setIsDamageWarningOpen(false)}
-          onConfirmAnyway={executeSubmit}
+          onConfirmAnyway={() => executeSubmit()}
+        />
+      )}
+
+      {/* Modal Hard-Breaker: Trava de Batimento Sênior WMS x SAP */}
+      {wmsBreakerCheck && wmsBreakerCheck.blockedAttempts.length > 0 && (
+        <WMSBreakerWarningModal
+          isOpen={isWmsBreakerWarningOpen}
+          blockedAttempts={wmsBreakerCheck.blockedAttempts}
+          totalSerialsCount={parsedSerials.length}
+          validSerialsCount={wmsBreakerCheck.approvedSerials.length}
+          onCloseAndFix={() => setIsWmsBreakerWarningOpen(false)}
+          onProceedOnlyWithValid={
+            wmsBreakerCheck.approvedSerials.length > 0
+              ? () => executeSubmit(wmsBreakerCheck.approvedSerials)
+              : undefined
+          }
+          onApplySuggestedRoute={(suggested) => {
+            if (suggested.centro) setCentro(suggested.centro);
+            setDepositoOrigem(suggested.depositoOrigem);
+            setDepositoDestino(suggested.depositoDestino);
+            setIsWmsBreakerWarningOpen(false);
+          }}
+          onAdminForceOverride={
+            currentRole === 'admin'
+              ? () =>
+                  executeSubmit(
+                    undefined,
+                    '[EXCEÇÃO GESTOR: Submetido com alerta no Batimento Sênior WMS]'
+                  )
+              : undefined
+          }
         />
       )}
     </div>

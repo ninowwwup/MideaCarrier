@@ -1,3 +1,5 @@
+import { WMSBreakerVerdict } from './wmsBatimento';
+
 export interface IQ09Item {
   /** Coluna B: UII (Número de Série / Unique Item Identifier no SAP) */
   serial: string;
@@ -46,6 +48,7 @@ export type IQ09CrossCheckStatus =
   | 'ja_na_fila_migou'
   | 'bloqueado_avaria_origem'
   | 'bloqueado_status_sap'
+  | 'bloqueado_wms_batimento'
   | 'divergencia_rota_centro'
   | 'nao_encontrado_iq09';
 
@@ -53,6 +56,7 @@ export interface IQ09BatchValidationItem {
   inputSerial: string;
   status: IQ09CrossCheckStatus;
   iq09Item?: IQ09Item;
+  wmsVerdict?: WMSBreakerVerdict;
   existingQueueItem?: {
     solicitationCode: string;
     status: string;
@@ -80,6 +84,7 @@ export interface IQ09QueueItemAudit {
   hasIQ09Base: boolean;
   serialFound: boolean;
   iq09Item?: IQ09Item;
+  wmsVerdict?: WMSBreakerVerdict;
   materialMismatch: boolean;
   centroMismatch: boolean;
   origemMismatch: boolean;
@@ -87,6 +92,7 @@ export interface IQ09QueueItemAudit {
   alreadyAtDestination: boolean;
   statusSapInvalid: boolean;
   definitiveDamageBlocked: boolean;
+  wmsBreakerBlocked: boolean;
   macroStatus: IQ09MacroReadinessStatus;
   canAutoFixDePara: boolean;
   isReadyForMacroAfterDePara: boolean;

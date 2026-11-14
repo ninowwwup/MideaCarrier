@@ -33,11 +33,16 @@ import { IQ09ConsultTab } from './components/IQ09ConsultTab';
 import { MigouLogo } from './components/MigouLogo';
 import { Check, X } from 'lucide-react';
 import { IQ09Snapshot } from './types/iq09';
+import { WMSBatimentoSnapshot } from './types/wmsBatimento';
 import {
   loadIQ09SnapshotFromStorage,
   subscribeToIQ09Snapshot,
   getStoredIQ09Metadata,
 } from './services/iq09Service';
+import {
+  loadWMSBatimentoFromStorage,
+  subscribeToWMSBatimentoSnapshot,
+} from './services/wmsBatimentoService';
 import { 
   TransferItem, 
   TransferStatus, 
@@ -104,6 +109,7 @@ export default function App() {
   const [activeMainTab, setActiveMainTab] = useState<'operacao' | 'consulta_iq09' | 'guia_depositos'>('operacao');
   const [iq09Snapshot, setIq09Snapshot] = useState<IQ09Snapshot | null>(null);
   const [iq09CachedMeta, setIq09CachedMeta] = useState(() => getStoredIQ09Metadata());
+  const [wmsSnapshot, setWmsSnapshot] = useState<WMSBatimentoSnapshot | null>(null);
   const [newRequestPreset, setNewRequestPreset] = useState<{
     material?: string;
     seriais?: string[];
@@ -348,9 +354,19 @@ export default function App() {
       }
     });
 
+    loadWMSBatimentoFromStorage().then((wSnap) => {
+      if (wSnap) {
+        setWmsSnapshot(wSnap);
+      }
+    });
+
     const unsubIQ09 = subscribeToIQ09Snapshot((snap) => {
       setIq09Snapshot(snap);
       setIq09CachedMeta(snap ? snap.metadata : null);
+    });
+
+    const unsubWMS = subscribeToWMSBatimentoSnapshot((wSnap) => {
+      setWmsSnapshot(wSnap);
     });
 
     const unsubscribe = subscribeToRealtimeTransfers((updatedItems, source, newIncomingPending) => {
@@ -367,6 +383,7 @@ export default function App() {
     return () => {
       unsubscribe();
       unsubIQ09();
+      unsubWMS();
     };
   }, [loadData, flashTitleNotification]);
 
@@ -649,6 +666,7 @@ export default function App() {
           ) : activeMainTab === 'consulta_iq09' ? (
             <IQ09ConsultTab
               snapshot={iq09Snapshot}
+              wmsSnapshot={wmsSnapshot}
               queueItems={items}
               defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
               currentRole={currentRole}
@@ -710,6 +728,7 @@ export default function App() {
                 onDeleteSelected={handleDeleteSelected}
                 iq09SnapshotVersion={iq09Snapshot?.metadata.snapshotId || null}
                 iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
+                wmsSnapshotVersion={wmsSnapshot?.metadata.snapshotId || null}
                 onApplyIQ09DePara={handleApplyIQ09DePara}
                 onOpenIQ09Tab={() => setActiveMainTab('consulta_iq09')}
               />
@@ -755,7 +774,7 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
       />
 
-      {/* Modal de Nova Solicitação (com Múltiplos Seriais e Inteligência de Rota SAP) */}
+      {/* Modal de Nova Solicitação (com Múltiplos Seriais e Inteligência de Rota SAP + Trava Sênior WMS) */}
       <NewRequestModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
@@ -764,6 +783,7 @@ export default function App() {
           setActiveMainTab('operacao');
         }}
         defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
+        currentRole={currentRole}
         initialPreset={newRequestPreset}
         onOpenDepositsGuide={() => setActiveMainTab('guia_depositos')}
       />
@@ -775,6 +795,7 @@ export default function App() {
         onImportItems={handleImportBatch}
         currentCount={items.length}
         defaultSolicitante={currentUser?.teamName || 'Time Buiatte (Prod)'}
+        currentRole={currentRole}
       />
 
       {/* Modal de Assistente e Cópia para o SAP */}
