@@ -160,6 +160,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   // Filtro rápido do batimento IQ09 direto na Fila de Solicitações & Operação SAP
   const [iq09MacroFilter, setIq09MacroFilter] = useState<'todos' | IQ09MacroReadinessStatus>('todos');
   const [isApplyingDePara, setIsApplyingDePara] = useState(false);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   // Estado de Ordenação e Agrupamento Interativo (por Material, Centro, Depósitos, FIFO, etc.)
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'fifo', direction: 'asc' });
@@ -698,40 +699,72 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
   return (
     <>
-      <div className="bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-[0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden transition-all ring-1 ring-white/40">
+      <div className="bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-[0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden transition-all ring-1 ring-white/40 w-full max-w-full">
         {/* Search & Filter Toolbar com Glassmorphism */}
-        <div className="p-3.5 sm:p-4 border-b border-slate-200/60 bg-white/60 backdrop-blur-md space-y-3">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            {/* Campo de Busca Rápida com Efeito de Tecla [Ctrl+K] */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                id="global-search-input"
-                type="text"
-                placeholder="Buscar por Material, Serial, Centro, Doc SAP ou Depósito..."
-                value={filters.busca}
-                onChange={(e) => onFilterChange({ ...filters, busca: e.target.value })}
-                className="w-full pl-9 pr-14 py-2 text-xs bg-white/80 focus:bg-white text-slate-800 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#249ED5]/50 focus:border-transparent placeholder:text-slate-400 shadow-2xs transition-all duration-200"
-              />
-              <div className="absolute right-2 top-2 flex items-center gap-1">
-                {filters.busca ? (
-                  <button
-                    type="button"
-                    onClick={() => onFilterChange({ ...filters, busca: '' })}
-                    className="text-xs text-slate-400 hover:text-slate-600 px-1"
-                  >
-                    ✕
-                  </button>
-                ) : (
-                  <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-500 rounded border border-slate-200">
-                    /
-                  </kbd>
-                )}
+        <div className="p-2.5 sm:p-4 border-b border-slate-200/60 bg-white/60 backdrop-blur-md space-y-2.5 sm:space-y-3 w-full max-w-full overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+            {/* Campo de Busca Rápida + Botão Mobile "Filtros & IQ09" */}
+            <div className="flex items-center gap-2 w-full md:max-w-md">
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  id="global-search-input"
+                  type="text"
+                  placeholder="Buscar Material, Serial, Centro, Doc SAP..."
+                  value={filters.busca}
+                  onChange={(e) => onFilterChange({ ...filters, busca: e.target.value })}
+                  className="w-full pl-9 pr-10 py-2 text-xs bg-white/90 focus:bg-white text-slate-800 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#249ED5]/50 focus:border-transparent placeholder:text-slate-400 shadow-2xs transition-all duration-200"
+                />
+                <div className="absolute right-2 top-2 flex items-center gap-1">
+                  {filters.busca ? (
+                    <button
+                      type="button"
+                      onClick={() => onFilterChange({ ...filters, busca: '' })}
+                      className="text-xs text-slate-400 hover:text-slate-600 px-1"
+                    >
+                      ✕
+                    </button>
+                  ) : (
+                    <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-500 rounded border border-slate-200">
+                      /
+                    </kbd>
+                  )}
+                </div>
               </div>
+
+              {/* Botão Acordeão de Filtros & Batimento IQ09 no Mobile (< md) */}
+              <button
+                type="button"
+                onClick={() => setIsMobileFiltersOpen((prev) => !prev)}
+                className={`md:hidden px-3 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all active:scale-95 ${
+                  isMobileFiltersOpen ||
+                  filters.status !== 'todos' ||
+                  filters.centro !== 'todos' ||
+                  filters.depositoOrigem !== 'todos' ||
+                  filters.depositoDestino !== 'todos' ||
+                  iq09MacroFilter !== 'todos'
+                    ? 'bg-[#002664] text-white border-[#002664] shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>Filtros</span>
+                {(filters.status !== 'todos' ||
+                  filters.centro !== 'todos' ||
+                  filters.depositoOrigem !== 'todos' ||
+                  filters.depositoDestino !== 'todos' ||
+                  iq09MacroFilter !== 'todos') && (
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                )}
+              </button>
             </div>
 
-            {/* Filtros Rápidos Estilo Figma */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Filtros Rápidos Estilo Figma (Colapsáveis no Mobile, sempre visíveis no Desktop md+) */}
+            <div
+              className={`${
+                isMobileFiltersOpen ? 'grid grid-cols-2 gap-2' : 'hidden'
+              } md:flex md:flex-wrap items-center gap-2 w-full md:w-auto`}
+            >
               {/* Status Filter */}
               <select
                 value={filters.status}
@@ -867,6 +900,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
           </div>
 
           {/* PAINEL DE BATIMENTO AUTOMÁTICO IQ09 ⟷ FILA SAP (DE-PARA EM TEMPO REAL & PRÉ-VALIDAÇÃO MACRO MIGO) */}
+          <div className={`${isMobileFiltersOpen || iq09MacroFilter !== 'todos' ? 'block' : 'hidden md:block'}`}>
           {iq09QueueSummary.hasBase ? (
             <div className="p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-[#002664] to-[#004488] text-white border border-cyan-400/30 shadow-md space-y-2.5">
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
@@ -1045,6 +1079,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               </div>
             )
           )}
+          </div>
 
           {/* Selected Rows Batch Action Bar - Botões Dinâmicos, Leves e Suaves */}
           {selectedItemsList.length > 0 && (
@@ -1166,8 +1201,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
           )}
         </div>
 
-        {/* 1. VISÃO MOBILE OTIMIZADA (CARD-BASED COM SUPORTE A FOTO) */}
-        <div className="block md:hidden divide-y divide-slate-200">
+        {/* 1. VISÃO MOBILE OTIMIZADA (FLUTTER CARD-BASED COM SUPORTE A FOTO E ZERO ESTOURO DE GRID) */}
+        <div className="block md:hidden divide-y divide-slate-200 w-full max-w-full overflow-hidden">
           {filteredItems.length === 0 ? (
             <div className="p-8 text-center text-slate-500">
               <Filter className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -1183,7 +1218,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               return (
                 <div
                   key={`mobile-${item.id}`}
-                  className={`p-3.5 transition-colors ${
+                  className={`p-3 transition-colors w-full max-w-full overflow-hidden ${
                     isInvalidOrigin
                       ? 'bg-red-100/95 border-l-4 border-l-red-600'
                       : isSelected
@@ -1456,25 +1491,25 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </div>
                     )}
 
-                  {/* Mobile Quick Action Buttons */}
-                  <div className="flex items-center justify-between pt-1 gap-1.5">
+                  {/* Mobile Quick Action Buttons (Grid Responsivo 2 Colunas Sem Estouro) */}
+                  <div className="grid grid-cols-2 gap-1.5 pt-1.5 w-full max-w-full">
                     <button
                       type="button"
                       onClick={() => handleCopySingleRow(item)}
-                      className="flex-1 py-1 px-2 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 flex items-center justify-center gap-1 active:scale-95"
+                      className="py-1.5 px-2.5 text-[11px] font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-100 flex items-center justify-center gap-1.5 active:scale-95 min-w-0"
                     >
-                      <Terminal className="w-3 h-3 text-[#00609C]" />
-                      <span>Copiar TAB</span>
+                      <Terminal className="w-3.5 h-3.5 text-[#00609C] shrink-0" />
+                      <span className="truncate">Copiar TAB</span>
                     </button>
 
                     {item.status !== 'concluido' && (
                       <button
                         type="button"
                         onClick={() => onOpenResolutionModal([item], 'concluir')}
-                        className="flex-1 py-1 px-2 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center justify-center gap-1 active:scale-95"
+                        className="py-1.5 px-2.5 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center justify-center gap-1.5 active:scale-95 min-w-0"
                       >
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Concluir</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Concluir SAP</span>
                       </button>
                     )}
 
@@ -1482,9 +1517,10 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenResolutionModal([item], 'divergencia')}
-                        className="py-1 px-2 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg active:scale-95"
+                        className="py-1.5 px-2.5 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl active:scale-95 flex items-center justify-center gap-1 min-w-0"
                       >
-                        Divergência
+                        <AlertOctagon className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Divergência</span>
                       </button>
                     )}
 
@@ -1492,11 +1528,11 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       <button
                         type="button"
                         onClick={() => setItemToDeleteSingle(item)}
-                        className="py-1 px-2 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg active:scale-95 flex items-center justify-center gap-1"
+                        className="py-1.5 px-2.5 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl active:scale-95 flex items-center justify-center gap-1 min-w-0"
                         title="Excluir este lançamento"
                       >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Excluir</span>
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Excluir</span>
                       </button>
                     )}
                   </div>

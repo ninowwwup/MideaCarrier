@@ -616,7 +616,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen figma-aurora-bg flex items-stretch text-slate-800 relative font-sans selection:bg-[#249ED5] selection:text-white">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden figma-aurora-bg flex items-stretch text-slate-800 relative font-sans selection:bg-[#249ED5] selection:text-white">
       {/* Sidebar Corporativa Fixa no Desktop + Gaveta e Barra Inferior no Mobile PWA */}
       <Sidebar
         activeMainTab={activeMainTab}
@@ -636,10 +636,17 @@ export default function App() {
           setNewRequestPreset(null);
           setIsNewModalOpen(true);
         }}
+        onOpenSoundSelector={() => setIsSoundSelectorOpen(true)}
+        isPushSubscribed={isPushSubscribed}
+        onEnablePushManager={handleEnablePushManager}
+        onTestPush={handleTestPush}
+        onExportCSV={handleExportCSV}
+        isCloudConnected={isCloudConnected}
+        onOpenDatabaseDiagnostic={() => setIsDiagnosticOpen(true)}
       />
 
       {/* Coluna Principal de Trabalho */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-10">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-hidden relative z-10">
         {/* Topbar Enxuta e Leve */}
         <Header
           onOpenNewModal={() => {
@@ -667,7 +674,7 @@ export default function App() {
         />
 
         {/* Conteúdo Principal (Com espaçamento inferior no mobile p/ a barra PWA fixa) */}
-        <main className="flex-1 max-w-[1680px] w-full mx-auto px-3 sm:px-4 lg:px-6 pt-3 sm:pt-5 pb-24 lg:pb-5 relative z-10">
+        <main className="flex-1 max-w-[1680px] w-full min-w-0 overflow-x-hidden mx-auto px-2.5 sm:px-4 lg:px-6 pt-3 sm:pt-5 pb-safe-nav lg:pb-5 relative z-10">
           {activeMainTab === 'guia_depositos' ? (
             <DepositsGuideTab
               onStartRequestWithRoute={(preset) => {
@@ -760,8 +767,8 @@ export default function App() {
           )}
         </main>
 
-        {/* Rodapé Corporativo com Estilo Glassmorphism e Passarinho Azul */}
-        <footer className="bg-slate-950/35 backdrop-blur-xl text-white border-t border-white/15 py-3.5 text-xs relative z-10">
+        {/* Rodapé Corporativo com Estilo Glassmorphism e Passarinho Azul (Oculto no Mobile PWA para liberar tela) */}
+        <footer className="hidden lg:block bg-slate-950/35 backdrop-blur-xl text-white border-t border-white/15 py-3.5 text-xs relative z-10">
           <div className="max-w-[1680px] mx-auto px-2.5 sm:px-4 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
               <MigouLogo size="sm" animated={false} />
@@ -784,11 +791,10 @@ export default function App() {
             await unlockAudioNow();
             setIsAudioActive(true);
           }}
-          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-[#002664]/95 text-white border border-[#249ED5]/60 px-5 py-2.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl flex items-center gap-3 cursor-pointer hover:bg-[#003380] transition-all duration-200 animate-bounce text-xs font-medium"
+          className="fixed bottom-20 lg:bottom-5 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 bg-[#002664]/95 text-white border border-[#249ED5]/60 px-4 py-2.5 rounded-2xl sm:rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl flex items-center justify-center gap-2.5 cursor-pointer hover:bg-[#003380] transition-all duration-200 text-xs font-medium max-w-md mx-auto"
         >
-          <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
-          <span className="font-semibold text-cyan-200">💧 Alerta Sonoro de Gota d'Água:</span>
-          <span className="text-white/90">Clique aqui para liberar o som no seu navegador</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping shrink-0" />
+          <span className="font-semibold text-cyan-200 truncate">💧 Liberar Som de Alerta no App</span>
         </button>
       )}
 
@@ -876,7 +882,7 @@ export default function App() {
 
       {/* Notificação Toast de Sucesso/Feedback do Sistema */}
       {successNotice && (
-        <div className="fixed top-20 right-6 z-50 bg-[#002664] text-white px-4 py-3 rounded-2xl shadow-2xl border border-[#249ED5]/50 flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-200 max-w-md">
+        <div className="fixed top-16 sm:top-20 left-3 right-3 sm:left-auto sm:right-6 z-50 bg-[#002664] text-white px-4 py-3 rounded-2xl shadow-2xl border border-[#249ED5]/50 flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-200 max-w-md mx-auto sm:mx-0">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
             <Check className="w-5 h-5" />
           </div>

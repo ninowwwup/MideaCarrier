@@ -109,6 +109,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   // Modal de Diagnóstico Breaker para seriais bloqueados no Validador
   const [selectedBlockedAttemptsForModal, setSelectedBlockedAttemptsForModal] = useState<BlockedTransferAttempt[]>([]);
   const [isBreakerModalOpen, setIsBreakerModalOpen] = useState<boolean>(false);
+  const [showMobileStatsSummary, setShowMobileStatsSummary] = useState<boolean>(false);
 
   // Estados do Validador e De-Para em Lote (Sub-aba 1)
   const [batchSerialsInput, setBatchSerialsInput] = useState<string>('');
@@ -608,9 +609,9 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-200">
+    <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200 w-full max-w-full overflow-x-hidden">
       {/* 1. CABEÇALHO DA FOTOGRAFIA ATUAL DO ESTOQUE SAP (SNAPSHOT IQ09) + TRAVA SÊNIOR WMS */}
-      <div className="bg-white/95 backdrop-blur-2xl rounded-2xl border border-white/70 shadow-[0_18px_50px_rgba(0,0,0,0.14)] p-4 sm:p-5">
+      <div className="bg-white/95 backdrop-blur-2xl rounded-2xl border border-white/70 shadow-[0_18px_50px_rgba(0,0,0,0.14)] p-3.5 sm:p-5 w-full max-w-full overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -765,9 +766,31 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
           </div>
         )}
 
+        {/* Botão Acordeão no Mobile para os 10 Cards de Resumo (Evita Poluição Visual no Celular) */}
+        {(metadata || wmsMetadata) && (
+          <div className="md:hidden mt-3 pt-3 border-t border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setShowMobileStatsSummary((prev) => !prev)}
+              className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/90 text-xs font-extrabold flex items-center justify-between cursor-pointer"
+            >
+              <span>
+                📊 {showMobileStatsSummary ? 'Ocultar Resumo de Saldos' : 'Ver Resumo de Saldos (IQ09 & WMS)'}
+              </span>
+              <span className="text-[10px] font-bold text-[#00609C]">
+                {showMobileStatsSummary ? '▲ Fechar' : '▼ Expandir'}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Cards Resumo da Fotografia IQ09 (Quando houver base ativa) */}
         {metadata && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-4 pt-4 border-t border-slate-200/80">
+          <div
+            className={`${
+              showMobileStatsSummary ? 'grid' : 'hidden md:grid'
+            } grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-3 md:mt-4 md:pt-4 md:border-t border-slate-200/80`}
+          >
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/90">
               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                 Total UIIs (SAP IQ09)
@@ -830,7 +853,11 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
 
         {/* Cards Resumo do Batimento Sênior WMS x SAP (Filtros Rápidos em 1 Clique) */}
         {wmsMetadata && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-2.5">
+          <div
+            className={`${
+              showMobileStatsSummary ? 'grid' : 'hidden md:grid'
+            } grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-2.5`}
+          >
             <button
               type="button"
               onClick={() => {
@@ -1486,8 +1513,121 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="max-h-[440px] overflow-x-auto overflow-y-auto">
+                <div className="border border-slate-200 rounded-xl overflow-hidden w-full max-w-full">
+                  {/* VISÃO MOBILE (CARDS FLUTTER) DO VALIDADOR EM LOTE */}
+                  <div className="block md:hidden divide-y divide-slate-200 max-h-[480px] overflow-y-auto w-full max-w-full">
+                    {filteredValidationResults.map((item, idx) => {
+                      const isApto =
+                        item.status === 'apto_transferir' || item.status === 'divergencia_rota_centro';
+                      const isJaNoDestino = item.status === 'ja_no_destino';
+                      const isJaNaFila = item.status === 'ja_na_fila_migou';
+                      const wmsIt = item.wmsVerdict?.wmsItem;
+
+                      return (
+                        <div
+                          key={`m-val-${item.inputSerial}-${idx}`}
+                          className={`p-3 space-y-2 text-xs w-full max-w-full overflow-hidden ${
+                            isApto
+                              ? 'bg-emerald-50/40'
+                              : isJaNoDestino
+                              ? 'bg-blue-50/40'
+                              : isJaNaFila
+                              ? 'bg-amber-50/50'
+                              : 'bg-rose-50/60'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-mono font-extrabold text-slate-900 break-all">
+                                {item.inputSerial}
+                              </div>
+                              <div className="font-mono text-[11px] font-bold text-[#002664] mt-0.5">
+                                SKU: {item.suggestedMaterial || '—'} • Centro: {item.suggestedCentro || '—'}
+                              </div>
+                            </div>
+
+                            {item.iq09Item || item.suggestedOrigem ? (
+                              <div className="inline-flex items-center gap-1 font-mono text-[11px] shrink-0">
+                                <span className="px-1.5 py-0.5 rounded bg-white border border-slate-300 font-bold text-slate-800">
+                                  {item.suggestedOrigem || '—'}
+                                </span>
+                                <ArrowRight className="w-3 h-3 text-slate-400" />
+                                <span
+                                  className={`px-1.5 py-0.5 rounded font-bold border ${
+                                    isJaNoDestino
+                                      ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                      : item.wmsBreakerBlocked
+                                      ? 'bg-red-100 text-red-900 border-red-300'
+                                      : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                  }`}
+                                >
+                                  {item.suggestedDestino || '—'}
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {wmsIt && (
+                            <div className="p-2 rounded-lg bg-white/80 border border-slate-200/80 flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                              <span className="font-mono font-extrabold text-indigo-950">
+                                WMS: {wmsIt.depositoWms || 'S/ SALDO'}
+                                {wmsIt.localWms ? ` (${wmsIt.localWms})` : ''}
+                              </span>
+                              <span className="text-slate-600 font-semibold">
+                                {wmsIt.analise}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <span
+                              className={`font-extrabold text-[11px] ${
+                                isApto
+                                  ? 'text-emerald-800'
+                                  : isJaNoDestino
+                                  ? 'text-blue-800'
+                                  : isJaNaFila
+                                  ? 'text-amber-900'
+                                  : 'text-rose-800'
+                              }`}
+                            >
+                              {isApto && '🟢 '}
+                              {isJaNoDestino && '🔵 '}
+                              {isJaNaFila && '🟡 '}
+                              {!isApto && !isJaNoDestino && !isJaNaFila && '🛑 '}
+                              {item.statusTitle}
+                            </span>
+
+                            {item.wmsBreakerBlocked && item.wmsVerdict && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedBlockedAttemptsForModal([
+                                    {
+                                      serial: item.inputSerial,
+                                      material: item.suggestedMaterial || 'S/M',
+                                      centro: item.suggestedCentro || 'B124',
+                                      depositoOrigem: item.suggestedOrigem || 'B111',
+                                      depositoDestino: item.suggestedDestino || 'B110',
+                                      verdict: item.wmsVerdict!,
+                                    },
+                                  ]);
+                                  setIsBreakerModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider shrink-0 cursor-pointer"
+                              >
+                                <ShieldAlert className="w-3 h-3 shrink-0" />
+                                <span>VER MOTIVO</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* VISÃO DESKTOP (TABELA ORIGINAL) */}
+                  <div className="hidden md:block max-h-[440px] overflow-x-auto overflow-y-auto">
                     <table className="w-full min-w-[780px] text-left text-xs border-collapse">
                       <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
                         <tr>
@@ -1841,7 +1981,147 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* VISÃO MOBILE (CARDS FLUTTER) DA CONSULTA GERAL IQ09 + SÊNIOR WMS */}
+              <div className="block md:hidden divide-y divide-slate-200 w-full max-w-full overflow-hidden">
+                {paginatedExplorerItems.map((item) => {
+                  const depInfo = SAP_DEPOSITOS_CATALOG[item.deposito];
+                  const isAvaria = Boolean(DEFINITIVE_DAMAGE_DEPOSITS[item.deposito]);
+                  const isLivre =
+                    depInfo?.category === 'estoque_livre' || depInfo?.category === 'blue_service';
+                  const queueReq = activeQueueMap.get(item.serial);
+                  const isSelected = selectedExplorerSerials.has(item.serial);
+                  const wmsIt = lookupSerialInWMSBatimento(item.serial);
+                  const isWmsFaltaOrOnlySap =
+                    wmsIt &&
+                    (!wmsIt.depositoWms ||
+                      wmsIt.depositoWms === 'FALTA' ||
+                      wmsIt.depositoWms === 'SOBRA/FALTA' ||
+                      wmsIt.depositoWms.includes('INVENTARIO') ||
+                      wmsIt.analise.toUpperCase().includes('FALTA - DESCONSIDERAR') ||
+                      wmsIt.analise.toUpperCase().includes('EXISTE APENAS NO SAP'));
+
+                  return (
+                    <div
+                      key={`m-exp-${item.serial}`}
+                      className={`p-3 space-y-2 text-xs w-full max-w-full overflow-hidden ${
+                        isSelected
+                          ? 'bg-blue-50/90'
+                          : isAvaria
+                          ? 'bg-rose-50/40'
+                          : 'bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              const next = new Set(selectedExplorerSerials);
+                              if (next.has(item.serial)) next.delete(item.serial);
+                              else next.add(item.serial);
+                              setSelectedExplorerSerials(next);
+                            }}
+                            className="mt-0.5 rounded text-[#0083CA] cursor-pointer shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-mono font-extrabold text-slate-900 break-all">
+                              {item.serial}
+                            </div>
+                            <div className="font-mono font-bold text-[#002664] text-[11px] mt-0.5">
+                              SKU: {item.material} • Centro {item.centro}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`font-mono font-extrabold px-2 py-0.5 rounded text-[11px] border shrink-0 ${
+                            isAvaria
+                              ? 'bg-red-600 text-white border-red-700'
+                              : isLivre
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          }`}
+                        >
+                          SAP: {item.deposito}
+                        </span>
+                      </div>
+
+                      {wmsIt && (
+                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-1">
+                            <span
+                              className={`font-mono font-extrabold px-1.5 py-0.5 rounded text-[10px] border ${
+                                isWmsFaltaOrOnlySap
+                                  ? 'bg-red-100 text-red-900 border-red-300'
+                                  : wmsIt.analise.toUpperCase() === 'OK'
+                                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                  : 'bg-indigo-100 text-indigo-950 border-indigo-300'
+                              }`}
+                            >
+                              WMS: {wmsIt.depositoWms || 'S/ SALDO'}
+                            </span>
+                            {wmsIt.localWms && (
+                              <span className="text-[10px] font-mono font-bold text-slate-700">
+                                📍 {wmsIt.localWms}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-700">
+                            <strong>{wmsIt.analise}</strong>
+                            {wmsIt.ondeAgir ? ` • Agir: ${wmsIt.ondeAgir}` : ''}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <div className="text-[10px] text-slate-500 truncate">
+                          {queueReq ? (
+                            <span className="font-bold text-amber-800">
+                              ⏳ Na fila: {queueReq.solicitationCode}
+                            </span>
+                          ) : (
+                            <span>Status SAP: {item.statusSistema}</span>
+                          )}
+                        </div>
+
+                        {isAvaria ? (
+                          <span className="text-[10px] font-bold text-red-700 shrink-0">
+                            🚫 Avaria Definitiva
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cInfo = SAP_CENTROS_CATALOG[item.centro];
+                              const recFree = cInfo?.freeStockProductDeposit || 'B110';
+                              const suggestedDest =
+                                wmsIt?.analise.toUpperCase().includes('MOVER NO SAP PARA B111')
+                                  ? 'B111'
+                                  : item.deposito === recFree
+                                  ? 'B111'
+                                  : recFree;
+                              onOpenNewRequestWithPreset({
+                                material: item.material,
+                                seriais: [item.serial],
+                                centro: item.centro,
+                                depositoOrigem: item.deposito,
+                                depositoDestino: suggestedDest,
+                              });
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-[#002664] text-white font-extrabold text-[11px] shrink-0 active:scale-95 cursor-pointer"
+                          >
+                            + Solicitar MIGO
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* VISÃO DESKTOP (TABELA ORIGINAL) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200">
                     <tr>

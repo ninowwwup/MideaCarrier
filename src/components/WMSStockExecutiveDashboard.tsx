@@ -511,9 +511,9 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5 w-full max-w-full overflow-x-hidden">
       {/* 0. CABEÇALHO DO PAINEL EXECUTIVO (BASES ATIVAS + ATUALIZAR / LIMPAR SISTEMA) */}
-      <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200/90 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full max-w-full overflow-hidden">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-900 to-[#002664] text-amber-300 flex items-center justify-center shadow-sm shrink-0">
             <BarChart3 className="w-5 h-5" />
@@ -573,7 +573,7 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
       </div>
 
       {/* 1. FAIXA EXECUTIVA: SAÚDE DO ESTOQUE & DIVISÃO DE RESPONSABILIDADE (ONDE AGIR) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3 w-full max-w-full overflow-hidden">
         {/* Card 1: Acuracidade Geral SAP x WMS */}
         <button
           type="button"
@@ -582,22 +582,22 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             setSelectedAnalise('TODAS');
             setSelectedCrossPair('TODOS');
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+          className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-w-0 ${
             ownerFilter === 'Alinhado'
               ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400/50 shadow-md'
               : 'bg-white/95 border-slate-200 hover:border-emerald-300 shadow-xs'
           }`}
         >
           <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
-          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
-            <span>1. Estoque Alinhado (OK)</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 gap-1">
+            <span className="truncate">1. Alinhado (OK)</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-1 tabular-nums">
+          <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tabular-nums">
             {analytics.alignedCount.toLocaleString('pt-BR')}
           </div>
-          <div className="text-[11px] font-bold text-emerald-700 mt-0.5">
-            {analytics.accuracyPct}% de acuracidade ({analytics.total.toLocaleString('pt-BR')} UIIs)
+          <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 mt-0.5 truncate">
+            {analytics.accuracyPct}% acuracidade ({analytics.total.toLocaleString('pt-BR')})
           </div>
         </button>
 
@@ -609,22 +609,22 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             setSelectedAnalise('TODAS');
             setSelectedCrossPair('TODOS');
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+          className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-w-0 ${
             ownerFilter === 'WMS'
               ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-400/50 shadow-md'
               : 'bg-white/95 border-slate-200 hover:border-indigo-300 shadow-xs'
           }`}
         >
           <div className="absolute top-0 inset-x-0 h-1 bg-indigo-600" />
-          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-indigo-900">
-            <span>2. Agir no Sênior WMS</span>
-            <Wrench className="w-4 h-4 text-indigo-600" />
+          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-indigo-900 gap-1">
+            <span className="truncate">2. Agir no WMS</span>
+            <Wrench className="w-4 h-4 text-indigo-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-indigo-950 mt-1 tabular-nums">
+          <div className="text-xl sm:text-2xl font-black text-indigo-950 mt-1 tabular-nums">
             {analytics.actionWmsCount.toLocaleString('pt-BR')}
           </div>
-          <div className="text-[11px] text-slate-600 mt-0.5 leading-tight">
-            Rua centro errado, IQC, local inativo, lote bloq.
+          <div className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5 leading-tight truncate">
+            Rua centro errado, IQC, bloq.
           </div>
         </button>
 
@@ -636,22 +636,22 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             setSelectedAnalise('TODAS');
             setSelectedCrossPair('TODOS');
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+          className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-w-0 ${
             ownerFilter === 'Físico'
               ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
               : 'bg-white/95 border-slate-200 hover:border-amber-300 shadow-xs'
           }`}
         >
           <div className="absolute top-0 inset-x-0 h-1 bg-amber-500" />
-          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
-            <span>3. Agir no Físico (CD)</span>
-            <MapPin className="w-4 h-4 text-amber-600" />
+          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-amber-900 gap-1">
+            <span className="truncate">3. Agir Físico (CD)</span>
+            <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-amber-950 mt-1 tabular-nums">
+          <div className="text-xl sm:text-2xl font-black text-amber-950 mt-1 tabular-nums">
             {analytics.actionFisicoCount.toLocaleString('pt-BR')}
           </div>
-          <div className="text-[11px] text-slate-600 mt-0.5 leading-tight">
-            Desmembrar multi-data ({analytics.desmembrarFisicoMultiDataItems.length.toLocaleString('pt-BR')}) e físico
+          <div className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5 leading-tight truncate">
+            Desmembrar multi-data/físico
           </div>
         </button>
 
@@ -663,22 +663,22 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             setSelectedAnalise('TODAS');
             setSelectedCrossPair('TODOS');
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+          className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-w-0 ${
             ownerFilter === 'SAP'
               ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-400/50 shadow-md'
               : 'bg-white/95 border-slate-200 hover:border-rose-300 shadow-xs'
           }`}
         >
           <div className="absolute top-0 inset-x-0 h-1 bg-rose-600" />
-          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-rose-900">
-            <span>4. Agir no SAP (Midea)</span>
-            <Database className="w-4 h-4 text-rose-600" />
+          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-rose-900 gap-1">
+            <span className="truncate">4. Agir SAP (Midea)</span>
+            <Database className="w-4 h-4 text-rose-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-rose-950 mt-1 tabular-nums">
+          <div className="text-xl sm:text-2xl font-black text-rose-950 mt-1 tabular-nums">
             {analytics.actionSapCount.toLocaleString('pt-BR')}
           </div>
-          <div className="text-[11px] text-rose-700 font-bold mt-0.5 leading-tight">
-            {analytics.furoEstoqueRiscoItems.length.toLocaleString('pt-BR')} p/ baixar p/ B111 agora!
+          <div className="text-[10px] sm:text-[11px] text-rose-700 font-bold mt-0.5 leading-tight truncate">
+            {analytics.furoEstoqueRiscoItems.length.toLocaleString('pt-BR')} p/ baixar p/ B111!
           </div>
         </button>
 
@@ -690,21 +690,21 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             setSelectedAnalise('TODAS');
             setSelectedCrossPair('TODOS');
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+          className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-w-0 ${
             ownerFilter === 'A definir'
               ? 'bg-purple-50 border-purple-400 ring-2 ring-purple-400/50 shadow-md'
               : 'bg-white/95 border-slate-200 hover:border-purple-300 shadow-xs'
           }`}
         >
           <div className="absolute top-0 inset-x-0 h-1 bg-purple-600" />
-          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-purple-900">
-            <span>5. Triagem Gestão (Sobra/Stage)</span>
-            <Layers className="w-4 h-4 text-purple-600" />
+          <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-purple-900 gap-1">
+            <span className="truncate">5. Triagem Gestão</span>
+            <Layers className="w-4 h-4 text-purple-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-purple-950 mt-1 tabular-nums">
+          <div className="text-xl sm:text-2xl font-black text-purple-950 mt-1 tabular-nums">
             {analytics.actionDefinirCount.toLocaleString('pt-BR')}
           </div>
-          <div className="text-[11px] text-slate-600 mt-0.5 leading-tight">
+          <div className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5 leading-tight truncate">
             Só WMS ({analytics.apenasWmsSemSapItems.length.toLocaleString('pt-BR')}) • Só SAP ({analytics.apenasSapSemWmsItems.length.toLocaleString('pt-BR')})
           </div>
         </button>
@@ -717,7 +717,7 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             setSelectedAnalise('Falta - desconsiderar');
             setSelectedCrossPair('TODOS');
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+          className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-w-0 ${
             selectedAnalise === 'Falta - desconsiderar'
               ? 'bg-slate-900 text-white border-slate-900 shadow-md'
               : 'bg-white/95 border-slate-200 hover:border-slate-400 shadow-xs'
@@ -725,26 +725,26 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
         >
           <div className="absolute top-0 inset-x-0 h-1 bg-slate-800" />
           <div
-            className={`flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider ${
+            className={`flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider gap-1 ${
               selectedAnalise === 'Falta - desconsiderar' ? 'text-amber-300' : 'text-slate-700'
             }`}
           >
-            <span>6. Trava B111 (Em Falta)</span>
-            <Lock className="w-4 h-4 text-rose-500" />
+            <span className="truncate">6. Trava B111</span>
+            <Lock className="w-4 h-4 text-rose-500 shrink-0" />
           </div>
           <div
-            className={`text-2xl font-black mt-1 tabular-nums ${
+            className={`text-xl sm:text-2xl font-black mt-1 tabular-nums ${
               selectedAnalise === 'Falta - desconsiderar' ? 'text-white' : 'text-slate-900'
             }`}
           >
             {analytics.b111RetornoIndevidoRiscoItems.length.toLocaleString('pt-BR')}
           </div>
           <div
-            className={`text-[11px] mt-0.5 leading-tight ${
+            className={`text-[10px] sm:text-[11px] mt-0.5 leading-tight truncate ${
               selectedAnalise === 'Falta - desconsiderar' ? 'text-slate-300' : 'text-slate-500'
             }`}
           >
-            Protegidos pelo Breaker contra retorno indevido
+            Protegidos pelo Breaker
           </div>
         </button>
       </div>
@@ -1205,15 +1205,15 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <div className="relative flex-1 sm:flex-initial min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={drillSearch}
                 onChange={(e) => setDrillSearch(e.target.value)}
                 placeholder="Buscar SKU, Serial, Rua/Local..."
-                className="pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-xl w-56 focus:ring-2 focus:ring-[#0083CA]"
+                className="pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-xl w-full sm:w-56 focus:ring-2 focus:ring-[#0083CA]"
               />
               {drillSearch && (
                 <button
@@ -1269,7 +1269,76 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
           </div>
         </div>
 
-        <div className="overflow-x-auto max-h-[420px]">
+        {/* VISÃO MOBILE (CARDS FLUTTER) DO DRILL-DOWN EXECUTIVO */}
+        <div className="block md:hidden divide-y divide-slate-200 max-h-[460px] overflow-y-auto w-full max-w-full">
+          {drilldownItems.slice(0, 80).map((it, idx) => {
+            const prioUpper = (it.prioridade || '').toUpperCase();
+            const isCrit = prioUpper.includes('CRÍTIC') || prioUpper.includes('CRITIC');
+            return (
+              <div
+                key={`m-drill-${it.serial}-${idx}`}
+                className="p-3 space-y-2 text-xs bg-white hover:bg-slate-50 w-full max-w-full overflow-hidden"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-mono font-extrabold text-slate-900 break-all">
+                      {it.serial}
+                    </div>
+                    <div className="font-mono font-bold text-[#002664] text-[11px] mt-0.5">
+                      SKU: {it.materialSap || it.materialWms || '-'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-white font-bold text-[10px]">
+                      {it.ondeAgir || 'Nenhum'}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                        isCrit
+                          ? 'bg-red-100 text-red-800 border border-red-300'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {it.prioridade || 'Normal'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 rounded-lg bg-slate-50 border border-slate-200/80 text-[11px]">
+                  <div className="flex items-center gap-1.5 font-mono font-bold">
+                    {it.depositoSap ? (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-950 border border-amber-300 text-[10px]">
+                        SAP: {it.centroSap ? `${it.centroSap}•` : ''}
+                        {it.depositoSap}
+                      </span>
+                    ) : (
+                      <span className="text-rose-700 text-[10px]">S/ SAP</span>
+                    )}
+                    <ArrowRight className="w-3 h-3 text-slate-400" />
+                    {it.depositoWms ? (
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-950 border border-indigo-300 text-[10px]">
+                        WMS: {it.depositoWms}
+                      </span>
+                    ) : (
+                      <span className="text-rose-700 text-[10px]">S/ WMS</span>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] font-bold text-slate-700">
+                    📍 {it.localWms || 'S/ Local'}
+                    {it.lote ? ` • Lote ${it.lote}` : ''}
+                  </span>
+                </div>
+
+                <div className="text-[11px] font-bold text-slate-800">
+                  Diagnóstico: <span className="text-[#00609C]">{it.analise}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* VISÃO DESKTOP (TABELA ORIGINAL) */}
+        <div className="hidden md:block overflow-x-auto max-h-[420px]">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200 sticky top-0 z-10">
               <tr>

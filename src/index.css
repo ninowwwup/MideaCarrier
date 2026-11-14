@@ -7,6 +7,46 @@
   --color-imperial-dark: #002363;
 }
 
+/* ============================================================================
+   FLUTTER / MATERIAL 3 MOBILE PWA SHELL & ANTI-WOBBLE VIEWPORT LOCK
+   Impede que a tela "dance" horizontalmente no celular/PWA e garante que
+   nenhum grid ou flex container estoure a largura da tela (100vw).
+   ============================================================================ */
+html,
+body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  touch-action: pan-y pinch-zoom;
+}
+
+#root {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Utilitário de scroll horizontal oculto para chips/abas estilo Flutter */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe Area para iPhones e Androids em modo PWA Standalone */
+.pb-safe-nav {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+.mb-safe-bottom {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Fundo Gradiente Aurora Cromático Idêntico à Imagem de Referência */
 .figma-aurora-bg {
   background-color: #1a4da6;

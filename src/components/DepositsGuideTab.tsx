@@ -242,9 +242,9 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
   }, [categoryFilter, centroFilter, appFilter, searchQuery]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full max-w-full overflow-x-hidden">
       {/* 1. BANNER TOPO EDUCATIVO */}
-      <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-white/60 shadow-lg p-5 sm:p-6">
+      <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-white/60 shadow-lg p-3.5 sm:p-6 w-full max-w-full overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#002664] text-xs font-extrabold">
@@ -744,8 +744,84 @@ export const DepositsGuideTab: React.FC<DepositsGuideTabProps> = ({
           </div>
         </div>
 
-        {/* Tabela Visual Idêntica às Planilhas Oficiais + Coluna de Instrução Prática */}
-        <div className="overflow-x-auto">
+        {/* VISÃO MOBILE (CARDS FLUTTER) DO CATÁLOGO OFICIAL DE DEPÓSITOS */}
+        <div className="block md:hidden divide-y divide-slate-200 w-full max-w-full overflow-hidden">
+          {officialDepositsList.map((dep) => {
+            const isGreen = dep.colorScheme === 'green';
+            const isYellow = dep.colorScheme === 'yellow';
+            return (
+              <div
+                key={`m-dep-${dep.code}`}
+                className="p-3.5 space-y-2.5 text-xs bg-white w-full max-w-full overflow-hidden"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono font-black text-sm px-2.5 py-1 rounded-lg bg-slate-900 text-white shrink-0">
+                      {dep.code}
+                    </span>
+                    <div
+                      className={`px-2 py-1 rounded-lg font-bold text-[11px] border truncate ${
+                        isGreen
+                          ? 'bg-emerald-600 text-white border-emerald-700'
+                          : isYellow
+                          ? 'bg-yellow-300 text-slate-950 border-yellow-400'
+                          : 'bg-red-600 text-white border-red-700'
+                      }`}
+                    >
+                      {dep.classification.split('—')[0].trim()} ({dep.nature})
+                    </div>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border shrink-0 ${
+                      dep.application === 'PRODUTO'
+                        ? 'bg-blue-50 text-[#002664] border-blue-200'
+                        : dep.application === 'PEÇAS'
+                        ? 'bg-amber-50 text-amber-900 border-amber-300'
+                        : 'bg-purple-50 text-purple-900 border-purple-200'
+                    }`}
+                  >
+                    {dep.application}
+                  </span>
+                </div>
+
+                <div className="text-slate-800 font-semibold leading-snug">
+                  {dep.definition}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 mr-1">Centros:</span>
+                  {dep.allowedCentros.map((c) => (
+                    <span
+                      key={c}
+                      className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300"
+                    >
+                      {c}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px]">
+                  {dep.category === 'avaria_definitivo' ? (
+                    <span className="text-red-800 font-bold">
+                      ✅ Destino OK (Avaria) • 🚫 Origem proibida voltar p/ Livre!
+                    </span>
+                  ) : dep.category === 'inventario_falta_definitivo' ? (
+                    <span className="text-slate-700 font-semibold">
+                      🔴 Usar para baixa de falta de inventário (ou retorno se achado c/ saldo físico no WMS).
+                    </span>
+                  ) : (
+                    <span className="text-emerald-800 font-semibold">
+                      🟢 Estoque disponível para venda nos centros {dep.allowedCentros.join('/')}.
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tabela Visual Idêntica às Planilhas Oficiais + Coluna de Instrução Prática (Desktop md+) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-800 text-white uppercase text-[10px] tracking-wider font-bold">
