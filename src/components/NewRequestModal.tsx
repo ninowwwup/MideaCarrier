@@ -756,54 +756,41 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             {/* Trava Sênior WMS x SAP (Batimento de Estoque em Tempo Real) */}
             {wmsBreakerCheck && (
               <div
-                className={`mt-2.5 p-3 rounded-xl border space-y-2 text-xs transition-all ${
+                className={`mt-2.5 px-3 py-2.5 rounded-xl border text-xs transition-all flex flex-wrap items-center justify-between gap-2 ${
                   wmsBreakerCheck.blockedAttempts.length > 0
                     ? 'bg-red-50/90 border-2 border-red-400 text-red-950'
                     : 'bg-emerald-50/70 border border-emerald-300 text-emerald-950'
                 }`}
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 font-extrabold">
-                    <span>
-                      {wmsBreakerCheck.blockedAttempts.length > 0 ? '🛑' : '✅'}
-                    </span>
-                    <span>
-                      {wmsBreakerCheck.blockedAttempts.length > 0
-                        ? `Trava Sênior WMS x SAP: ${wmsBreakerCheck.blockedAttempts.length} de ${parsedSerials.length} serial(is) BLOQUEADO(S)!`
-                        : `Batimento Sênior WMS x SAP: ${wmsBreakerCheck.approvedSerials.length} serial(is) validado(s) p/ ${depositoOrigem} ➔ ${depositoDestino}`}
-                    </span>
-                  </div>
-
-                  {wmsBreakerCheck.blockedAttempts.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {wmsBreakerCheck.approvedSerials.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setRawSerials(wmsBreakerCheck.approvedSerials.join('\n'))}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors cursor-pointer"
-                        >
-                          Manter apenas {wmsBreakerCheck.approvedSerials.length} serial(is) apto(s)
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setIsWmsBreakerWarningOpen(true)}
-                        className="px-2.5 py-1 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-[11px] transition-colors cursor-pointer"
-                      >
-                        Ver Diagnóstico & Ação Buiatte
-                      </button>
-                    </div>
-                  )}
+                <div className="flex items-center gap-1.5 font-extrabold">
+                  <span>
+                    {wmsBreakerCheck.blockedAttempts.length > 0 ? '🛑' : '✅'}
+                  </span>
+                  <span>
+                    {wmsBreakerCheck.blockedAttempts.length > 0
+                      ? `Solicitação Indevida (${wmsBreakerCheck.blockedAttempts.length} de ${parsedSerials.length} serial(is) bloqueado(s) no Sênior WMS)`
+                      : `Batimento Sênior WMS x SAP: ${wmsBreakerCheck.approvedSerials.length} serial(is) validado(s) p/ ${depositoOrigem} ➔ ${depositoDestino}`}
+                  </span>
                 </div>
 
                 {wmsBreakerCheck.blockedAttempts.length > 0 && (
-                  <div className="p-2.5 rounded-lg bg-white/95 border border-red-200 space-y-1">
-                    <div className="font-bold text-red-800 text-[11px]">
-                      Por que é uma solicitação indevida ({wmsBreakerCheck.blockedAttempts[0].verdict.title}):
-                    </div>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">
-                      {wmsBreakerCheck.blockedAttempts[0].verdict.whyItIsInvalid}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {wmsBreakerCheck.approvedSerials.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setRawSerials(wmsBreakerCheck.approvedSerials.join('\n'))}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors cursor-pointer"
+                      >
+                        Manter apenas {wmsBreakerCheck.approvedSerials.length} serial(is) apto(s)
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsWmsBreakerWarningOpen(true)}
+                      className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[11px] uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      VER MOTIVO
+                    </button>
                   </div>
                 )}
               </div>

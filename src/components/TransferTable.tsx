@@ -102,14 +102,14 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
   select: 2.8,
   fifo: 3.8,
   material: 10.5,
-  serial: 15.5,
-  centro: 5.2,
+  serial: 15.0,
+  centro: 5.0,
   rota: 11.2,
-  status: 9.5,
+  status: 9.2,
   foto: 6.0,
-  docSap: 14.0,
+  docSap: 13.0,
   solicitante: 12.0,
-  acoes: 9.5,
+  acoes: 11.5,
 };
 
 const MIN_COLUMN_WIDTHS: Record<ColumnKey, number> = {
@@ -123,10 +123,10 @@ const MIN_COLUMN_WIDTHS: Record<ColumnKey, number> = {
   foto: 4.5,
   docSap: 7.0,
   solicitante: 6.5,
-  acoes: 6.5,
+  acoes: 7.5,
 };
 
-const STORAGE_WIDTHS_KEY = 'migou_column_weights_v3';
+const STORAGE_WIDTHS_KEY = 'migou_column_weights_v4';
 
 export const TransferTable: React.FC<TransferTableProps> = ({
   items,
@@ -310,6 +310,72 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     } finally {
       setIsApplyingDePara(false);
     }
+  };
+
+  // Abre o modal executivo "VER MOTIVO" para qualquer divergência Sênior WMS ou IQ09
+  const handleOpenMotivoModal = (item: TransferItem, iqAudit?: IQ09QueueItemAudit) => {
+    if (iqAudit?.wmsVerdict && iqAudit.wmsVerdict.code !== 'NO_WMS_BASE_LOADED') {
+      setSelectedBlockedWmsAttempt({
+        serial: item.serial,
+        material: item.material,
+        centro: item.centro,
+        depositoOrigem: item.depositoOrigem,
+        depositoDestino: item.depositoDestino,
+        verdict: iqAudit.wmsVerdict,
+      });
+      return;
+    }
+
+    const damageCheck = checkDefinitiveDamageOrigin(item.depositoOrigem, item.depositoDestino);
+    const iq = iqAudit?.iq09Item;
+
+    setSelectedBlockedWmsAttempt({
+      serial: item.serial,
+      material: item.material,
+      centro: item.centro,
+      depositoOrigem: item.depositoOrigem,
+      depositoDestino: item.depositoDestino,
+      verdict: {
+        serial: item.serial,
+        hasWmsBase: Boolean(iqAudit?.wmsVerdict?.hasWmsBase),
+        foundInWmsBase: Boolean(iqAudit?.wmsVerdict?.foundInWmsBase),
+        allowed: false,
+        isAllowed: false,
+        severity: iqAudit?.macroStatus === 'corrigivel_depara' ? 'warning_physical_check' : 'blocked_breaker',
+        code: 'BLOCKED_WMS_DEPOSIT_MISMATCH',
+        badgeLabel:
+          iqAudit?.badgeLabel ||
+          (damageCheck.isInvalidOrigin ? `🛑 Origem Avaria (${item.depositoOrigem})` : '🛑 Solicitação Indevida'),
+        title: damageCheck.isInvalidOrigin
+          ? `Proibido Voltar de Avaria Definitiva (${item.depositoOrigem}) para Estoque Livre`
+          : iqAudit?.macroStatus === 'corrigivel_depara'
+          ? 'Divergência Contábil SAP IQ09 (Corrigível via De-Para)'
+          : 'Diagnóstico de Bloqueio SAP IQ09 / Sênior WMS',
+        whyItIsInvalid:
+          iqAudit?.summaryMessage ||
+          (damageCheck.isInvalidOrigin
+            ? `O depósito de origem ${item.depositoOrigem} é de Avaria Definitiva e não pode retornar ao estoque livre.`
+            : 'Divergência identificada na validação sistêmica.'),
+        whyExplanation:
+          iqAudit?.summaryMessage ||
+          (damageCheck.isInvalidOrigin
+            ? `O depósito de origem ${item.depositoOrigem} é de Avaria Definitiva e não pode retornar ao estoque livre.`
+            : 'Divergência identificada na validação sistêmica.'),
+        buiatteActionPlan:
+          iqAudit?.macroStatus === 'corrigivel_depara'
+            ? [
+                `Utilize o botão "⚡ Corrigir c/ IQ09" na linha para sincronizar Material (${iq?.material || item.material}), Centro (${iq?.centro || item.centro}) e Depósito Origem (${iq?.deposito || item.depositoOrigem}).`,
+                'Confirme no Sênior WMS se o lote e endereço físico já estão regularizados no depósito de destino.',
+              ]
+            : [
+                'Verifique a posição contábil atual do serial na transação IQ09 (SAP) e o endereço físico no Sênior WMS.',
+                'Regularize primeiro a movimentação física/lote no Sênior WMS ou alinhe com o Supervisor antes de solicitar a MIGO 311.',
+              ],
+        actionOwner: 'WMS',
+        iq09Item: iq,
+        wmsItem: iqAudit?.wmsVerdict?.wmsItem,
+      },
+    });
   };
 
   // Itens filtrados, agrupados e ordenados
@@ -1266,7 +1332,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </div>
                     )}
 
-                    {/* Alerta e Botão De-Para IQ09 no Card Mobile */}
+                    {/* Alerta Enxuto e Botão VER MOTIVO / De-Para IQ09 no Card Mobile */}
                     {iqAudit?.hasIQ09Base && item.status !== 'concluido' && iqAudit.macroStatus !== 'pronto_macro_100' && (
                       <div
                         className={`pt-1.5 border-t text-[11px] font-semibold flex flex-col gap-1.5 ${
@@ -1277,7 +1343,17 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             : 'border-rose-200 text-rose-900'
                         }`}
                       >
-                        <div>{iqAudit.summaryMessage}</div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-extrabold truncate">{iqAudit.badgeLabel}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMotivoModal(item, iqAudit)}
+                            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider shadow-2xs cursor-pointer"
+                          >
+                            <ShieldAlert className="w-3 h-3 shrink-0" />
+                            <span>VER MOTIVO</span>
+                          </button>
+                        </div>
                         {iqAudit.canAutoFixDePara && onApplyIQ09DePara && (
                           <button
                             type="button"
@@ -1653,7 +1729,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 </th>
 
                 {/* 11. Ações */}
-                <th className="py-2.5 px-2 text-right relative select-none">
+                <th className="py-2.5 pl-1.5 pr-3 text-right relative select-none">
                   <span>Ações</span>
                 </th>
               </tr>
@@ -1851,54 +1927,54 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             </button>
                           </div>
 
-                          {/* Selo de Status do Cruzamento Automático IQ09 + Sênior WMS */}
+                          {/* Selo Único de Status do Cruzamento Automático IQ09 + Sênior WMS */}
                           {(iqAudit?.hasIQ09Base || iqAudit?.wmsVerdict) && (
                             <div className="flex flex-wrap items-center gap-1">
-                              {iqAudit?.hasIQ09Base && (
-                                <span
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border ${
-                                    iqAudit.macroStatus === 'pronto_macro_100'
-                                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                      : iqAudit.macroStatus === 'corrigivel_depara'
-                                      ? 'bg-amber-200 text-amber-950 border-amber-400'
-                                      : iqAudit.macroStatus === 'ja_no_destino_sap'
-                                      ? 'bg-sky-100 text-sky-900 border-sky-300'
-                                      : 'bg-rose-600 text-white border-rose-700'
-                                  }`}
-                                  title={iqAudit.summaryMessage}
-                                >
-                                  {iqAudit.badgeLabel}
-                                </span>
-                              )}
-
-                              {iqAudit?.wmsVerdict && iqAudit.wmsVerdict.code !== 'NO_WMS_BASE_LOADED' && (
+                              {iqAudit?.wmsVerdict &&
+                              iqAudit.wmsVerdict.code !== 'NO_WMS_BASE_LOADED' &&
+                              !iqAudit.wmsVerdict.allowed ? (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (!iqAudit.wmsVerdict) return;
-                                    setSelectedBlockedWmsAttempt({
-                                      serial: item.serial,
-                                      material: item.material,
-                                      centro: item.centro,
-                                      depositoOrigem: item.depositoOrigem,
-                                      depositoDestino: item.depositoDestino,
-                                      verdict: iqAudit.wmsVerdict,
-                                    });
-                                  }}
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border cursor-pointer transition-colors ${
-                                    !iqAudit.wmsVerdict.allowed
-                                      ? 'bg-red-700 hover:bg-red-800 text-white border-red-800'
-                                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200'
-                                  }`}
-                                  title={`${iqAudit.wmsVerdict.title}${
-                                    iqAudit.wmsVerdict.wmsItem?.localWms
-                                      ? ` • Endereço WMS: ${iqAudit.wmsVerdict.wmsItem.localWms}`
-                                      : ''
-                                  } — Clique para ver detalhes`}
+                                  onClick={() => handleOpenMotivoModal(item, iqAudit)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border bg-rose-600 hover:bg-rose-700 text-white border-rose-700 cursor-pointer transition-colors"
+                                  title="Clique para ver o motivo do bloqueio e a ação recomendada"
                                 >
                                   <span>{iqAudit.wmsVerdict.badgeLabel}</span>
                                 </button>
-                              )}
+                              ) : iqAudit?.hasIQ09Base ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (iqAudit.macroStatus !== 'pronto_macro_100') {
+                                      handleOpenMotivoModal(item, iqAudit);
+                                    }
+                                  }}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold leading-none border ${
+                                    iqAudit.macroStatus === 'pronto_macro_100'
+                                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300 cursor-default'
+                                      : iqAudit.macroStatus === 'corrigivel_depara'
+                                      ? 'bg-amber-200 hover:bg-amber-300 text-amber-950 border-amber-400 cursor-pointer'
+                                      : iqAudit.macroStatus === 'ja_no_destino_sap'
+                                      ? 'bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-300 cursor-pointer'
+                                      : 'bg-rose-600 hover:bg-rose-700 text-white border-rose-700 cursor-pointer'
+                                  }`}
+                                  title={
+                                    iqAudit.macroStatus === 'pronto_macro_100'
+                                      ? iqAudit.wmsVerdict?.wmsItem?.localWms
+                                        ? `${iqAudit.summaryMessage} • Endereço WMS: ${iqAudit.wmsVerdict.wmsItem.localWms}`
+                                        : iqAudit.summaryMessage
+                                      : 'Clique para ver o motivo completo'
+                                  }
+                                >
+                                  <span>
+                                    {iqAudit.badgeLabel}
+                                    {iqAudit.macroStatus === 'pronto_macro_100' &&
+                                    iqAudit.wmsVerdict?.wmsItem?.localWms
+                                      ? ` (${iqAudit.wmsVerdict.wmsItem.localWms})`
+                                      : ''}
+                                  </span>
+                                </button>
+                              ) : null}
 
                               {iqAudit?.iq09Item?.equipamento && (
                                 <span className="text-[9px] text-slate-400 font-mono">
@@ -2107,29 +2183,45 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         )}
                       </td>
 
-                      {/* 9. Doc SAP / Observações (Texto completo + Diagnóstico Automático IQ09) */}
+                      {/* 9. Doc SAP / Observações (Visual Enxuto + Botão VER MOTIVO) */}
                       <td className="py-2 px-1.5 align-middle">
-                        {isInvalidOrigin && damageCheck.originInfo && (
-                          <div
-                            className="text-[10px] font-bold text-red-900 leading-tight mb-0.5 break-words whitespace-normal"
-                            title={`${damageCheck.originInfo.definition} — Produto avariado não deve voltar ao estoque livre.`}
-                          >
-                            🛑 {damageCheck.originInfo.shortTitle}: Proibido voltar p/ livre
-                          </div>
-                        )}
-                        {showIQ09Diff && iqAudit && iqAudit.macroStatus !== 'pronto_macro_100' && (
-                          <div
-                            className={`text-[10px] font-bold leading-tight mb-0.5 break-words whitespace-normal ${
-                              iqAudit.macroStatus === 'corrigivel_depara'
-                                ? 'text-amber-900'
-                                : iqAudit.macroStatus === 'ja_no_destino_sap'
-                                ? 'text-sky-800'
-                                : 'text-rose-800'
-                            }`}
-                          >
-                            {iqAudit.macroStatus === 'corrigivel_depara'
-                              ? `⚡ De-Para IQ09: ${iqAudit.mismatchDetails.join(' | ')}`
-                              : iqAudit.summaryMessage}
+                        {(isInvalidOrigin || (showIQ09Diff && iqAudit && iqAudit.macroStatus !== 'pronto_macro_100')) && (
+                          <div className="flex flex-col items-start gap-1 mb-0.5">
+                            <span
+                              className={`text-[10px] font-extrabold leading-tight ${
+                                isInvalidOrigin
+                                  ? 'text-red-900'
+                                  : iqAudit?.macroStatus === 'corrigivel_depara'
+                                  ? 'text-amber-900'
+                                  : iqAudit?.macroStatus === 'ja_no_destino_sap'
+                                  ? 'text-sky-800'
+                                  : 'text-rose-800'
+                              }`}
+                            >
+                              {isInvalidOrigin && damageCheck.originInfo
+                                ? `🛑 ${damageCheck.originInfo.shortTitle}: Proibido p/ Livre`
+                                : iqAudit?.macroStatus === 'corrigivel_depara'
+                                ? `⚡ De-Para: ${iqAudit.mismatchDetails.join(' | ')}`
+                                : iqAudit?.macroStatus === 'ja_no_destino_sap'
+                                ? `🔵 Já em ${item.depositoDestino} no SAP`
+                                : '🛑 Solicitação Indevida'}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMotivoModal(item, iqAudit)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[10px] uppercase tracking-wider shadow-2xs transition-all cursor-pointer active:scale-95 ${
+                                iqAudit?.macroStatus === 'corrigivel_depara' && !isInvalidOrigin
+                                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                  : iqAudit?.macroStatus === 'ja_no_destino_sap' && !isInvalidOrigin
+                                  ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                                  : 'bg-rose-600 hover:bg-rose-700 text-white'
+                              }`}
+                              title="Clique para abrir o diagnóstico completo Sênior WMS ⟷ SAP e plano de ação"
+                            >
+                              <ShieldAlert className="w-3 h-3 shrink-0" />
+                              <span>VER MOTIVO</span>
+                            </button>
                           </div>
                         )}
                         {item.sapDocNumber ? (
@@ -2152,7 +2244,9 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             <MessageSquare className="w-2.5 h-2.5 shrink-0 mt-0.5" />
                             <span>{item.observacoes}</span>
                           </div>
-                        ) : !item.sapDocNumber && !isInvalidOrigin ? (
+                        ) : !item.sapDocNumber &&
+                          !isInvalidOrigin &&
+                          !(showIQ09Diff && iqAudit && iqAudit.macroStatus !== 'pronto_macro_100') ? (
                           <span className="text-slate-400 text-[10px]">-</span>
                         ) : null}
                       </td>
@@ -2175,8 +2269,8 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       </td>
 
                       {/* 11. Ações Rápidas (100% dentro da célula sem cortar ícones na direita) */}
-                      <td className="py-2 px-1.5 text-right align-middle">
-                        <div className="flex flex-wrap items-center justify-end gap-0.5">
+                      <td className="py-2 pl-1 pr-3 text-right align-middle">
+                        <div className="flex items-center justify-end gap-0.5">
                           {/* Copiar Linha */}
                           <button
                             type="button"

@@ -1577,47 +1577,51 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                               </td>
 
                               <td className="py-2.5 px-3">
-                                <div
-                                  className={`font-extrabold text-[11px] ${
-                                    isApto
-                                      ? 'text-emerald-800'
-                                      : isJaNoDestino
-                                      ? 'text-blue-800'
-                                      : isJaNaFila
-                                      ? 'text-amber-900'
-                                      : 'text-rose-800'
-                                  }`}
-                                >
-                                  {isApto && '🟢 '}
-                                  {isJaNoDestino && '🔵 '}
-                                  {isJaNaFila && '🟡 '}
-                                  {!isApto && !isJaNoDestino && !isJaNaFila && '🛑 '}
-                                  {item.statusTitle}
-                                </div>
-                                <div className="text-[11px] text-slate-600 leading-snug mt-0.5">
-                                  {item.statusDetail}
-                                </div>
-                                {item.wmsBreakerBlocked && item.wmsVerdict && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedBlockedAttemptsForModal([
-                                        {
-                                          serial: item.inputSerial,
-                                          material: item.suggestedMaterial || 'S/M',
-                                          centro: item.suggestedCentro || 'B124',
-                                          depositoOrigem: item.suggestedOrigem || 'B111',
-                                          depositoDestino: item.suggestedDestino || 'B110',
-                                          verdict: item.wmsVerdict!,
-                                        },
-                                      ]);
-                                      setIsBreakerModalOpen(true);
-                                    }}
-                                    className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-[10px] transition-colors cursor-pointer"
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div
+                                    className={`font-extrabold text-[11px] ${
+                                      isApto
+                                        ? 'text-emerald-800'
+                                        : isJaNoDestino
+                                        ? 'text-blue-800'
+                                        : isJaNaFila
+                                        ? 'text-amber-900'
+                                        : 'text-rose-800'
+                                    }`}
                                   >
-                                    <ShieldAlert className="w-3 h-3" />
-                                    <span>Ver Por Que é Indevida & Ação Buiatte</span>
-                                  </button>
+                                    {isApto && '🟢 '}
+                                    {isJaNoDestino && '🔵 '}
+                                    {isJaNaFila && '🟡 '}
+                                    {!isApto && !isJaNoDestino && !isJaNaFila && '🛑 '}
+                                    {item.statusTitle}
+                                  </div>
+                                  {item.wmsBreakerBlocked && item.wmsVerdict && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedBlockedAttemptsForModal([
+                                          {
+                                            serial: item.inputSerial,
+                                            material: item.suggestedMaterial || 'S/M',
+                                            centro: item.suggestedCentro || 'B124',
+                                            depositoOrigem: item.suggestedOrigem || 'B111',
+                                            depositoDestino: item.suggestedDestino || 'B110',
+                                            verdict: item.wmsVerdict!,
+                                          },
+                                        ]);
+                                        setIsBreakerModalOpen(true);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider transition-colors shadow-2xs cursor-pointer"
+                                    >
+                                      <ShieldAlert className="w-3 h-3 shrink-0" />
+                                      <span>VER MOTIVO</span>
+                                    </button>
+                                  )}
+                                </div>
+                                {!item.wmsBreakerBlocked && (
+                                  <div className="text-[11px] text-slate-600 leading-snug mt-0.5">
+                                    {item.statusDetail}
+                                  </div>
                                 )}
                               </td>
                             </tr>

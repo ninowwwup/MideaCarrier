@@ -278,16 +278,11 @@ QCL108BB\tS1326B21294802\tB179\tB111\tB413`;
 
               {/* Banner de Alerta da Trava Sênior WMS x SAP */}
               {wmsEvaluation.blockedAttempts.length > 0 && (
-                <div className="bg-red-50 border-2 border-red-500 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-                  <div className="flex items-start gap-2.5 text-xs text-red-950">
-                    <span className="text-lg leading-none">🛑</span>
-                    <div className="space-y-1">
-                      <div className="font-extrabold text-red-900">
-                        Trava Breaker Sênior WMS x SAP: {wmsEvaluation.blockedAttempts.length} de {parsedRows.length} linha(s) BLOQUEADA(S)!
-                      </div>
-                      <p className="text-red-800 leading-relaxed">
-                        {wmsEvaluation.blockedAttempts[0].verdict.whyItIsInvalid}
-                      </p>
+                <div className="bg-red-50 border-2 border-red-500 rounded-xl px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-xs text-red-950">
+                    <span className="text-base leading-none">🛑</span>
+                    <div className="font-extrabold text-red-900">
+                      Trava Breaker Sênior WMS x SAP: {wmsEvaluation.blockedAttempts.length} de {parsedRows.length} linha(s) BLOQUEADA(S) por divergência física no WMS!
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -303,9 +298,9 @@ QCL108BB\tS1326B21294802\tB179\tB111\tB413`;
                     <button
                       type="button"
                       onClick={() => setIsWmsBreakerWarningOpen(true)}
-                      className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs uppercase tracking-wider transition-colors cursor-pointer"
                     >
-                      Ver Diagnóstico & Ação Buiatte
+                      VER MOTIVO
                     </button>
                   </div>
                 </div>
@@ -432,17 +427,17 @@ QCL108BB\tS1326B21294802\tB179\tB111\tB413`;
                                   🚫 ERRO: {rowCheck.originInfo.code} ({rowCheck.originInfo.shortTitle}) não pode ir para estoque livre!
                                 </span>
                               ) : isBlockedByWms ? (
-                                <div className="space-y-0.5">
-                                  <div className="text-red-800 font-extrabold">
-                                    {wmsVerdict.badgeLabel} — {wmsVerdict.title}
-                                  </div>
-                                  {wmsVerdict.wmsItem && (
-                                    <div className="text-[10px] text-red-700">
-                                      Sênior WMS: Dep. <strong>{wmsVerdict.wmsItem.depositoWms || 'S/ Saldo'}</strong> • Local{' '}
-                                      <strong>{wmsVerdict.wmsItem.localWms || '—'}</strong> • Análise:{' '}
-                                      <strong>{wmsVerdict.wmsItem.analise}</strong>
-                                    </div>
-                                  )}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-red-800 font-extrabold">
+                                    {wmsVerdict.badgeLabel}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsWmsBreakerWarningOpen(true)}
+                                    className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider cursor-pointer shrink-0"
+                                  >
+                                    VER MOTIVO
+                                  </button>
                                 </div>
                               ) : isAlreadyInDestIQ09 ? (
                                 <span className="text-blue-800 font-extrabold">
