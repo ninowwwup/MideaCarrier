@@ -25,6 +25,7 @@ import {
   X,
   ShieldCheck,
   MapPin,
+  BarChart3,
 } from 'lucide-react';
 import {
   IQ09Item,
@@ -49,6 +50,7 @@ import {
   lookupSerialInWMSBatimento,
 } from '../services/wmsBatimentoService';
 import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
+import { WMSStockExecutiveDashboard } from './WMSStockExecutiveDashboard';
 import {
   SAP_CENTROS_CATALOG,
   SAP_DEPOSITOS_CATALOG,
@@ -85,8 +87,8 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   onOpenNewRequestWithPreset,
   onSwitchToQueueTab,
 }) => {
-  // Sub-aba ativa: 'validador' (De-Para Mastigado p/ Buiatte) | 'explorador' (Consulta Geral IQ09)
-  const [subTab, setSubTab] = useState<'validador' | 'explorador'>('validador');
+  // Sub-aba ativa: 'validador' (De-Para Mastigado p/ Buiatte) | 'explorador' (Consulta Geral IQ09) | 'dashboard' (Dashboard Executivo SAP x WMS)
+  const [subTab, setSubTab] = useState<'validador' | 'explorador' | 'dashboard'>('validador');
 
   // Estados do Modal/Painel de Upload da IQ09
   const [isImporterOpen, setIsImporterOpen] = useState<boolean>(!snapshot);
@@ -1201,33 +1203,46 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         )}
       </div>
 
-      {/* 2. SELETOR DE MODO OPERACIONAL DA IQ09 (RESPONSIVO) */}
+      {/* 2. SELETOR DE MODO OPERACIONAL DA IQ09 & DASHBOARD EXECUTIVO (RESPONSIVO) */}
       <div className="bg-white/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/70 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
           <button
             type="button"
             onClick={() => setSubTab('validador')}
-            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
               subTab === 'validador'
                 ? 'bg-[#002664] text-white shadow-sm'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
             <Sparkles className={`w-4 h-4 shrink-0 ${subTab === 'validador' ? 'text-cyan-300' : 'text-[#00609C]'}`} />
-            <span className="truncate">1. Validador & De-Para em Lote (Time Buiatte ➔ MIGO 311)</span>
+            <span className="truncate">1. Validador & De-Para em Lote (Buiatte ➔ SAP)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('explorador')}
-            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
               subTab === 'explorador'
                 ? 'bg-[#002664] text-white shadow-sm'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
             <Search className={`w-4 h-4 shrink-0 ${subTab === 'explorador' ? 'text-cyan-300' : 'text-[#00609C]'}`} />
-            <span className="truncate">2. Consulta Geral de Estoque IQ09 ({(metadata?.totalItems || iq09Items.length).toLocaleString('pt-BR')} UIIs)</span>
+            <span className="truncate">2. Consulta Geral IQ09 ({(metadata?.totalItems || iq09Items.length).toLocaleString('pt-BR')} UIIs)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubTab('dashboard')}
+            className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
+              subTab === 'dashboard'
+                ? 'bg-gradient-to-r from-indigo-900 to-[#002664] text-white shadow-sm'
+                : 'text-indigo-950 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-200/80'
+            }`}
+          >
+            <BarChart3 className={`w-4 h-4 shrink-0 ${subTab === 'dashboard' ? 'text-amber-300' : 'text-indigo-600'}`} />
+            <span className="truncate">3. Dashboard Executivo & Gargalos (SAP ⟷ WMS)</span>
           </button>
         </div>
       </div>
@@ -1645,6 +1660,23 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
             </div>
           </div>
         </div>
+      ) : subTab === 'dashboard' ? (
+        /* ========================================================================== */
+        /* SUB-ABA 3: DASHBOARD EXECUTIVO & GARGALOS DE ESTOQUE (SAP ⟷ SÊNIOR WMS)   */
+        /* ========================================================================== */
+        <WMSStockExecutiveDashboard
+          iq09Snapshot={snapshot}
+          wmsSnapshot={wmsSnapshot}
+          onOpenWmsImporter={() => {
+            setIsWmsImporterOpen(true);
+            setIsImporterOpen(false);
+          }}
+          onOpenIq09Importer={() => {
+            setIsImporterOpen(true);
+            setIsWmsImporterOpen(false);
+          }}
+          onOpenNewRequestWithPreset={onOpenNewRequestWithPreset}
+        />
       ) : (
         /* ========================================================================== */
         /* SUB-ABA 2: EXPLORADOR & CONSULTA GERAL DA BASE IQ09 + SÊNIOR WMS           */
