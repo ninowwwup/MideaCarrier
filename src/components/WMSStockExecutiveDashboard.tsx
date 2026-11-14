@@ -17,10 +17,15 @@ import {
   Building2,
   Lock,
   PlusCircle,
+  Trash2,
+  UploadCloud,
+  ShieldCheck,
 } from 'lucide-react';
 import { IQ09Snapshot } from '../types/iq09';
 import { WMSBatimentoItem, WMSBatimentoSnapshot } from '../types/wmsBatimento';
 import { SAP_CENTROS_CATALOG } from '../utils/sapFormatter';
+import { clearIQ09Snapshot } from '../services/iq09Service';
+import { clearWMSBatimentoSnapshot } from '../services/wmsBatimentoService';
 
 interface WMSStockExecutiveDashboardProps {
   iq09Snapshot: IQ09Snapshot | null;
@@ -507,6 +512,66 @@ export const WMSStockExecutiveDashboard: React.FC<WMSStockExecutiveDashboardProp
 
   return (
     <div className="space-y-5">
+      {/* 0. CABEÇALHO DO PAINEL EXECUTIVO (BASES ATIVAS + ATUALIZAR / LIMPAR SISTEMA) */}
+      <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200/90 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-900 to-[#002664] text-amber-300 flex items-center justify-center shadow-sm shrink-0">
+            <BarChart3 className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight flex flex-wrap items-center gap-2">
+              <span>Painel Executivo de Acuracidade & Gargalos (SAP IQ09 ⟷ Sênior WMS)</span>
+            </h2>
+            <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-600">
+              {wmsSnapshot && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200 font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  Batimento WMS: {wmsSnapshot.metadata.fileNames.join(' + ')} (
+                  {wmsSnapshot.metadata.totalItems.toLocaleString('pt-BR')} UIIs)
+                </span>
+              )}
+              {iq09Snapshot && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                  <Database className="w-3.5 h-3.5 text-emerald-600" />
+                  SAP IQ09: {iq09Snapshot.metadata.fileName} (
+                  {iq09Snapshot.metadata.totalItems.toLocaleString('pt-BR')} UIIs)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenWmsImporter}
+            className="px-3.5 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+          >
+            <UploadCloud className="w-4 h-4 text-indigo-200" />
+            <span>Importar / Atualizar Bases</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (
+                window.confirm(
+                  'Deseja limpar completamente as bases (SAP IQ09 e Batimento Sênior WMS) do sistema para submeter novas bases do zero?'
+                )
+              ) {
+                await clearIQ09Snapshot();
+                await clearWMSBatimentoSnapshot();
+              }
+            }}
+            className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Limpar todas as bases do sistema para novo cruzamento"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Limpar Bases</span>
+          </button>
+        </div>
+      </div>
+
       {/* 1. FAIXA EXECUTIVA: SAÚDE DO ESTOQUE & DIVISÃO DE RESPONSABILIDADE (ONDE AGIR) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
         {/* Card 1: Acuracidade Geral SAP x WMS */}

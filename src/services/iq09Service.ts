@@ -27,6 +27,8 @@ const IDB_STORE = 'iq09_snapshot_store';
 const IDB_KEY = 'active_snapshot';
 const LOCAL_META_KEY = 'migou_iq09_meta_v1';
 const LOCAL_ITEMS_FALLBACK_KEY = 'migou_iq09_items_fallback_v1';
+const IQ09_CLEARED_FLAG_KEY = 'migou_iq09_cleared_flag_v1';
+const IQ09_LAST_CLEARED_ID_KEY = 'migou_iq09_last_cleared_id_v1';
 
 // Prefixo especial para sincronizar snapshot compacto na nuvem (Google Sheets) sem misturar com TransferItem
 export const IQ09_CLOUD_ROW_PREFIX = '__IQ09_SYNC_';
@@ -135,9 +137,12 @@ export function getMemoryIQ09Snapshot(): IQ09Snapshot | null {
 export function getStoredIQ09Metadata(): IQ09SnapshotMetadata | null {
   if (typeof window === 'undefined') return null;
   try {
+    if (localStorage.getItem(IQ09_CLEARED_FLAG_KEY) === 'true') return null;
     const raw = localStorage.getItem(LOCAL_META_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as IQ09SnapshotMetadata;
+    const parsed = JSON.parse(raw) as IQ09SnapshotMetadata;
+    if (!parsed || parsed.sourceType === 'sample') return null;
+    return parsed;
   } catch (e) {
     return null;
   }
@@ -199,8 +204,19 @@ async function saveSnapshotToIndexedDB(snapshot: IQ09Snapshot): Promise<void> {
 }
 
 export async function loadIQ09SnapshotFromStorage(): Promise<IQ09Snapshot | null> {
-  if (memorySnapshot) return memorySnapshot;
   if (typeof window === 'undefined') return null;
+
+  try {
+    if (localStorage.getItem(IQ09_CLEARED_FLAG_KEY) === 'true') {
+      rebuildMemoryMaps(null);
+      notifySnapshotListeners();
+      return null;
+    }
+  } catch (e) {}
+
+  if (memorySnapshot && memorySnapshot.metadata.sourceType !== 'sample') {
+    return memorySnapshot;
+  }
 
   try {
     const db = await openIQ09Database();
@@ -219,6 +235,10 @@ export async function loadIQ09SnapshotFromStorage(): Promise<IQ09Snapshot | null
     });
 
     if (snap && snap.metadata && Array.isArray(snap.items)) {
+      if (snap.metadata.sourceType === 'sample') {
+        await clearIQ09Snapshot();
+        return null;
+      }
       rebuildMemoryMaps(snap);
       notifySnapshotListeners();
       return memorySnapshot;
@@ -231,6 +251,10 @@ export async function loadIQ09SnapshotFromStorage(): Promise<IQ09Snapshot | null
     if (raw) {
       const parsed = JSON.parse(raw) as IQ09Snapshot;
       if (parsed && parsed.metadata && Array.isArray(parsed.items)) {
+        if (parsed.metadata.sourceType === 'sample') {
+          await clearIQ09Snapshot();
+          return null;
+        }
         rebuildMemoryMaps(parsed);
         notifySnapshotListeners();
         return memorySnapshot;
@@ -238,29 +262,26 @@ export async function loadIQ09SnapshotFromStorage(): Promise<IQ09Snapshot | null
     }
   } catch (e) {}
 
-  // Inicializa amostra oficial caso nenhuma base tenha sido carregada ainda
-  const sampleItems = getOfficialSampleIQ09Items();
-  const sampleMeta = buildSnapshotMetadata(
-    sampleItems,
-    'Sistema MIGOU (Pré-Carregado)',
-    'IQ09_Amostra_Oficial_SAP.xlsx',
-    'sample'
-  );
-  const sampleSnap: IQ09Snapshot = { metadata: sampleMeta, items: sampleItems };
-  rebuildMemoryMaps(sampleSnap);
+  // Retorna null quando nenhuma base foi importada (nunca carrega amostras travadas)
+  rebuildMemoryMaps(null);
   notifySnapshotListeners();
-  return memorySnapshot;
+  return null;
 }
 
 /**
- * Limpa a base IQ09 local e na nuvem (caso o administrador queira zerar a fotografia)
+ * Limpa a base IQ09 local e na nuvem (zera 100% a fotografia sem recarregar amostras)
  */
 export async function clearIQ09Snapshot(): Promise<void> {
+  const prevId = memorySnapshot?.metadata?.snapshotId || '';
   rebuildMemoryMaps(null);
   notifySnapshotListeners();
 
   if (typeof window !== 'undefined') {
     try {
+      localStorage.setItem(IQ09_CLEARED_FLAG_KEY, 'true');
+      if (prevId) {
+        localStorage.setItem(IQ09_LAST_CLEARED_ID_KEY, prevId);
+      }
       localStorage.removeItem(LOCAL_META_KEY);
       localStorage.removeItem(LOCAL_ITEMS_FALLBACK_KEY);
     } catch (e) {}
@@ -269,7 +290,7 @@ export async function clearIQ09Snapshot(): Promise<void> {
       const db = await openIQ09Database();
       await new Promise<void>((resolve) => {
         const tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).delete(IDB_KEY);
+        tx.objectStore(IDB_STORE).clear();
         tx.oncomplete = () => {
           db.close();
           resolve();
@@ -410,6 +431,14 @@ async function syncSnapshotToCloud(snapshot: IQ09Snapshot): Promise<void> {
 export async function processIncomingCloudIQ09Rows(rawCloudRows: any[]): Promise<void> {
   if (!rawCloudRows || rawCloudRows.length === 0) return;
 
+  if (typeof window !== 'undefined') {
+    try {
+      if (localStorage.getItem(IQ09_CLEARED_FLAG_KEY) === 'true') {
+        return;
+      }
+    } catch (e) {}
+  }
+
   const sorted = [...rawCloudRows].sort((a, b) => {
     const idxA = Number(a.deposito_origem || a.depositoOrigem || 0);
     const idxB = Number(b.deposito_origem || b.depositoOrigem || 0);
@@ -419,6 +448,15 @@ export async function processIncomingCloudIQ09Rows(rawCloudRows: any[]): Promise
   const first = sorted[0];
   const incomingSnapshotId = String(first.serial || '');
   if (!incomingSnapshotId) return;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const lastClearedId = localStorage.getItem(IQ09_LAST_CLEARED_ID_KEY);
+      if (lastClearedId && lastClearedId === incomingSnapshotId) {
+        return;
+      }
+    } catch (e) {}
+  }
 
   // Se já temos exatamente este snapshot carregado em memória, não precisa reprocessar
   if (memorySnapshot && memorySnapshot.metadata.snapshotId === incomingSnapshotId) {
@@ -548,6 +586,13 @@ export async function saveAndActivateIQ09Snapshot(
     metadata,
     items: cleanItems,
   };
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(IQ09_CLEARED_FLAG_KEY);
+      localStorage.removeItem(IQ09_LAST_CLEARED_ID_KEY);
+    } catch (e) {}
+  }
 
   rebuildMemoryMaps(snapshot);
   await saveSnapshotToIndexedDB(snapshot);

@@ -3,7 +3,8 @@ import {
   Header 
 } from './components/Header';
 import {
-  Sidebar
+  Sidebar,
+  MainTabType,
 } from './components/Sidebar';
 import { 
   KPIDashboard 
@@ -30,6 +31,7 @@ import { LoginModal } from './components/LoginModal';
 import { SoundSelectorModal } from './components/SoundSelectorModal';
 import { DepositsGuideTab } from './components/DepositsGuideTab';
 import { IQ09ConsultTab } from './components/IQ09ConsultTab';
+import { WMSStockExecutiveDashboard } from './components/WMSStockExecutiveDashboard';
 import { MigouLogo } from './components/MigouLogo';
 import { Check, X } from 'lucide-react';
 import { IQ09Snapshot } from './types/iq09';
@@ -106,7 +108,7 @@ export default function App() {
   const titleIntervalRef = useRef<any>(null);
 
   // Modais Operacionais e Abas Principais
-  const [activeMainTab, setActiveMainTab] = useState<'operacao' | 'consulta_iq09' | 'guia_depositos'>('operacao');
+  const [activeMainTab, setActiveMainTab] = useState<MainTabType>('operacao');
   const [iq09Snapshot, setIq09Snapshot] = useState<IQ09Snapshot | null>(null);
   const [iq09CachedMeta, setIq09CachedMeta] = useState(() => getStoredIQ09Metadata());
   const [wmsSnapshot, setWmsSnapshot] = useState<WMSBatimentoSnapshot | null>(null);
@@ -351,13 +353,14 @@ export default function App() {
       if (snap) {
         setIq09Snapshot(snap);
         setIq09CachedMeta(snap.metadata);
+      } else {
+        setIq09Snapshot(null);
+        setIq09CachedMeta(null);
       }
     });
 
     loadWMSBatimentoFromStorage().then((wSnap) => {
-      if (wSnap) {
-        setWmsSnapshot(wSnap);
-      }
+      setWmsSnapshot(wSnap || null);
     });
 
     const unsubIQ09 = subscribeToIQ09Snapshot((snap) => {
@@ -623,6 +626,7 @@ export default function App() {
         totalPending={kpis.pendentes}
         totalErrors={kpis.divergencias}
         iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
+        wmsTotalItems={wmsSnapshot?.metadata.totalItems || 0}
         currentUser={currentUser}
         onLogout={handleLogout}
       />
@@ -663,6 +667,17 @@ export default function App() {
                 setIsNewModalOpen(true);
               }}
             />
+          ) : activeMainTab === 'dashboard_executivo' ? (
+            <WMSStockExecutiveDashboard
+              iq09Snapshot={iq09Snapshot}
+              wmsSnapshot={wmsSnapshot}
+              onOpenWmsImporter={() => setActiveMainTab('consulta_iq09')}
+              onOpenIq09Importer={() => setActiveMainTab('consulta_iq09')}
+              onOpenNewRequestWithPreset={(preset) => {
+                setNewRequestPreset(preset);
+                setIsNewModalOpen(true);
+              }}
+            />
           ) : activeMainTab === 'consulta_iq09' ? (
             <IQ09ConsultTab
               snapshot={iq09Snapshot}
@@ -676,6 +691,7 @@ export default function App() {
                 setIsNewModalOpen(true);
               }}
               onSwitchToQueueTab={() => setActiveMainTab('operacao')}
+              onOpenExecutiveDashboard={() => setActiveMainTab('dashboard_executivo')}
             />
           ) : (
             <>

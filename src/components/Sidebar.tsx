@@ -9,12 +9,13 @@ import {
   ShieldCheck,
   Truck,
   LogOut,
+  BarChart3,
 } from 'lucide-react';
 import { TeamRole } from '../types/transfer';
 import { AuthUser } from '../types/auth';
 import { MigouLogo } from './MigouLogo';
 
-export type MainTabType = 'operacao' | 'consulta_iq09' | 'guia_depositos';
+export type MainTabType = 'operacao' | 'consulta_iq09' | 'dashboard_executivo' | 'guia_depositos';
 
 interface SidebarProps {
   activeMainTab: MainTabType;
@@ -25,6 +26,7 @@ interface SidebarProps {
   totalPending: number;
   totalErrors: number;
   iq09TotalItems: number;
+  wmsTotalItems?: number;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
 }
@@ -38,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalPending,
   totalErrors,
   iq09TotalItems,
+  wmsTotalItems = 0,
   currentUser,
   onLogout,
 }) => {
@@ -123,6 +126,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span
                   className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"
                   title={`Base IQ09 ativa (${iq09TotalItems.toLocaleString('pt-BR')} UIIs)`}
+                />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectMainTab('dashboard_executivo')}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                activeMainTab === 'dashboard_executivo'
+                  ? 'bg-white text-[#002664] shadow-xs'
+                  : 'text-slate-200 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-2 truncate">
+                <BarChart3
+                  className={`w-4 h-4 shrink-0 ${
+                    activeMainTab === 'dashboard_executivo' ? 'text-indigo-600' : 'text-indigo-300'
+                  }`}
+                />
+                <span className="truncate">Dashboard Estoque</span>
+              </span>
+              {wmsTotalItems > 0 && (
+                <span
+                  className="w-2 h-2 rounded-full bg-indigo-400 shrink-0"
+                  title={`Batimento Sênior WMS ativo (${wmsTotalItems.toLocaleString('pt-BR')} seriais)`}
                 />
               )}
             </button>

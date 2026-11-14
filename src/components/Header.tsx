@@ -9,10 +9,12 @@ import {
   Compass,
   Database,
   ClipboardList,
+  BarChart3,
 } from 'lucide-react';
 import { AuthUser } from '../types/auth';
 import { PWAInstallButton } from './PWAInstallButton';
 import { AlertSoundType, ALERT_SOUND_OPTIONS, getSavedAlertSound } from '../utils/audioAlert';
+import { MainTabType } from './Sidebar';
 
 interface HeaderProps {
   onOpenNewModal: () => void;
@@ -29,8 +31,8 @@ interface HeaderProps {
   isCloudConnected: boolean;
   onOpenDatabaseDiagnostic?: () => void;
   currentUser?: AuthUser | null;
-  activeMainTab?: 'operacao' | 'consulta_iq09' | 'guia_depositos';
-  onSelectMainTab?: (tab: 'operacao' | 'consulta_iq09' | 'guia_depositos') => void;
+  activeMainTab?: MainTabType;
+  onSelectMainTab?: (tab: MainTabType) => void;
   iq09TotalItems?: number;
   iq09UpdatedAt?: string | null;
 }
@@ -69,6 +71,11 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Central 2º WMS: Base IQ09 SAP & Batimento Sênior WMS',
       subtitle: 'Trava Breaker B111 • Consulta Unificada SAP (UII) ⟷ Sênior WMS (Lote/Local)',
       icon: Database,
+    },
+    dashboard_executivo: {
+      title: 'Dashboard Executivo: Batimento SAP ⟷ Sênior WMS',
+      subtitle: 'Análise de Acuracidade • Matriz De-Para de Depósitos • Gargalos Operacionais e Planos de Ação',
+      icon: BarChart3,
     },
     guia_depositos: {
       title: 'Guia de Depósitos & Regras SAP',

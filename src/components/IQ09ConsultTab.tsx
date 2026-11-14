@@ -50,7 +50,6 @@ import {
   lookupSerialInWMSBatimento,
 } from '../services/wmsBatimentoService';
 import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
-import { WMSStockExecutiveDashboard } from './WMSStockExecutiveDashboard';
 import {
   SAP_CENTROS_CATALOG,
   SAP_DEPOSITOS_CATALOG,
@@ -73,6 +72,7 @@ interface IQ09ConsultTabProps {
     depositoDestino: string;
   }) => void;
   onSwitchToQueueTab: () => void;
+  onOpenExecutiveDashboard?: () => void;
 }
 
 const PAGE_SIZE = 100;
@@ -86,9 +86,10 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
   onImportBatchRequests,
   onOpenNewRequestWithPreset,
   onSwitchToQueueTab,
+  onOpenExecutiveDashboard,
 }) => {
-  // Sub-aba ativa: 'validador' (De-Para Mastigado p/ Buiatte) | 'explorador' (Consulta Geral IQ09) | 'dashboard' (Dashboard Executivo SAP x WMS)
-  const [subTab, setSubTab] = useState<'validador' | 'explorador' | 'dashboard'>('validador');
+  // Sub-aba ativa: 'validador' (De-Para Mastigado p/ Buiatte) | 'explorador' (Consulta Geral IQ09)
+  const [subTab, setSubTab] = useState<'validador' | 'explorador'>('validador');
 
   // Estados do Modal/Painel de Upload da IQ09
   const [isImporterOpen, setIsImporterOpen] = useState<boolean>(!snapshot);
@@ -715,23 +716,33 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
               <span>{metadata ? 'Atualizar Base IQ09 (.xlsx)' : 'Importar Base IQ09 (.xlsx)'}</span>
             </button>
 
-            {metadata && currentRole !== 'buiatte' && (
+            {(metadata || wmsMetadata) && (
               <button
                 type="button"
                 onClick={async () => {
                   if (
                     window.confirm(
-                      'Deseja remover a fotografia atual da IQ09 da memória e da nuvem?'
+                      'Deseja limpar completamente as bases (SAP IQ09 e Batimento Sênior WMS) do sistema para submeter novas bases do zero?'
                     )
                   ) {
                     await clearIQ09Snapshot();
+                    await clearWMSBatimentoSnapshot();
+                    setSearchQuery('');
+                    setBatchSerialsInput('');
+                    setSelectedExplorerSerials(new Set());
+                    setWmsStatusFilter('todos');
                     setIsImporterOpen(true);
+                    setIsWmsImporterOpen(false);
+                    setImportSuccessMsg(
+                      'Sistema 100% limpo! As bases anteriores foram removidas da memória e da nuvem. Você já pode submeter novas bases para realizar o cruzamento.'
+                    );
                   }
                 }}
-                className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-colors cursor-pointer"
-                title="Limpar base IQ09 atual"
+                className="px-3 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Limpar todas as bases do sistema (SAP IQ09 + Sênior WMS)"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span>Limpar Bases</span>
               </button>
             )}
           </div>
@@ -1203,9 +1214,9 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         )}
       </div>
 
-      {/* 2. SELETOR DE MODO OPERACIONAL DA IQ09 & DASHBOARD EXECUTIVO (RESPONSIVO) */}
+      {/* 2. SELETOR DE MODO OPERACIONAL DA IQ09 (RESPONSIVO) */}
       <div className="bg-white/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/70 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
+        <div className={`grid grid-cols-1 ${onOpenExecutiveDashboard ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-1.5`}>
           <button
             type="button"
             onClick={() => setSubTab('validador')}
@@ -1232,18 +1243,16 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
             <span className="truncate">2. Consulta Geral IQ09 ({(metadata?.totalItems || iq09Items.length).toLocaleString('pt-BR')} UIIs)</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setSubTab('dashboard')}
-            className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
-              subTab === 'dashboard'
-                ? 'bg-gradient-to-r from-indigo-900 to-[#002664] text-white shadow-sm'
-                : 'text-indigo-950 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-200/80'
-            }`}
-          >
-            <BarChart3 className={`w-4 h-4 shrink-0 ${subTab === 'dashboard' ? 'text-amber-300' : 'text-indigo-600'}`} />
-            <span className="truncate">3. Dashboard Executivo & Gargalos (SAP ⟷ WMS)</span>
-          </button>
+          {onOpenExecutiveDashboard && (
+            <button
+              type="button"
+              onClick={onOpenExecutiveDashboard}
+              className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer text-indigo-950 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-200/80"
+            >
+              <BarChart3 className="w-4 h-4 shrink-0 text-indigo-600" />
+              <span className="truncate">Ir p/ Dashboard Executivo (Menu Lateral) ➔</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1660,23 +1669,6 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
             </div>
           </div>
         </div>
-      ) : subTab === 'dashboard' ? (
-        /* ========================================================================== */
-        /* SUB-ABA 3: DASHBOARD EXECUTIVO & GARGALOS DE ESTOQUE (SAP ⟷ SÊNIOR WMS)   */
-        /* ========================================================================== */
-        <WMSStockExecutiveDashboard
-          iq09Snapshot={snapshot}
-          wmsSnapshot={wmsSnapshot}
-          onOpenWmsImporter={() => {
-            setIsWmsImporterOpen(true);
-            setIsImporterOpen(false);
-          }}
-          onOpenIq09Importer={() => {
-            setIsImporterOpen(true);
-            setIsWmsImporterOpen(false);
-          }}
-          onOpenNewRequestWithPreset={onOpenNewRequestWithPreset}
-        />
       ) : (
         /* ========================================================================== */
         /* SUB-ABA 2: EXPLORADOR & CONSULTA GERAL DA BASE IQ09 + SÊNIOR WMS           */

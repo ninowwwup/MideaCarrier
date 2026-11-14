@@ -16,6 +16,7 @@ const IDB_NAME = 'migou_wms_batimento_db_v1';
 const IDB_STORE = 'wms_batimento_store';
 const IDB_KEY = 'active_wms_snapshot';
 const LOCAL_META_KEY = 'migou_wms_batimento_meta_v1';
+const WMS_CLEARED_FLAG_KEY = 'migou_wms_batimento_cleared_flag_v1';
 
 // Cache O(1) em memória para busca instantânea (< 1ms mesmo para 75.000+ seriais)
 let memoryWmsSnapshot: WMSBatimentoSnapshot | null = null;
@@ -128,9 +129,12 @@ export function lookupSerialInWMSBatimento(serial: string): WMSBatimentoItem | u
 export function getStoredWMSBatimentoMetadata(): WMSBatimentoMetadata | null {
   if (typeof window === 'undefined') return null;
   try {
+    if (localStorage.getItem(WMS_CLEARED_FLAG_KEY) === 'true') return null;
     const raw = localStorage.getItem(LOCAL_META_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as WMSBatimentoMetadata;
+    const parsed = JSON.parse(raw) as WMSBatimentoMetadata;
+    if (!parsed || parsed.sourceType === 'sample') return null;
+    return parsed;
   } catch (e) {
     return null;
   }
@@ -159,13 +163,17 @@ function openWMSDatabase(): Promise<IDBDatabase> {
 }
 
 export async function saveWMSBatimentoToStorage(snapshot: WMSBatimentoSnapshot): Promise<void> {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(WMS_CLEARED_FLAG_KEY);
+      localStorage.setItem(LOCAL_META_KEY, JSON.stringify(snapshot.metadata));
+    } catch (e) {}
+  }
+
   rebuildWmsMemoryMap(snapshot);
   notifyWmsListeners();
 
   if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(LOCAL_META_KEY, JSON.stringify(snapshot.metadata));
-  } catch (e) {}
 
   try {
     const db = await openWMSDatabase();
@@ -200,8 +208,19 @@ export async function saveWMSBatimentoToStorage(snapshot: WMSBatimentoSnapshot):
 }
 
 export async function loadWMSBatimentoFromStorage(): Promise<WMSBatimentoSnapshot | null> {
-  if (memoryWmsSnapshot) return memoryWmsSnapshot;
   if (typeof window === 'undefined') return null;
+
+  try {
+    if (localStorage.getItem(WMS_CLEARED_FLAG_KEY) === 'true') {
+      rebuildWmsMemoryMap(null);
+      notifyWmsListeners();
+      return null;
+    }
+  } catch (e) {}
+
+  if (memoryWmsSnapshot && memoryWmsSnapshot.metadata.sourceType !== 'sample') {
+    return memoryWmsSnapshot;
+  }
 
   try {
     const db = await openWMSDatabase();
@@ -220,23 +239,20 @@ export async function loadWMSBatimentoFromStorage(): Promise<WMSBatimentoSnapsho
     });
 
     if (snap && snap.metadata && Array.isArray(snap.items) && snap.items.length > 0) {
+      if (snap.metadata.sourceType === 'sample') {
+        await clearWMSBatimentoSnapshot();
+        return null;
+      }
       rebuildWmsMemoryMap(snap);
       notifyWmsListeners();
       return memoryWmsSnapshot;
     }
   } catch (e) {}
 
-  // Se ainda não houver base salva no navegador, inicializa com a Amostra Oficial Realista do Batimento
-  const sampleItems = getOfficialSampleWMSBatimentoItems();
-  const sampleSnap = buildWMSSnapshotFromItems(
-    sampleItems,
-    'Batimento_Estoque_Amostra_Oficial.xlsx',
-    'Sistema MIGOU (Pré-Carregado)',
-    'sample'
-  );
-  rebuildWmsMemoryMap(sampleSnap);
+  // Retorna null quando nenhuma base foi importada (nunca trava em amostras pré-carregadas)
+  rebuildWmsMemoryMap(null);
   notifyWmsListeners();
-  return sampleSnap;
+  return null;
 }
 
 export async function clearWMSBatimentoSnapshot(): Promise<void> {
@@ -245,6 +261,7 @@ export async function clearWMSBatimentoSnapshot(): Promise<void> {
 
   if (typeof window !== 'undefined') {
     try {
+      localStorage.setItem(WMS_CLEARED_FLAG_KEY, 'true');
       localStorage.removeItem(LOCAL_META_KEY);
     } catch (e) {}
 
@@ -252,7 +269,7 @@ export async function clearWMSBatimentoSnapshot(): Promise<void> {
       const db = await openWMSDatabase();
       await new Promise<void>((resolve) => {
         const tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).delete(IDB_KEY);
+        tx.objectStore(IDB_STORE).clear();
         tx.oncomplete = () => {
           db.close();
           resolve();
@@ -262,6 +279,14 @@ export async function clearWMSBatimentoSnapshot(): Promise<void> {
           resolve();
         };
       });
+    } catch (e) {}
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('migou_sync_realtime');
+        bc.postMessage({ type: 'WMS_BATIMENTO_CLEARED', timestamp: Date.now() });
+        bc.close();
+      }
     } catch (e) {}
   }
 }

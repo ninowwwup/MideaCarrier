@@ -14,6 +14,7 @@ import {
   processIncomingCloudIQ09Rows,
   loadIQ09SnapshotFromStorage,
 } from './iq09Service';
+import { loadWMSBatimentoFromStorage } from './wmsBatimentoService';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
@@ -674,6 +675,10 @@ export function subscribeToRealtimeTransfers(
         }
         if (ev?.data?.type === 'IQ09_SNAPSHOT_UPDATED' || ev?.data?.type === 'IQ09_SNAPSHOT_CLEARED') {
           loadIQ09SnapshotFromStorage().catch(() => {});
+          return;
+        }
+        if (ev?.data?.type === 'WMS_BATIMENTO_UPDATED' || ev?.data?.type === 'WMS_BATIMENTO_CLEARED') {
+          loadWMSBatimentoFromStorage().catch(() => {});
           return;
         }
         if (ev?.data?.type === 'ITEMS_DELETED' && Array.isArray(ev.data.remainingItems)) {
