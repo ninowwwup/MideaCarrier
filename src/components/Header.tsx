@@ -62,12 +62,12 @@ export const Header: React.FC<HeaderProps> = ({
   const moduleMeta = {
     operacao: {
       title: 'Fila de Solicitações & Operação SAP',
-      subtitle: 'Movimentação MIGO 311 • Batimento Automático IQ09',
+      subtitle: 'Movimentação MIGO 311 • Batimento Automático IQ09 & Trava Sênior WMS',
       icon: ClipboardList,
     },
     consulta_iq09: {
-      title: 'Central Base IQ09 & Validador De-Para',
-      subtitle: 'Consulta Instantânea SAP (UII = Serial)',
+      title: 'Central 2º WMS: Base IQ09 SAP & Batimento Sênior WMS',
+      subtitle: 'Trava Breaker B111 • Consulta Unificada SAP (UII) ⟷ Sênior WMS (Lote/Local)',
       icon: Database,
     },
     guia_depositos: {
@@ -120,6 +120,16 @@ export const Header: React.FC<HeaderProps> = ({
                     <span>Importar IQ09</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/25 hover:bg-indigo-500/35 border border-indigo-300/40 text-indigo-100 text-[11px] font-bold transition-colors cursor-pointer shrink-0"
+                  title="Trava Breaker Sênior WMS x SAP ativa — Clique para abrir a Central 2º WMS e importar o Batimento de Estoque"
+                >
+                  <ShieldCheck className="w-3 h-3 text-indigo-300" />
+                  <span>Trava Sênior WMS</span>
+                </button>
               </div>
               <p className="text-[11px] text-cyan-100/75 font-medium truncate">
                 {moduleMeta.subtitle}

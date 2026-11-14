@@ -1871,7 +1871,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                                 </span>
                               )}
 
-                              {iqAudit?.wmsVerdict && iqAudit.wmsVerdict.code !== 'NO_WMS_BASE' && (
+                              {iqAudit?.wmsVerdict && iqAudit.wmsVerdict.code !== 'NO_WMS_BASE_LOADED' && (
                                 <button
                                   type="button"
                                   onClick={() => {

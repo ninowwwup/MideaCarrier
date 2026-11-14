@@ -357,10 +357,10 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
           (item.equipamento && item.equipamento.includes(q)) ||
           (item.modificadoPor && item.modificadoPor.includes(q)) ||
           (wmsItem &&
-            (wmsItem.localWms.toUpperCase().includes(q) ||
-              wmsItem.depositoWms.toUpperCase().includes(q) ||
-              wmsItem.loteWms.toUpperCase().includes(q) ||
-              wmsItem.analise.toUpperCase().includes(q)));
+            ((wmsItem.localWms || '').toUpperCase().includes(q) ||
+              (wmsItem.depositoWms || '').toUpperCase().includes(q) ||
+              (wmsItem.lote || wmsItem.loteWms || '').toUpperCase().includes(q) ||
+              (wmsItem.analise || '').toUpperCase().includes(q)));
         if (!match) return false;
       }
 
@@ -643,7 +643,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100 text-indigo-950 border border-indigo-300 text-xs font-extrabold">
                   <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
                   <span>
-                    🛡️ Trava Sênior WMS Ativa ({wmsMetadata.totalSerials.toLocaleString('pt-BR')} seriais)
+                    🛡️ Trava Sênior WMS Ativa ({(wmsMetadata.totalSerials ?? wmsMetadata.totalItems ?? 0).toLocaleString('pt-BR')} seriais)
                   </span>
                 </span>
               ) : (
@@ -668,9 +668,11 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   <>
                     {' '}• <strong>Sênior WMS / Batimento:</strong>{' '}
                     <code className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-900 font-mono text-[11px]">
-                      {wmsMetadata.fileNames.join(' + ')}
+                      {Array.isArray(wmsMetadata.fileNames) && wmsMetadata.fileNames.length > 0
+                        ? wmsMetadata.fileNames.join(' + ')
+                        : wmsMetadata.fileName || 'Batimento_Estoque.xlsx'}
                     </code>{' '}
-                    ({wmsMetadata.b111InFaltaWmsCount.toLocaleString('pt-BR')} B111 em FALTA travados)
+                    ({(wmsMetadata.b111InFaltaWmsCount ?? wmsMetadata.b111FaltaDesconsiderarCount ?? 0).toLocaleString('pt-BR')} B111 em FALTA travados)
                   </>
                 )}
               </p>
@@ -761,7 +763,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 {iq09Stats.total.toLocaleString('pt-BR')}
               </div>
               <div className="text-[11px] text-slate-500">
-                em {Object.keys(metadata.centrosCount).length} centro(s) SAP
+                em {Object.keys(metadata.centrosCount || {}).length} centro(s) SAP
               </div>
             </div>
 
@@ -833,7 +835,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 ✅ Alinhados (SAP = WMS)
               </div>
               <div className="text-lg font-black text-emerald-700 tabular-nums">
-                {wmsMetadata.okCount.toLocaleString('pt-BR')}
+                {(wmsMetadata.okCount ?? 0).toLocaleString('pt-BR')}
               </div>
               <div className="text-[10px] text-emerald-800">Análise: OK</div>
             </button>
@@ -857,10 +859,13 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 🛑 Trava B111 (Falta WMS / Só SAP)
               </div>
               <div className="text-lg font-black text-red-700 tabular-nums">
-                {(wmsMetadata.b111InFaltaWmsCount + wmsMetadata.apenasNoSapCount).toLocaleString('pt-BR')}
+                {(
+                  (wmsMetadata.b111InFaltaWmsCount ?? wmsMetadata.b111FaltaDesconsiderarCount ?? 0) +
+                  (wmsMetadata.apenasNoSapCount ?? 0)
+                ).toLocaleString('pt-BR')}
               </div>
               <div className="text-[10px] text-red-800">
-                {wmsMetadata.b111InFaltaWmsCount} em FALTA • {wmsMetadata.apenasNoSapCount} só SAP
+                {wmsMetadata.b111InFaltaWmsCount ?? wmsMetadata.b111FaltaDesconsiderarCount ?? 0} em FALTA • {wmsMetadata.apenasNoSapCount ?? 0} só SAP
               </div>
             </button>
 
@@ -881,7 +886,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 ⚠️ Mover no SAP p/ B111
               </div>
               <div className="text-lg font-black text-amber-700 tabular-nums">
-                {wmsMetadata.moverParaB111Count.toLocaleString('pt-BR')}
+                {(wmsMetadata.moverParaB111Count ?? 0).toLocaleString('pt-BR')}
               </div>
               <div className="text-[10px] text-amber-800">
                 Em FALTA no WMS mas Livre no SAP
@@ -907,7 +912,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 🔎 B111 c/ Saldo Físico WMS
               </div>
               <div className="text-lg font-black text-blue-700 tabular-nums">
-                {wmsMetadata.validarFisicoCount.toLocaleString('pt-BR')}
+                {(wmsMetadata.validarFisicoCount ?? 0).toLocaleString('pt-BR')}
               </div>
               <div className="text-[10px] text-blue-800">
                 Liberados p/ retornar ao Livre
@@ -933,7 +938,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                 🟠 Divergência no Sênior WMS
               </div>
               <div className="text-lg font-black text-indigo-700 tabular-nums">
-                {wmsMetadata.divergenciaWmsCount.toLocaleString('pt-BR')}
+                {(wmsMetadata.divergenciaWmsCount ?? wmsMetadata.divergenciasWmsCount ?? 0).toLocaleString('pt-BR')}
               </div>
               <div className="text-[10px] text-indigo-800">
                 Desbloquear Lote / Mover Dep. WMS
@@ -1697,7 +1702,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                   <option value="todos">Centro SAP: Todos ({allIQ09Centros.length})</option>
                   {allIQ09Centros.map((c) => (
                     <option key={c} value={c}>
-                      Centro {c} ({(metadata?.centrosCount[c] || 0).toLocaleString('pt-BR')})
+                      Centro {c} ({(metadata?.centrosCount?.[c] || 0).toLocaleString('pt-BR')})
                     </option>
                   ))}
                 </select>
@@ -1715,7 +1720,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     const dInfo = SAP_DEPOSITOS_CATALOG[d];
                     return (
                       <option key={d} value={d}>
-                        {d} {dInfo ? `— ${dInfo.shortTitle}` : ''} ({(metadata?.depositosCount[d] || 0).toLocaleString('pt-BR')})
+                        {d} {dInfo ? `— ${dInfo.shortTitle}` : ''} ({(metadata?.depositosCount?.[d] || 0).toLocaleString('pt-BR')})
                       </option>
                     );
                   })}

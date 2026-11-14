@@ -23,8 +23,11 @@ export interface BlockedTransferAttempt {
 
 interface WMSBreakerWarningModalProps {
   isOpen: boolean;
-  blockedItems: BlockedTransferAttempt[];
-  validItemsCount: number;
+  blockedItems?: BlockedTransferAttempt[];
+  blockedAttempts?: BlockedTransferAttempt[];
+  validItemsCount?: number;
+  validSerialsCount?: number;
+  totalSerialsCount?: number;
   isAdminRole?: boolean;
   onCloseAndFix: () => void;
   /** Permite ao operador remover automaticamente os seriais recusados e prosseguir apenas com os seriais 100% validados no Sênior WMS */
@@ -42,14 +45,19 @@ interface WMSBreakerWarningModalProps {
 
 export const WMSBreakerWarningModal: React.FC<WMSBreakerWarningModalProps> = ({
   isOpen,
-  blockedItems,
-  validItemsCount,
+  blockedItems: rawBlockedItems,
+  blockedAttempts,
+  validItemsCount: rawValidItemsCount,
+  validSerialsCount,
   isAdminRole = false,
   onCloseAndFix,
   onProceedOnlyWithValid,
   onApplySuggestedRoute,
   onAdminForceOverride,
 }) => {
+  const blockedItems = rawBlockedItems || blockedAttempts || [];
+  const validItemsCount = rawValidItemsCount ?? validSerialsCount ?? 0;
+
   if (!isOpen || blockedItems.length === 0) return null;
 
   const firstSuggestion =

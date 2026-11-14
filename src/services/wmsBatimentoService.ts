@@ -22,12 +22,67 @@ let memoryWmsSnapshot: WMSBatimentoSnapshot | null = null;
 let memoryWmsSerialMap: Map<string, WMSBatimentoItem> = new Map();
 const wmsListeners = new Set<(snapshot: WMSBatimentoSnapshot | null) => void>();
 
+function normalizeWmsSnapshot(snapshot: WMSBatimentoSnapshot | null): WMSBatimentoSnapshot | null {
+  if (!snapshot) return null;
+  const items = Array.isArray(snapshot.items)
+    ? snapshot.items.map((it) => ({
+        ...it,
+        lote: it.lote || it.loteWms || '',
+        loteWms: it.loteWms || it.lote || '',
+        localWms: it.localWms || '',
+        depositoWms: it.depositoWms || '',
+        analise: it.analise || 'OK',
+      }))
+    : [];
+
+  const meta = snapshot.metadata || ({} as WMSBatimentoMetadata);
+  const fileName =
+    meta.fileName ||
+    (Array.isArray(meta.fileNames) && meta.fileNames.length > 0
+      ? meta.fileNames.join(' + ')
+      : 'Batimento_Estoque.xlsx');
+  const fileNames =
+    Array.isArray(meta.fileNames) && meta.fileNames.length > 0
+      ? meta.fileNames
+      : fileName.split(' + ').filter(Boolean);
+  const totalItems = meta.totalItems ?? meta.totalSerials ?? items.length;
+  const b111Falta = meta.b111FaltaDesconsiderarCount ?? meta.b111InFaltaWmsCount ?? 0;
+  const divWms = meta.divergenciasWmsCount ?? meta.divergenciaWmsCount ?? 0;
+
+  return {
+    metadata: {
+      ...meta,
+      snapshotId: meta.snapshotId || `WMS-BAT-${Date.now()}`,
+      updatedAt: meta.updatedAt || new Date().toISOString(),
+      updatedBy: meta.updatedBy || 'Supervisor WMS/SAP',
+      fileName,
+      fileNames,
+      totalItems,
+      totalSerials: totalItems,
+      okCount: meta.okCount ?? 0,
+      b111FaltaDesconsiderarCount: b111Falta,
+      b111InFaltaWmsCount: b111Falta,
+      moverParaB111Count: meta.moverParaB111Count ?? 0,
+      apenasNoSapCount: meta.apenasNoSapCount ?? 0,
+      apenasNoWmsCount: meta.apenasNoWmsCount ?? 0,
+      divergenciasWmsCount: divWms,
+      divergenciaWmsCount: divWms,
+      validarFisicoCount: meta.validarFisicoCount ?? 0,
+      analiseBreakdown: meta.analiseBreakdown || {},
+      depositosWmsCount: meta.depositosWmsCount || {},
+      sourceType: meta.sourceType || 'batimento_xlsx',
+    },
+    items,
+  };
+}
+
 function rebuildWmsMemoryMap(snapshot: WMSBatimentoSnapshot | null) {
-  memoryWmsSnapshot = snapshot;
+  const normalized = normalizeWmsSnapshot(snapshot);
+  memoryWmsSnapshot = normalized;
   memoryWmsSerialMap = new Map();
 
-  if (snapshot && Array.isArray(snapshot.items)) {
-    for (const item of snapshot.items) {
+  if (normalized && Array.isArray(normalized.items)) {
+    for (const item of normalized.items) {
       if (item.serial) {
         memoryWmsSerialMap.set(item.serial.trim().toUpperCase(), item);
       }
@@ -167,7 +222,7 @@ export async function loadWMSBatimentoFromStorage(): Promise<WMSBatimentoSnapsho
     if (snap && snap.metadata && Array.isArray(snap.items) && snap.items.length > 0) {
       rebuildWmsMemoryMap(snap);
       notifyWmsListeners();
-      return snap;
+      return memoryWmsSnapshot;
     }
   } catch (e) {}
 
@@ -223,9 +278,11 @@ export function buildWMSSnapshotFromItems(
     if (!it.serial) continue;
     const key = it.serial.trim().toUpperCase();
     const existing = map.get(key);
+    const loteVal = it.lote || it.loteWms || '';
     if (!existing) {
-      map.set(key, { ...it, serial: key });
+      map.set(key, { ...it, serial: key, lote: loteVal, loteWms: loteVal });
     } else {
+      const mergedLote = loteVal || existing.lote || existing.loteWms || '';
       map.set(key, {
         ...existing,
         ...it,
@@ -237,7 +294,8 @@ export function buildWMSSnapshotFromItems(
         centroWms: it.centroWms || existing.centroWms,
         depositoWms: it.depositoWms || existing.depositoWms,
         localWms: it.localWms || existing.localWms,
-        lote: it.lote || existing.lote,
+        lote: mergedLote,
+        loteWms: mergedLote,
         analise: it.analise || existing.analise,
       });
     }
@@ -280,18 +338,23 @@ export function buildWMSSnapshotFromItems(
     }
   }
 
+  const cleanFileName = fileName || 'Batimento_Estoque.xlsx';
   const metadata: WMSBatimentoMetadata = {
     snapshotId: `WMS-BAT-${Date.now()}`,
     updatedAt: new Date().toISOString(),
     updatedBy: updatedBy || 'Supervisor WMS/SAP',
-    fileName: fileName || 'Batimento_Estoque.xlsx',
+    fileName: cleanFileName,
+    fileNames: cleanFileName.split(' + ').filter(Boolean),
     totalItems: deduped.length,
+    totalSerials: deduped.length,
     okCount,
     b111FaltaDesconsiderarCount,
+    b111InFaltaWmsCount: b111FaltaDesconsiderarCount,
     moverParaB111Count,
     apenasNoSapCount,
     apenasNoWmsCount,
     divergenciasWmsCount,
+    divergenciaWmsCount: divergenciasWmsCount,
     validarFisicoCount,
     analiseBreakdown,
     depositosWmsCount,
@@ -310,11 +373,41 @@ export function buildWMSSnapshotFromItems(
  */
 export async function saveAndActivateWMSBatimento(
   items: WMSBatimentoItem[],
-  fileName: string,
-  updatedBy: string,
-  sourceType: WMSBatimentoMetadata['sourceType'] = 'batimento_xlsx',
-  alsoSyncIQ09IfEmpty = true
+  fileNameOrOptions:
+    | string
+    | {
+        updatedBy?: string;
+        fileName?: string;
+        fileNames?: string[];
+        sourceMode?: WMSBatimentoMetadata['sourceType'];
+        sourceType?: WMSBatimentoMetadata['sourceType'];
+        alsoSyncIQ09IfEmpty?: boolean;
+      },
+  updatedByArg?: string,
+  sourceTypeArg: WMSBatimentoMetadata['sourceType'] = 'batimento_xlsx',
+  alsoSyncIQ09IfEmptyArg = true
 ): Promise<WMSBatimentoSnapshot> {
+  let fileName = 'Batimento_Estoque.xlsx';
+  let updatedBy = 'Supervisor WMS/SAP';
+  let sourceType: WMSBatimentoMetadata['sourceType'] = 'batimento_xlsx';
+  let alsoSyncIQ09IfEmpty = true;
+
+  if (typeof fileNameOrOptions === 'string') {
+    fileName = fileNameOrOptions;
+    updatedBy = updatedByArg || 'Supervisor WMS/SAP';
+    sourceType = sourceTypeArg;
+    alsoSyncIQ09IfEmpty = alsoSyncIQ09IfEmptyArg;
+  } else if (fileNameOrOptions && typeof fileNameOrOptions === 'object') {
+    fileName =
+      fileNameOrOptions.fileName ||
+      (fileNameOrOptions.fileNames && fileNameOrOptions.fileNames.join(' + ')) ||
+      'Batimento_Estoque.xlsx';
+    updatedBy = fileNameOrOptions.updatedBy || 'Supervisor WMS/SAP';
+    sourceType =
+      fileNameOrOptions.sourceType || fileNameOrOptions.sourceMode || 'batimento_xlsx';
+    alsoSyncIQ09IfEmpty = fileNameOrOptions.alsoSyncIQ09IfEmpty ?? true;
+  }
+
   const snapshot = buildWMSSnapshotFromItems(items, fileName, updatedBy, sourceType);
   await saveWMSBatimentoToStorage(snapshot);
 
@@ -339,12 +432,11 @@ export async function saveAndActivateWMSBatimento(
       }
     }
     if (extractedIq09.length > 0) {
-      await saveAndActivateIQ09Snapshot(
-        extractedIq09,
-        `${fileName} (Espelho SAP)`,
+      await saveAndActivateIQ09Snapshot(extractedIq09, {
         updatedBy,
-        'xlsx_upload'
-      );
+        fileName: `${fileName} (Espelho SAP)`,
+        sourceType: 'xlsx_upload',
+      });
     }
   }
 
@@ -640,11 +732,17 @@ function parseWmsTipoRecebimento(rawTipo: string): { centro: string; deposito: s
  * Identifica o tipo de matriz (1: Planilha Consolidada de Batimento, 2: Gerenciador de Informações Específicas, 3: Estoque Local por Lote)
  * e converte/cruza automaticamente!
  */
-export async function parseAndMergeWMSFiles(files: File[]): Promise<{
+export async function parseAndMergeWMSFiles(
+  files: File[],
+  _optionalIq09Lookup?: (serial: string) => IQ09Item | undefined
+): Promise<{
   items: WMSBatimentoItem[];
   detectedType: WMSBatimentoMetadata['sourceType'];
+  sourceMode: WMSBatimentoMetadata['sourceType'];
+  fileNames: string[];
   summaryLabel: string;
 }> {
+  const uploadedFileNames = files.map((f) => f.name);
   let batimentoItems: WMSBatimentoItem[] = [];
   // Mapa de Lote -> Dados de Endereço/Depósito do "Estoque Local por Lote"
   const loteToLocationMap = new Map<
@@ -872,6 +970,8 @@ export async function parseAndMergeWMSFiles(files: File[]): Promise<{
     return {
       items: batimentoItems,
       detectedType: 'batimento_xlsx',
+      sourceMode: 'batimento_xlsx',
+      fileNames: uploadedFileNames,
       summaryLabel: `${batimentoItems.length.toLocaleString('pt-BR')} séries carregadas da Planilha de Batimento SAP x WMS`,
     };
   }
@@ -991,6 +1091,8 @@ export async function parseAndMergeWMSFiles(files: File[]): Promise<{
     return {
       items: mergedList,
       detectedType: 'wms_raw_merge',
+      sourceMode: 'wms_raw_merge',
+      fileNames: uploadedFileNames,
       summaryLabel: `${mergedList.length.toLocaleString('pt-BR')} séries cruzadas automaticamente (Sênior WMS ⟷ SAP IQ09)`,
     };
   }
@@ -1014,7 +1116,24 @@ export function evaluateWMSBreakerForTransfer(params: {
   centro?: string;
   depositoOrigem?: string;
   depositoDestino: string;
+  iq09Item?: IQ09Item;
 }): WMSBreakerVerdict {
+  const raw = evaluateWMSBreakerForTransferInternal(params);
+  return {
+    ...raw,
+    allowed: raw.isAllowed,
+    whyItIsInvalid: raw.whyExplanation,
+  };
+}
+
+function evaluateWMSBreakerForTransferInternal(params: {
+  serial: string;
+  material?: string;
+  centro?: string;
+  depositoOrigem?: string;
+  depositoDestino: string;
+  iq09Item?: IQ09Item;
+}): Omit<WMSBreakerVerdict, 'allowed' | 'whyItIsInvalid'> {
   const cleanSerial = (params.serial || '').trim().toUpperCase();
   const reqCentro = (params.centro || '').trim().toUpperCase();
   const reqOrigem = (params.depositoOrigem || '').trim().toUpperCase();
@@ -1022,7 +1141,7 @@ export function evaluateWMSBreakerForTransfer(params: {
 
   const hasBase = hasActiveWMSBatimentoBase();
   const wms = lookupSerialInWMSBatimento(cleanSerial);
-  const iq09 = lookupSerialInIQ09(cleanSerial);
+  const iq09 = params.iq09Item || lookupSerialInIQ09(cleanSerial);
 
   if (!hasBase) {
     return {

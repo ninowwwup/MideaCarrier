@@ -39,13 +39,48 @@ let memorySerialMap: Map<string, IQ09Item> = new Map();
 let memoryEquipmentMap: Map<string, IQ09Item> = new Map();
 const snapshotListeners = new Set<(snapshot: IQ09Snapshot | null) => void>();
 
+function normalizeIQ09Snapshot(snapshot: IQ09Snapshot | null): IQ09Snapshot | null {
+  if (!snapshot || !Array.isArray(snapshot.items)) return null;
+  const meta = snapshot.metadata || ({} as IQ09SnapshotMetadata);
+
+  const hasValidMaps =
+    meta.centrosCount &&
+    typeof meta.centrosCount === 'object' &&
+    meta.depositosCount &&
+    typeof meta.depositosCount === 'object' &&
+    Object.keys(meta.centrosCount).length > 0;
+
+  const rebuiltMeta = hasValidMaps
+    ? {
+        ...meta,
+        totalItems: meta.totalItems ?? snapshot.items.length,
+        uniqueMaterials: meta.uniqueMaterials ?? 0,
+        centrosCount: meta.centrosCount || {},
+        depositosCount: meta.depositosCount || {},
+      }
+    : buildSnapshotMetadata(
+        snapshot.items,
+        meta.updatedBy || 'Time Midea (SAP)',
+        meta.fileName || 'Base_IQ09_SAP.xlsx',
+        meta.sourceType || 'xlsx_upload',
+        meta.snapshotId,
+        meta.updatedAt
+      );
+
+  return {
+    metadata: rebuiltMeta,
+    items: snapshot.items,
+  };
+}
+
 function rebuildMemoryMaps(snapshot: IQ09Snapshot | null) {
-  memorySnapshot = snapshot;
+  const normalized = normalizeIQ09Snapshot(snapshot);
+  memorySnapshot = normalized;
   memorySerialMap = new Map();
   memoryEquipmentMap = new Map();
 
-  if (snapshot && Array.isArray(snapshot.items)) {
-    for (const item of snapshot.items) {
+  if (normalized && Array.isArray(normalized.items)) {
+    for (const item of normalized.items) {
       if (item.serial) {
         memorySerialMap.set(item.serial.toUpperCase(), item);
       }
@@ -186,7 +221,7 @@ export async function loadIQ09SnapshotFromStorage(): Promise<IQ09Snapshot | null
     if (snap && snap.metadata && Array.isArray(snap.items)) {
       rebuildMemoryMaps(snap);
       notifySnapshotListeners();
-      return snap;
+      return memorySnapshot;
     }
   } catch (e) {}
 
@@ -198,12 +233,23 @@ export async function loadIQ09SnapshotFromStorage(): Promise<IQ09Snapshot | null
       if (parsed && parsed.metadata && Array.isArray(parsed.items)) {
         rebuildMemoryMaps(parsed);
         notifySnapshotListeners();
-        return parsed;
+        return memorySnapshot;
       }
     }
   } catch (e) {}
 
-  return null;
+  // Inicializa amostra oficial caso nenhuma base tenha sido carregada ainda
+  const sampleItems = getOfficialSampleIQ09Items();
+  const sampleMeta = buildSnapshotMetadata(
+    sampleItems,
+    'Sistema MIGOU (Pré-Carregado)',
+    'IQ09_Amostra_Oficial_SAP.xlsx',
+    'sample'
+  );
+  const sampleSnap: IQ09Snapshot = { metadata: sampleMeta, items: sampleItems };
+  rebuildMemoryMaps(sampleSnap);
+  notifySnapshotListeners();
+  return memorySnapshot;
 }
 
 /**
@@ -1220,6 +1266,7 @@ export function validateSerialsBatchAgainstIQ09(
         status: 'bloqueado_wms_batimento',
         iq09Item: iq09,
         wmsVerdict,
+        wmsBreakerBlocked: true,
         suggestedMaterial: iq09.material,
         suggestedCentro: iq09.centro,
         suggestedOrigem: iq09.deposito,

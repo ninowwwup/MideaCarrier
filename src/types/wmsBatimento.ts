@@ -30,6 +30,8 @@ export interface WMSBatimentoItem {
   localAtivo?: string;
   /** Coluna U (Batimento) / "Lote" (WMS): Número do Lote no Sênior WMS (ex: '3048416') */
   lote?: string;
+  /** Alias para compatibilidade na UI */
+  loteWms?: string;
   /** Coluna V (Batimento): Lote Liberado no Sênior WMS ('S' | 'N') */
   loteLiberado?: string;
   /** Coluna W (Batimento): Status IQC (ex: 'B136', 'B149', 'B110') */
@@ -71,13 +73,17 @@ export interface WMSBatimentoMetadata {
   updatedAt: string; // ISO string
   updatedBy: string;
   fileName: string;
+  fileNames: string[];
   totalItems: number;
+  totalSerials: number;
   okCount: number;
   b111FaltaDesconsiderarCount: number;
+  b111InFaltaWmsCount: number;
   moverParaB111Count: number;
   apenasNoSapCount: number;
   apenasNoWmsCount: number;
   divergenciasWmsCount: number;
+  divergenciaWmsCount: number;
   validarFisicoCount: number;
   analiseBreakdown: Record<string, number>;
   depositosWmsCount: Record<string, number>;
@@ -109,6 +115,8 @@ export interface WMSBreakerVerdict {
   foundInWmsBase: boolean;
   /** Se true, a solicitação é permitida. Se false, o Breaker bloqueia a solicitação! */
   isAllowed: boolean;
+  /** Alias para compatibilidade nos modais */
+  allowed: boolean;
   severity: 'approved' | 'warning_physical_check' | 'blocked_breaker' | 'not_in_batimento' | 'no_base';
   code: WMSBreakerCode;
   /** Selo curto para exibição em tabelas e badges (ex: '✅ WMS OK: B110', '🛑 WMS: Em FALTA') */
@@ -117,6 +125,8 @@ export interface WMSBreakerVerdict {
   title: string;
   /** Explicação clara do porquê a solicitação é indevida (ou válida), citando dados reais do Sênior WMS */
   whyExplanation: string;
+  /** Alias para compatibilidade nos modais */
+  whyItIsInvalid: string;
   /** Plano de ação prático e educativo para o Time Buiatte atuar (Sênior WMS / Físico / Alinhamento com Gestores) */
   buiatteActionPlan: string[];
   /** Quem deve agir segundo o Batimento ('WMS', 'Físico', 'SAP', 'Gestão') */

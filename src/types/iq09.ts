@@ -57,6 +57,7 @@ export interface IQ09BatchValidationItem {
   status: IQ09CrossCheckStatus;
   iq09Item?: IQ09Item;
   wmsVerdict?: WMSBreakerVerdict;
+  wmsBreakerBlocked?: boolean;
   existingQueueItem?: {
     solicitationCode: string;
     status: string;

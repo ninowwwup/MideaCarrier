@@ -1065,8 +1065,8 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
           }
           onApplySuggestedRoute={(suggested) => {
             if (suggested.centro) setCentro(suggested.centro);
-            setDepositoOrigem(suggested.depositoOrigem);
-            setDepositoDestino(suggested.depositoDestino);
+            if (suggested.depositoOrigem) setDepositoOrigem(suggested.depositoOrigem);
+            if (suggested.depositoDestino) setDepositoDestino(suggested.depositoDestino);
             setIsWmsBreakerWarningOpen(false);
           }}
           onAdminForceOverride={
