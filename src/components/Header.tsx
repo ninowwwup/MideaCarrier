@@ -10,6 +10,7 @@ import {
   Database,
   ClipboardList,
   BarChart3,
+  Menu,
 } from 'lucide-react';
 import { AuthUser } from '../types/auth';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -35,6 +36,7 @@ interface HeaderProps {
   onSelectMainTab?: (tab: MainTabType) => void;
   iq09TotalItems?: number;
   iq09UpdatedAt?: string | null;
+  onOpenMobileDrawer?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectMainTab,
   iq09TotalItems = 0,
   iq09UpdatedAt = null,
+  onOpenMobileDrawer,
 }) => {
   const activeSound =
     ALERT_SOUND_OPTIONS.find((s) => s.id === (currentAlertSound || getSavedAlertSound())) ||
@@ -87,15 +90,27 @@ export const Header: React.FC<HeaderProps> = ({
   const ActiveModuleIcon = moduleMeta.icon;
 
   return (
-    <header className="bg-[#081b42]/90 border-b border-white/15 sticky top-0 z-20">
-      <div className="max-w-[1680px] mx-auto px-4 lg:px-6">
-        <div className="flex items-center justify-between py-2.5 gap-3">
-          {/* Esquerda: Título da Tela Ativa + Indicador da Base IQ09 */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+    <header className="bg-[#081b42]/95 backdrop-blur-xl border-b border-white/15 sticky top-0 z-30">
+      <div className="max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6">
+        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between py-2.5 gap-2 sm:gap-3">
+          {/* Esquerda: Botão Menu Mobile + Título da Tela Ativa + Indicador da Base IQ09 */}
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {onOpenMobileDrawer && (
+              <button
+                type="button"
+                onClick={onOpenMobileDrawer}
+                className="lg:hidden p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 cursor-pointer shrink-0"
+                title="Abrir Menu de Módulos e Visão da Fila"
+                aria-label="Abrir Menu"
+              >
+                <Menu className="w-4 h-4 text-cyan-200" />
+              </button>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <ActiveModuleIcon className="w-4 h-4 text-cyan-300 shrink-0" />
-                <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-white truncate">
+                <h1 className="font-extrabold text-xs sm:text-base tracking-tight text-white truncate">
                   {moduleMeta.title}
                 </h1>
 
@@ -106,7 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onSelectMainTab &&
                       onSelectMainTab(activeMainTab === 'consulta_iq09' ? 'operacao' : 'consulta_iq09')
                     }
-                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 text-[11px] font-bold transition-colors cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 text-[10px] sm:text-[11px] font-bold transition-colors cursor-pointer shrink-0"
                     title={
                       iq09UpdatedAt
                         ? `Base IQ09 atualizada em ${new Date(iq09UpdatedAt).toLocaleString('pt-BR')}`
@@ -120,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectMainTab && onSelectMainTab('consulta_iq09')}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 text-[10px] font-semibold transition-colors cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 text-[10px] font-semibold transition-colors cursor-pointer shrink-0"
                     title="Clique para importar a planilha IQ09 do SAP"
                   >
                     <Database className="w-3 h-3 text-cyan-300" />
@@ -138,35 +153,35 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Trava Sênior WMS</span>
                 </button>
               </div>
-              <p className="text-[11px] text-cyan-100/75 font-medium truncate">
+              <p className="hidden sm:block text-[11px] text-cyan-100/75 font-medium truncate">
                 {moduleMeta.subtitle}
               </p>
             </div>
           </div>
 
           {/* Direita: Ações Rápidas + Utilitários */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
             <button
               type="button"
               onClick={onOpenBatchPaste}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-white/15 hover:bg-white/25 border border-white/25 transition-colors cursor-pointer whitespace-nowrap"
+              className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-white/15 hover:bg-white/25 border border-white/25 transition-colors cursor-pointer whitespace-nowrap"
               title="Colar tabela do Excel ou mensagem do WhatsApp diretamente (Atalho: V)"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-200 shrink-0" />
-              <span>Colar Tabela</span>
+              <span className="hidden sm:inline">Colar Tabela</span>
             </button>
 
             <button
               type="button"
               onClick={onOpenNewModal}
-              className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold text-slate-900 bg-white hover:bg-slate-100 border border-white transition-colors cursor-pointer whitespace-nowrap"
+              className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs font-extrabold text-slate-900 bg-white hover:bg-slate-100 border border-white transition-colors cursor-pointer whitespace-nowrap"
               title="Nova Solicitação com múltiplos seriais (Atalho: N)"
             >
               <PlusCircle className="w-4 h-4 text-blue-600 shrink-0" />
               <span>Nova Solicitação</span>
             </button>
 
-            <div className="h-5 w-px bg-white/15 mx-0.5" />
+            <div className="hidden sm:block h-5 w-px bg-white/15 mx-0.5" />
 
             {currentUser?.role !== 'buiatte' && onOpenDatabaseDiagnostic && (
               <button

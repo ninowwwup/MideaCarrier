@@ -19,7 +19,7 @@ export function isPushSupported(): boolean {
 }
 
 /**
- * Registra o Service Worker (/sw.js) caso ainda não esteja ativo
+ * Registra o Service Worker (./sw.js) compatível com raiz ou subcaminho GitHub Pages (/MideaCarrier/)
  */
 export async function registerAppServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
@@ -27,7 +27,7 @@ export async function registerAppServiceWorker(): Promise<ServiceWorkerRegistrat
   }
 
   try {
-    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
     await navigator.serviceWorker.ready;
     return reg;
   } catch (err) {

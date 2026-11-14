@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v28-clean-bases-sidebar-dashboard';
+const CACHE_NAME = 'migou-pwa-v29-mobile-camera-notifications';
 const STATIC_ASSETS = [
   './manifest.json',
   './icon.svg',
@@ -122,16 +122,16 @@ self.addEventListener('push', (event) => {
 
   const notificationOptions = {
     body: data.body || 'Nova transferência entre depósitos aguardando atendimento.',
-    icon: data.icon || '/icon.svg',
-    badge: '/icon.svg',
+    icon: data.icon || './icon.svg',
+    badge: './icon.svg',
     tag: tag,
-    data: data.data || { url: '/', items: data.items || [] },
+    data: data.data || { url: './', items: data.items || [] },
     vibrate: [200, 100, 200, 100, 250],
     renotify: true,
     requireInteraction: false,
     silent: false, // Som do sistema caso o navegador esteja fechado
     actions: [
-      { action: 'open_sap', title: 'Tratar no SAP' },
+      { action: 'open_sap', title: 'Abrir no MIGOU' },
     ],
   };
 
@@ -169,7 +169,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const targetUrl = (event.notification.data && event.notification.data.url) || './';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
@@ -192,9 +192,39 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Mensagens internas do aplicativo para o Service Worker
+// Mensagens internas do aplicativo para o Service Worker (incluindo disparo de Notificações Nativas no PWA Mobile)
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (!event.data) return;
+
+  if (event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    return;
+  }
+
+  if (event.data.type === 'SHOW_LOCAL_NOTIFICATION') {
+    const title = event.data.title || 'MIGOU SAP';
+    const tag = event.data.tag || 'migou-local-' + Date.now();
+    const options = {
+      body: event.data.body || '',
+      icon: './icon.svg',
+      badge: './icon.svg',
+      tag,
+      vibrate: [200, 100, 200, 100, 250],
+      renotify: true,
+      requireInteraction: false,
+      silent: false,
+      data: { url: './' },
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(title, options).then(() => {
+        setTimeout(async () => {
+          try {
+            const activeNotifs = await self.registration.getNotifications({ tag });
+            activeNotifs.forEach((n) => n.close());
+          } catch (err) {}
+        }, 6500);
+      }).catch(() => {})
+    );
   }
 });

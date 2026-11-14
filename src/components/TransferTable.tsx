@@ -29,6 +29,7 @@ import { TransferItem, TransferStatus, TeamRole, FilterOptions } from '../types/
 import { formatForSAPTable, formatSerialsForSAP, checkDefinitiveDamageOrigin, analyzeTransferRoute, SAP_DEPOSITOS_CATALOG } from '../utils/sapFormatter';
 import { LabelPhotoModal } from './LabelPhotoModal';
 import { WMSBreakerWarningModal, BlockedTransferAttempt } from './WMSBreakerWarningModal';
+import { CameraCaptureModal } from './CameraCaptureModal';
 import { compressImageFile } from '../utils/imageCompressor';
 import { IQ09MacroReadinessStatus, IQ09QueueItemAudit } from '../types/iq09';
 import { auditTransferItemAgainstIQ09 } from '../services/iq09Service';
@@ -152,6 +153,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedBatchNotice, setCopiedBatchNotice] = useState(false);
   const [viewingPhotoItem, setViewingPhotoItem] = useState<TransferItem | null>(null);
+  const [cameraCaptureTargetItem, setCameraCaptureTargetItem] = useState<TransferItem | null>(null);
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
   const [selectedBlockedWmsAttempt, setSelectedBlockedWmsAttempt] = useState<BlockedTransferAttempt | null>(null);
 
@@ -680,15 +682,15 @@ export const TransferTable: React.FC<TransferTableProps> = ({
     return COLUMN_ORDER.some((k) => Math.abs(columnWidths[k] - DEFAULT_COLUMN_WIDTHS[k]) > 0.25);
   }, [columnWidths]);
 
-  const handleDirectAttachPhoto = async (itemId: string, file: File) => {
+  const handleDirectAttachPhoto = async (itemId: string, file: File | Blob) => {
     if (!file || !onAttachLabelPhoto) return;
     try {
       setUploadingItemId(itemId);
-      const compressed = await compressImageFile(file, 1024, 0.78);
+      const compressed = await compressImageFile(file, 760, 0.68);
       onAttachLabelPhoto(itemId, compressed);
     } catch (err) {
       console.error('Erro ao anexar foto:', err);
-      alert('Não foi possível comprimir a foto da label.');
+      alert('Não foi possível comprimir a foto da etiqueta.');
     } finally {
       setUploadingItemId(null);
     }
@@ -1269,154 +1271,190 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                     </div>
                   </div>
 
-                  {/* Serial & Centro */}
-                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 mb-2 space-y-1 text-xs">
-                    <div className="flex items-center justify-between font-mono">
-                      <span className="text-slate-500 text-[11px]">Serial:</span>
-                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                        <span>{item.serial}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(item.serial);
-                            setCopiedId(`m-ser-${item.id}`);
-                            setTimeout(() => setCopiedId(null), 1500);
-                          }}
-                          className="text-slate-400 hover:text-slate-700 active:scale-90"
-                        >
-                          {copiedId === `m-ser-${item.id}` ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
+                    {/* Serial, Posição WMS/SAP & Centro (Sem ocultar nenhuma informação no Mobile) */}
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 mb-2 space-y-1.5 text-xs">
+                      <div className="flex items-start justify-between gap-2 font-mono">
+                        <span className="text-slate-500 text-[11px] shrink-0">Serial (UII):</span>
+                        <div className="flex flex-col items-end gap-1 min-w-0">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-900 break-all text-right">
+                            <span>{item.serial}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(item.serial);
+                                setCopiedId(`m-ser-${item.id}`);
+                                setTimeout(() => setCopiedId(null), 1500);
+                              }}
+                              className="text-slate-400 hover:text-slate-700 active:scale-90 shrink-0"
+                            >
+                              {copiedId === `m-ser-${item.id}` ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                          {iqAudit?.iq09Item?.equipamento && (
+                            <span className="text-[10px] text-slate-500">
+                              Eq. SAP: {iqAudit.iq09Item.equipamento}
+                            </span>
                           )}
-                        </button>
+                          {iqAudit?.wmsVerdict?.wmsItem && (
+                            <span className="text-[10px] font-sans font-bold text-indigo-900 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                              WMS: {iqAudit.wmsVerdict.wmsItem.depositoWms || 'S/ SALDO'}
+                              {iqAudit.wmsVerdict.wmsItem.localWms
+                                ? ` (${iqAudit.wmsVerdict.wmsItem.localWms})`
+                                : ''}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 font-mono text-[11px]">
-                      <span
-                        className={`font-bold px-1.5 py-0.5 rounded ${
-                          isInvalidOrigin
-                            ? 'bg-red-200 text-red-950 border border-red-400'
-                            : 'text-indigo-700 bg-indigo-50'
-                        }`}
-                      >
-                        Centro {item.centro}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        {isInvalidOrigin ? (
-                          <span className="px-2 py-0.5 rounded bg-red-600 text-white font-extrabold shadow-2xs">
-                            {item.depositoOrigem} ⚠️
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold">
-                            {item.depositoOrigem}
-                          </span>
-                        )}
-                        <ArrowRight className={`w-3 h-3 ${isInvalidOrigin ? 'text-red-700' : 'text-slate-400'}`} />
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 font-mono text-[11px]">
                         <span
-                          className={`px-1.5 py-0.5 rounded font-semibold ${
+                          className={`font-bold px-1.5 py-0.5 rounded ${
                             isInvalidOrigin
-                              ? 'bg-white text-red-900 border border-red-400 font-extrabold'
-                              : 'bg-emerald-50 text-emerald-800'
+                              ? 'bg-red-200 text-red-950 border border-red-400'
+                              : 'text-indigo-700 bg-indigo-50'
                           }`}
                         >
-                          {item.depositoDestino}
+                          Centro {item.centro}
                         </span>
-                      </div>
-                    </div>
-
-                    {isInvalidOrigin && damageCheck.originInfo && (
-                      <div className="pt-1.5 border-t border-red-200 text-[11px] text-red-900 font-semibold leading-snug">
-                        ❌ <strong>Origem {damageCheck.originInfo.code} ({damageCheck.originInfo.shortTitle}):</strong> Produto já avariado (Definitivo). Não deve ir para o estoque livre.
-                      </div>
-                    )}
-
-                    {/* Alerta Enxuto e Botão VER MOTIVO / De-Para IQ09 no Card Mobile */}
-                    {iqAudit?.hasIQ09Base && item.status !== 'concluido' && iqAudit.macroStatus !== 'pronto_macro_100' && (
-                      <div
-                        className={`pt-1.5 border-t text-[11px] font-semibold flex flex-col gap-1.5 ${
-                          iqAudit.macroStatus === 'corrigivel_depara'
-                            ? 'border-amber-200 text-amber-900'
-                            : iqAudit.macroStatus === 'ja_no_destino_sap'
-                            ? 'border-sky-200 text-sky-900'
-                            : 'border-rose-200 text-rose-900'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-extrabold truncate">{iqAudit.badgeLabel}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenMotivoModal(item, iqAudit)}
-                            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider shadow-2xs cursor-pointer"
+                        <div className="flex items-center gap-1.5">
+                          {isInvalidOrigin ? (
+                            <span className="px-2 py-0.5 rounded bg-red-600 text-white font-extrabold shadow-2xs">
+                              {item.depositoOrigem} ⚠️
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-semibold border border-amber-200">
+                              {item.depositoOrigem}
+                            </span>
+                          )}
+                          <ArrowRight className={`w-3 h-3 ${isInvalidOrigin ? 'text-red-700' : 'text-slate-400'}`} />
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-semibold ${
+                              isInvalidOrigin
+                                ? 'bg-white text-red-900 border border-red-400 font-extrabold'
+                                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            }`}
                           >
-                            <ShieldAlert className="w-3 h-3 shrink-0" />
-                            <span>VER MOTIVO</span>
-                          </button>
+                            {item.depositoDestino}
+                          </span>
                         </div>
-                        {iqAudit.canAutoFixDePara && onApplyIQ09DePara && (
+                      </div>
+
+                      {isInvalidOrigin && damageCheck.originInfo && (
+                        <div className="pt-1.5 border-t border-red-200 text-[11px] text-red-900 font-semibold leading-snug">
+                          ❌ <strong>Origem {damageCheck.originInfo.code} ({damageCheck.originInfo.shortTitle}):</strong> Produto já avariado (Definitivo). Não deve ir para o estoque livre.
+                        </div>
+                      )}
+
+                      {/* Alerta Enxuto e Botão VER MOTIVO / De-Para IQ09 no Card Mobile */}
+                      {iqAudit?.hasIQ09Base && item.status !== 'concluido' && iqAudit.macroStatus !== 'pronto_macro_100' && (
+                        <div
+                          className={`pt-1.5 border-t text-[11px] font-semibold flex flex-col gap-1.5 ${
+                            iqAudit.macroStatus === 'corrigivel_depara'
+                              ? 'border-amber-200 text-amber-900'
+                              : iqAudit.macroStatus === 'ja_no_destino_sap'
+                              ? 'border-sky-200 text-sky-900'
+                              : 'border-rose-200 text-rose-900'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-extrabold break-words">{iqAudit.badgeLabel}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMotivoModal(item, iqAudit)}
+                              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider shadow-2xs cursor-pointer"
+                            >
+                              <ShieldAlert className="w-3 h-3 shrink-0" />
+                              <span>VER MOTIVO</span>
+                            </button>
+                          </div>
+                          {iqAudit.canAutoFixDePara && onApplyIQ09DePara && (
+                            <button
+                              type="button"
+                              onClick={() => handleFixSingleItemWithIQ09(item, iqAudit)}
+                              className="w-full py-1.5 px-2.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                            >
+                              <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                              <span>
+                                ⚡ Corrigir c/ IQ09 ({iqAudit.iq09Item?.material} • {iqAudit.iq09Item?.centro} • {iqAudit.iq09Item?.deposito})
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Foto da Label no Mobile (Com Câmera ao Vivo / Nativa e Galeria) */}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
+                        <span className="text-slate-500 text-[11px]">Foto da Etiqueta:</span>
+                        {item.labelPhotoUrl ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewingPhotoItem(item)}
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-[#002664] text-[11px] font-bold cursor-pointer"
+                            >
+                              <img
+                                src={item.labelPhotoUrl}
+                                alt="Label"
+                                className="w-4 h-4 object-cover rounded"
+                              />
+                              <span>Ver Foto</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCameraCaptureTargetItem(item)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                              title="Trocar foto"
+                            >
+                              <Camera className="w-3.5 h-3.5 text-[#00609C]" />
+                              <span>Trocar</span>
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => handleFixSingleItemWithIQ09(item, iqAudit)}
-                            className="w-full py-1.5 px-2.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                            onClick={() => setCameraCaptureTargetItem(item)}
+                            className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#002664] hover:bg-[#003380] text-white text-[11px] font-bold shadow-2xs active:scale-95"
                           >
-                            <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                            <Camera className="w-3.5 h-3.5 text-cyan-300" />
                             <span>
-                              ⚡ Corrigir c/ IQ09 ({iqAudit.iq09Item?.material} • {iqAudit.iq09Item?.centro} • {iqAudit.iq09Item?.deposito})
+                              {uploadingItemId === item.id ? 'Salvando...' : '+ Tirar / Anexar Foto'}
                             </span>
                           </button>
                         )}
                       </div>
+
+                      {/* Solicitante & Horário Completo no Mobile */}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-[11px] text-slate-600">
+                        <span>
+                          Solicitante: <strong className="text-slate-800">{item.criadoPor}</strong>
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500">
+                          {item.solicitationCode} •{' '}
+                          {new Date(item.criadoEm).toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Doc SAP ou Observações Completas (sem truncate) */}
+                    {item.sapDocNumber && (
+                      <div className="text-[11px] font-mono font-bold text-emerald-700 flex items-center gap-1 mb-1.5">
+                        <FileCheck className="w-3.5 h-3.5 shrink-0" />
+                        <span>Doc SAP: {item.sapDocNumber}</span>
+                      </div>
                     )}
-
-                    {/* Foto da Label no Mobile */}
-                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
-                      <span className="text-slate-500 text-[11px]">Foto da Etiqueta:</span>
-                      {item.labelPhotoUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => setViewingPhotoItem(item)}
-                          className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[#002664] text-[11px] font-bold"
-                        >
-                          <img
-                            src={item.labelPhotoUrl}
-                            alt="Label"
-                            className="w-4 h-4 object-cover rounded"
-                          />
-                          <span>Ver Foto</span>
-                        </button>
-                      ) : (
-                        <label className="cursor-pointer flex items-center gap-1 text-[11px] text-[#00609C] font-semibold hover:underline">
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>Anexar Foto</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleDirectAttachPhoto(item.id, file);
-                            }}
-                          />
-                        </label>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Doc SAP ou Observações */}
-                  {item.sapDocNumber && (
-                    <div className="text-[11px] font-mono font-bold text-emerald-700 flex items-center gap-1 mb-1.5">
-                      <FileCheck className="w-3.5 h-3.5" />
-                      <span>Doc SAP: {item.sapDocNumber}</span>
-                    </div>
-                  )}
-                  {item.observacoes && (
-                    <div className={`text-[11px] flex items-center gap-1 mb-2 ${item.status === 'divergencia' ? 'text-rose-700 font-semibold' : 'text-slate-500'}`}>
-                      <MessageSquare className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{item.observacoes}</span>
-                    </div>
-                  )}
+                    {item.observacoes && (
+                      <div className={`text-[11px] flex items-start gap-1.5 mb-2 break-words whitespace-normal ${item.status === 'divergencia' ? 'text-rose-700 font-semibold' : 'text-slate-600'}`}>
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>{item.observacoes}</span>
+                      </div>
+                    )}
 
                   {/* Mobile Quick Action Buttons */}
                   <div className="flex items-center justify-between pt-1 gap-1.5">
@@ -2134,7 +2172,7 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                             <button
                               type="button"
                               onClick={() => setViewingPhotoItem(item)}
-                              className="group relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-[#002664] text-[10px] font-bold hover:bg-blue-100 shadow-2xs transition-colors"
+                              className="group relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-[#002664] text-[10px] font-bold hover:bg-blue-100 shadow-2xs transition-colors cursor-pointer"
                               title="Ver foto da etiqueta / label do produto"
                             >
                               <img
@@ -2145,41 +2183,25 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                               <span>Foto</span>
                             </button>
 
-                            <label
-                              className="cursor-pointer p-0.5 text-slate-400 hover:text-slate-700"
-                              title="Trocar foto da etiqueta"
+                            <button
+                              type="button"
+                              onClick={() => setCameraCaptureTargetItem(item)}
+                              className="cursor-pointer p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                              title="Tirar nova foto ou trocar imagem da etiqueta"
                             >
                               <Camera className="w-3 h-3" />
-                              <input
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleDirectAttachPhoto(item.id, file);
-                                }}
-                              />
-                            </label>
+                            </button>
                           </div>
                         ) : (
-                          <label
-                            className="cursor-pointer inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-slate-300 hover:border-[#002664] text-slate-500 hover:text-[#002664] text-[10px] transition-colors"
-                            title="Anexar foto da etiqueta para comprovação"
+                          <button
+                            type="button"
+                            onClick={() => setCameraCaptureTargetItem(item)}
+                            className="cursor-pointer inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-slate-300 hover:border-[#002664] hover:bg-blue-50/50 text-slate-500 hover:text-[#002664] text-[10px] font-semibold transition-colors"
+                            title="Tirar foto com a câmera ou anexar arquivo da etiqueta"
                           >
                             <Camera className="w-3 h-3 shrink-0" />
-                            <span>+ Foto</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleDirectAttachPhoto(item.id, file);
-                              }}
-                            />
-                          </label>
+                            <span>{uploadingItemId === item.id ? '...' : '+ Foto'}</span>
+                          </button>
                         )}
                       </td>
 
@@ -2548,6 +2570,24 @@ export const TransferTable: React.FC<TransferTableProps> = ({
           onCloseAndFix={() => setSelectedBlockedWmsAttempt(null)}
         />
       )}
+
+      {/* Modal de Câmera ao Vivo / Nativa para Anexar Foto na Fila */}
+      <CameraCaptureModal
+        isOpen={Boolean(cameraCaptureTargetItem)}
+        title="Anexar Foto da Etiqueta / Material"
+        subtitle={
+          cameraCaptureTargetItem
+            ? `Material: ${cameraCaptureTargetItem.material} • Serial: ${cameraCaptureTargetItem.serial}`
+            : ''
+        }
+        onClose={() => setCameraCaptureTargetItem(null)}
+        onCapturePhoto={(compressedDataUrl) => {
+          if (cameraCaptureTargetItem && onAttachLabelPhoto) {
+            onAttachLabelPhoto(cameraCaptureTargetItem.id, compressedDataUrl);
+          }
+          setCameraCaptureTargetItem(null);
+        }}
+      />
     </>
   );
 };

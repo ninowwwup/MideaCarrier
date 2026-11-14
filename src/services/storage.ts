@@ -18,7 +18,31 @@ import { loadWMSBatimentoFromStorage } from './wmsBatimentoService';
 
 const STORAGE_KEY = 'midea_transfer_items_v1';
 const ARCHIVE_KEY = 'midea_transfer_items_archive_v1';
+const LOCAL_PHOTO_CACHE_KEY = 'migou_local_label_photos_v1';
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000; // Auto-limpeza a cada 2 dias (48 horas)
+
+function getLocalPhotoVault(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(LOCAL_PHOTO_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePhotoToLocalVault(itemId: string, photoDataUrl?: string) {
+  if (typeof window === 'undefined' || !itemId || !photoDataUrl) return;
+  try {
+    const vault = getLocalPhotoVault();
+    vault[itemId] = photoDataUrl;
+    const keys = Object.keys(vault);
+    if (keys.length > 40) {
+      delete vault[keys[0]];
+    }
+    localStorage.setItem(LOCAL_PHOTO_CACHE_KEY, JSON.stringify(vault));
+  } catch (e) {}
+}
 
 // Inicialização limpa e pronta para uso em produção
 export const INITIAL_SEED: TransferItem[] = [];
@@ -26,9 +50,12 @@ export const INITIAL_SEED: TransferItem[] = [];
 export function mapRowToTransferItem(d: any, index = 0): TransferItem {
   const criadoEm = d.criado_em || d.criadoEm || new Date().toISOString();
   const sla = calculateSLA(criadoEm, d.status);
+  const idStr = String(d.id);
+  const remotePhoto = d.label_photo_url || d.labelPhotoUrl;
+  const vaultPhoto = !remotePhoto ? getLocalPhotoVault()[idStr] : undefined;
 
   return {
-    id: String(d.id),
+    id: idStr,
     solicitationCode: d.solicitation_code || d.solicitationCode || `SOL-${index + 1}`,
     material: d.material,
     serial: d.serial,
@@ -45,7 +72,7 @@ export function mapRowToTransferItem(d: any, index = 0): TransferItem {
     prioridadeFifo: index + 1,
     slaStatus: sla.slaStatus,
     batchId: d.batch_id || d.batchId,
-    labelPhotoUrl: d.label_photo_url || d.labelPhotoUrl,
+    labelPhotoUrl: remotePhoto || vaultPhoto,
     originatorClientId: d.originator_client_id || d.originatorClientId,
   };
 }
@@ -278,6 +305,9 @@ export async function insertTransferItems(newItems: TransferItem[]): Promise<boo
 
   const now = Date.now();
   newItems.forEach((item) => {
+    if (item.labelPhotoUrl) {
+      savePhotoToLocalVault(item.id, item.labelPhotoUrl);
+    }
     pendingLocalInserts.set(item.id, { item, insertedAt: now });
     globalKnownItemIds.add(item.id);
   });
@@ -330,7 +360,12 @@ export async function updateSpecificTransferItems(
   allUpdatedItems?: TransferItem[]
 ): Promise<boolean> {
   // 1. Registra no lock otimista local de imediato (0ms)
-  affectedItems.forEach((item) => registerLocalPendingUpdate(item));
+  affectedItems.forEach((item) => {
+    if (item.labelPhotoUrl) {
+      savePhotoToLocalVault(item.id, item.labelPhotoUrl);
+    }
+    registerLocalPendingUpdate(item);
+  });
 
   // 2. Salva no cache local de imediato (0ms)
   const currentList = allUpdatedItems || (() => {
@@ -561,6 +596,9 @@ export function subscribeToRealtimeTransfers(
   onDataChange: (items: TransferItem[], source: 'realtime' | 'polling', newPendingItems?: TransferItem[]) => void
 ): () => void {
   let latestItems: TransferItem[] = getLocalCachedItems();
+  const knownStatusById = new Map<string, TransferStatus>(
+    latestItems.map((it) => [it.id, it.status])
+  );
   let isSyncing = false;
   let lastSyncTime = Date.now();
   let isInitialSync = globalKnownItemIds.size === 0;
@@ -589,6 +627,7 @@ export function subscribeToRealtimeTransfers(
         lastSyncTime = Date.now();
         const currentList = applyPendingLocalUpdates(res.items);
         const newPending: TransferItem[] = [];
+        const newlyResolved: TransferItem[] = [];
 
         if (!isInitialSync && globalKnownItemIds.size > 0) {
           for (const item of currentList) {
@@ -601,12 +640,28 @@ export function subscribeToRealtimeTransfers(
               if (!isCreatedByMe) {
                 newPending.push(item);
               }
+            } else if (globalKnownItemIds.has(item.id)) {
+              const prevStatus = knownStatusById.get(item.id);
+              const isUpdatedByMe =
+                pendingLocalUpdates.has(item.id) ||
+                (forcedOriginator && forcedOriginator === CURRENT_SESSION_ID);
+              if (
+                prevStatus &&
+                prevStatus !== item.status &&
+                (item.status === 'concluido' || item.status === 'divergencia') &&
+                !isUpdatedByMe
+              ) {
+                newlyResolved.push(item);
+              }
             }
           }
         }
 
         isInitialSync = false;
-        currentList.forEach((i) => globalKnownItemIds.add(i.id));
+        currentList.forEach((i) => {
+          globalKnownItemIds.add(i.id);
+          knownStatusById.set(i.id, i.status);
+        });
 
         if (newPending.length > 0) {
           playAlertChime();
@@ -619,6 +674,20 @@ export function subscribeToRealtimeTransfers(
             newPending.length === 1
               ? `Serial: ${first.serial} • Centro ${first.centro} (${first.depositoOrigem} ➔ ${first.depositoDestino})`
               : `Lote de ${newPending.length} seriais aguardando transferência (${first.depositoOrigem} ➔ ${first.depositoDestino}).`;
+          sendDesktopNotification(notifTitle, notifBody);
+        } else if (newlyResolved.length > 0) {
+          playAlertChime();
+          const first = newlyResolved[0];
+          const isDiverg = first.status === 'divergencia';
+          const notifTitle = isDiverg
+            ? `MIGOU: ⚠️ Divergência SAP (${first.material})`
+            : `MIGOU: ✅ MIGO Concluída (${first.material})`;
+          const notifBody =
+            newlyResolved.length === 1
+              ? `Serial ${first.serial} (${first.depositoOrigem} ➔ ${first.depositoDestino})${
+                  first.sapDocNumber ? ` • Doc SAP: ${first.sapDocNumber}` : ''
+                }`
+              : `${newlyResolved.length} solicitações atualizadas pelo Time Midea no SAP.`;
           sendDesktopNotification(notifTitle, notifBody);
         }
 

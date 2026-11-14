@@ -123,6 +123,7 @@ export default function App() {
   const [isBatchPasteOpen, setIsBatchPasteOpen] = useState(false);
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
   const [isSoundSelectorOpen, setIsSoundSelectorOpen] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [currentAlertSound, setCurrentAlertSound] = useState<AlertSoundType>(() => getSavedAlertSound());
   const [sapModalItems, setSapModalItems] = useState<TransferItem[] | null>(null);
   const [resolutionData, setResolutionData] = useState<{
@@ -489,7 +490,7 @@ export default function App() {
     await updateSpecificTransferItems([updatedItem], updated);
     showSuccessNotice(
       'Foto da Etiqueta Anexada!',
-      'Comprovação da label salva com sucesso no Supabase para conferência do Time Midea no SAP.'
+      'Comprovação da etiqueta comprimida e salva com sucesso na nuvem para conferência do Time Midea no SAP.'
     );
   };
 
@@ -616,7 +617,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen figma-aurora-bg flex items-stretch text-slate-800 relative font-sans selection:bg-[#249ED5] selection:text-white">
-      {/* Sidebar Corporativa Fixa, Enxuta e Inteira até o Final da Página */}
+      {/* Sidebar Corporativa Fixa no Desktop + Gaveta e Barra Inferior no Mobile PWA */}
       <Sidebar
         activeMainTab={activeMainTab}
         onSelectMainTab={setActiveMainTab}
@@ -629,6 +630,12 @@ export default function App() {
         wmsTotalItems={wmsSnapshot?.metadata.totalItems || 0}
         currentUser={currentUser}
         onLogout={handleLogout}
+        isMobileDrawerOpen={isMobileDrawerOpen}
+        onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
+        onOpenNewModal={() => {
+          setNewRequestPreset(null);
+          setIsNewModalOpen(true);
+        }}
       />
 
       {/* Coluna Principal de Trabalho */}
@@ -656,10 +663,11 @@ export default function App() {
           onSelectMainTab={setActiveMainTab}
           iq09TotalItems={iq09Snapshot?.metadata.totalItems || iq09CachedMeta?.totalItems || 0}
           iq09UpdatedAt={iq09Snapshot?.metadata.updatedAt || iq09CachedMeta?.updatedAt || null}
+          onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
         />
 
-        {/* Conteúdo Principal */}
-        <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 lg:px-6 py-4 sm:py-5 relative z-10">
+        {/* Conteúdo Principal (Com espaçamento inferior no mobile p/ a barra PWA fixa) */}
+        <main className="flex-1 max-w-[1680px] w-full mx-auto px-3 sm:px-4 lg:px-6 pt-3 sm:pt-5 pb-24 lg:pb-5 relative z-10">
           {activeMainTab === 'guia_depositos' ? (
             <DepositsGuideTab
               onStartRequestWithRoute={(preset) => {

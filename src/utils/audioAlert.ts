@@ -247,7 +247,7 @@ function synthesizeWaterDrop(ctx: AudioContext, now: number) {
   // Tentar tocar via arquivo WAV pré-carregado em paralelo
   if (typeof window !== 'undefined') {
     try {
-      const audio = new Audio('/audio/water_drop.wav');
+      const audio = new Audio('./audio/water_drop.wav');
       audio.volume = 1.0;
       audio.play().catch(() => {});
     } catch (e) {}
@@ -709,8 +709,8 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Dispara notificação nativa na tela do Windows / macOS
- * Desaparece automaticamente da tela após exatamente 5 segundos (estilo Outlook)
+ * Dispara notificação nativa tanto no Desktop (Windows / macOS) quanto no Celular / PWA (Android / iOS)
+ * No celular e no modo PWA Standalone, os navegadores exigem o disparo via ServiceWorkerRegistration.showNotification().
  */
 export function sendDesktopNotification(
   title: string,
@@ -721,31 +721,101 @@ export function sendDesktopNotification(
     return;
   }
 
-  if (Notification.permission === 'granted') {
-    try {
-      const notif = new Notification(title, {
-        body,
-        icon: '/icon.svg',
-        tag: 'migou-' + Date.now(),
-        silent: true, // O som selecionado pelo usuário já é tocado via playAlertChime()
-      });
-
-      notif.onclick = () => {
-        try {
-          window.focus();
-          if (onClickCallback) onClickCallback();
-          notif.close();
-        } catch (e) {}
-      };
-
-      // Desaparece da tela em exatamente 5 segundos
-      setTimeout(() => {
-        try {
-          notif.close();
-        } catch (e) {}
-      }, 5000);
-    } catch (err) {
-      console.warn('Erro ao disparar Desktop Notification:', err);
+  // Vibração tátil no celular (Android PWA)
+  try {
+    if ('vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
     }
+  } catch (e) {}
+
+  if (Notification.permission !== 'granted') {
+    return;
+  }
+
+  const tag = 'migou-' + Date.now();
+
+  // 1. Caminho preferencial para Celular / PWA / Chrome / Edge via Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => {
+        if (reg && typeof reg.showNotification === 'function') {
+          return reg
+            .showNotification(title, {
+              body,
+              icon: './icon.svg',
+              badge: './icon.svg',
+              tag,
+              vibrate: [200, 100, 200, 100, 250],
+              renotify: true,
+              requireInteraction: false,
+              silent: true, // O som selecionado pelo usuário já é tocado via playAlertChime()
+              data: { url: './' },
+            } as any)
+            .then(() => {
+              setTimeout(async () => {
+                try {
+                  const active = await reg.getNotifications({ tag });
+                  active.forEach((n) => n.close());
+                } catch (e) {}
+              }, 6000);
+            });
+        }
+        throw new Error('SW registration without showNotification');
+      })
+      .catch(() => {
+        // 2. Fallback para construtor Notification padrão (Desktop sem SW ativo)
+        try {
+          const notif = new Notification(title, {
+            body,
+            icon: './icon.svg',
+            tag,
+            silent: true,
+          });
+
+          notif.onclick = () => {
+            try {
+              window.focus();
+              if (onClickCallback) onClickCallback();
+              notif.close();
+            } catch (e) {}
+          };
+
+          setTimeout(() => {
+            try {
+              notif.close();
+            } catch (e) {}
+          }, 5500);
+        } catch (err) {
+          console.warn('Aviso ao disparar notificação local:', err);
+        }
+      });
+    return;
+  }
+
+  // Fallback direto se navigator.serviceWorker não existir
+  try {
+    const notif = new Notification(title, {
+      body,
+      icon: './icon.svg',
+      tag,
+      silent: true,
+    });
+
+    notif.onclick = () => {
+      try {
+        window.focus();
+        if (onClickCallback) onClickCallback();
+        notif.close();
+      } catch (e) {}
+    };
+
+    setTimeout(() => {
+      try {
+        notif.close();
+      } catch (e) {}
+    }, 5500);
+  } catch (err) {
+    console.warn('Erro ao disparar Desktop Notification:', err);
   }
 }
