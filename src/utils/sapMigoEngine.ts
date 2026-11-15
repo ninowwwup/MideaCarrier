@@ -896,13 +896,12 @@ export function downloadLocalSapBridgeLauncher(): void {
  */
 export function generateExcelVbaV2MacroCode(options: MigoEngineOptions): string {
   const defaultTexto = resolveMigoItemText(options);
-  return `Attribute VB_Name = "Modulo_Mestre_MIGOU_MIGO311"
-' =======================================================================================
+  return `' =======================================================================================
 ' SISTEMA MESTRE EXCEL VBA V3 - MIGOU SAP MIGO 311 (MIDEA CARRIER)
-' Autor: MIGOU Automation Engine • Exclusivo Time Midea
+' Autor: MIGOU Automation Engine - Exclusivo Time Midea
 '
 ' COMO USAR E COMPARTILHAR COM SEUS COLEGAS:
-' 1. No Excel, aperte ALT + F11 -> Inserir -> Modulo e cole todo este codigo.
+' 1. No Excel, aperte ALT + F11 -> Inserir -> Modulo (tenha apenas 1 modulo no projeto) e cole este codigo.
 ' 2. Execute uma unica vez a macro "Construir_Painel_Visual_MIGOU" (F5).
 '    Ela vai desenhar automaticamente toda a interface visual azul Safira do MIGOU,
 '    criar os seletores, as tabelas e os BOTOES CLICAVEIS na planilha!
@@ -934,17 +933,17 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Cells.Font.Size = 10
     
     ' 1. Faixa Superior Azul Safira MIGOU (Linhas 1 a 3)
-    ws.Range("A1:P3").Interior.Color = RGB(6, 25, 62) ' #06193E Safira MIGOU
+    ws.Range("A1:P3").Interior.Color = RGB(6, 25, 62)
     ws.Range("A1:P1").RowHeight = 8
     ws.Range("A2:P2").RowHeight = 28
     ws.Range("A3:P3").RowHeight = 18
     
-    ws.Range("B2").Value = "MIGOU SAP • CENTRAL MESTRE DE AUTOMACAO MIGO 311 (AGRUPAMENTO INTELIGENTE)"
+    ws.Range("B2").Value = "MIGOU SAP - CENTRAL MESTRE DE AUTOMACAO MIGO 311 (AGRUPAMENTO INTELIGENTE)"
     ws.Range("B2").Font.Color = RGB(255, 255, 255)
     ws.Range("B2").Font.Bold = True
     ws.Range("B2").Font.Size = 14
     
-    ws.Range("B3").Value = "Agrupa automaticamente por Material + Centro + Deposito Origem/Destino • Preenche Nºs de Serie • Captura Doc SAP 49xxxxxxxx"
+    ws.Range("B3").Value = "Agrupa automaticamente por Material + Centro + Deposito Origem/Destino - Preenche Numeros de Serie - Captura Doc SAP 49xxxxxxxx"
     ws.Range("B3").Font.Color = RGB(186, 230, 253)
     ws.Range("B3").Font.Size = 9
     
@@ -997,8 +996,8 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Range("I5:L5").Font.Size = 8
     ws.Range("I5:L5").Font.Color = RGB(71, 85, 105)
     
-    ws.Range("I6").Formula = "=COUNTA(C10:C5000)"
-    ws.Range("J6").Formula = "=COUNTA(I10:I5000)"
+    ws.Range("I6").Value = 0
+    ws.Range("J6").Value = 0
     ws.Range("K6").Value = "-"
     ws.Range("L6").Value = "Aguardando Lote"
     ws.Range("I6:L6").Font.Bold = True
@@ -1013,7 +1012,7 @@ Public Sub Construir_Painel_Visual_MIGOU()
     
     ws.Range("B8:G8").Merge
     ws.Range("B8").Value = "1. DADOS DE ENTRADA (COLE AQUI DO MIGOU OU EXCEL - 1 SERIAL POR LINHA)"
-    ws.Range("B8").Interior.Color = RGB(0, 72, 142) ' #00488E
+    ws.Range("B8").Interior.Color = RGB(0, 72, 142)
     ws.Range("B8").Font.Color = RGB(255, 255, 255)
     ws.Range("B8").Font.Bold = True
     ws.Range("B8").VerticalAlignment = xlCenter
@@ -1037,7 +1036,7 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ' 4. Cabecalhos da Tabela 2 (Grade MIGO 311 Agrupada - Colunas I a P)
     ws.Range("I8:P8").Merge
     ws.Range("I8").Value = "2. ESPELHO AGRUPADO DA MIGO 311 (COMO A MACRO PREENCHERA NO SAP)"
-    ws.Range("I8").Interior.Color = RGB(6, 25, 62) ' #06193E
+    ws.Range("I8").Interior.Color = RGB(6, 25, 62)
     ws.Range("I8").Font.Color = RGB(255, 255, 255)
     ws.Range("I8").Font.Bold = True
     ws.Range("I8").VerticalAlignment = xlCenter
@@ -1045,8 +1044,8 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Range("I9").Value = "Linha"
     ws.Range("J9").Value = "Txt.brv.material"
     ws.Range("K9").Value = "Cen."
-    ws.Range("L9").Value = "Depósito"
-    ws.Range("M9").Value = "Depósito RegTran."
+    ws.Range("L9").Value = "Deposito"
+    ws.Range("M9").Value = "Deposito RegTran."
     ws.Range("N9").Value = "Qtd.em UMR"
     ws.Range("O9").Value = "Seriais do Grupo"
     ws.Range("P9").Value = "Status SAP / Doc 49x"
@@ -1090,17 +1089,18 @@ End Sub
 
 Private Sub CreateActionButton(ws As Worksheet, btnName As String, captionText As String, macroName As String, leftPos As Double, topPos As Double, widthVal As Double, heightVal As Double, fillColor As Long)
     Dim shp As Shape
-    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, leftPos, topPos, widthVal, heightVal)
+    ' Constantes numericas nativas do Office (compativeis com qualquer versao do Excel)
+    Set shp = ws.Shapes.AddShape(5, leftPos, topPos, widthVal, heightVal)
     shp.Name = btnName
     shp.Fill.ForeColor.RGB = fillColor
-    shp.Line.Visible = msoFalse
+    shp.Line.Visible = 0
     shp.TextFrame2.TextRange.Text = captionText
     shp.TextFrame2.TextRange.Font.Name = "Segoe UI"
     shp.TextFrame2.TextRange.Font.Size = 9.5
-    shp.TextFrame2.TextRange.Font.Bold = msoTrue
+    shp.TextFrame2.TextRange.Font.Bold = -1
     shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-    shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
-    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+    shp.TextFrame2.VerticalAnchor = 3
+    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = 2
     shp.OnAction = macroName
 End Sub
 
@@ -1195,6 +1195,8 @@ Public Sub Simular_Agrupamento_MIGO311()
             outRow = outRow + 1
         Next idx
         
+        ws.Range("I6").Value = dictSeenSerial.Count
+        ws.Range("J6").Value = dictQtd.Count
         ws.Range("L6").Value = dictQtd.Count & " linha(s) agrupada(s)"
     End If
 End Sub
@@ -1275,7 +1277,7 @@ Public Sub Executar_SAP_MIGO_311_Mestre()
         For r = 10 To lastGroupRow
             If currentCentroFilter = "TODOS" Or UCase(Trim(CStr(ws.Cells(r, "K").Value))) = currentCentroFilter Then
                 If statusExec = "SUCCESS" Then
-                    ws.Cells(r, "P").Value = "CONCLUIDO • Doc: " & docSapGerado
+                    ws.Cells(r, "P").Value = "CONCLUIDO - Doc: " & docSapGerado
                     ws.Cells(r, "P").Interior.Color = RGB(209, 250, 229)
                     PreencherDocSapNaEntrada ws, CStr(ws.Cells(r, "J").Value), CStr(ws.Cells(r, "K").Value), docSapGerado
                 ElseIf statusExec = "VERIFIED" Then
@@ -1520,6 +1522,8 @@ Public Sub Limpar_Painel_MIGOU()
     ws.Range("B10:G5000").Interior.ColorIndex = xlNone
     ws.Range("I10:P5000").ClearContents
     ws.Range("I10:P5000").Interior.ColorIndex = xlNone
+    ws.Range("I6").Value = 0
+    ws.Range("J6").Value = 0
     ws.Range("L6").Value = "Painel Limpo"
 End Sub
 
@@ -1602,7 +1606,7 @@ End Function`;
  * Baixa o Módulo VBA Mestre (.bas) pronto para importar no Excel (Alt+F11 -> Arquivo -> Importar Arquivo)
  */
 export function downloadExcelMasterVbaModule(options: MigoEngineOptions): void {
-  const code = generateExcelVbaV2MacroCode(options);
+  const code = `Attribute VB_Name = "Modulo_Mestre_MIGOU_MIGO311"\r\n` + generateExcelVbaV2MacroCode(options);
   const blob = new Blob([code], { type: 'text/plain;charset=windows-1252;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -1652,11 +1656,11 @@ export function downloadAutoExcelDashboardBuilderVbs(
   lines.push(`ws.Range("A1:P1").RowHeight = 8`);
   lines.push(`ws.Range("A2:P2").RowHeight = 28`);
   lines.push(`ws.Range("A3:P3").RowHeight = 18`);
-  lines.push(`ws.Range("B2").Value = "MIGOU SAP • CENTRAL MESTRE DE AUTOMACAO MIGO 311 (AGRUPAMENTO INTELIGENTE)"`);
+  lines.push(`ws.Range("B2").Value = "MIGOU SAP - CENTRAL MESTRE DE AUTOMACAO MIGO 311 (AGRUPAMENTO INTELIGENTE)"`);
   lines.push(`ws.Range("B2").Font.Color = RGB(255, 255, 255)`);
   lines.push(`ws.Range("B2").Font.Bold = True`);
   lines.push(`ws.Range("B2").Font.Size = 14`);
-  lines.push(`ws.Range("B3").Value = "Agrupa automaticamente por Material + Centro + Deposito Origem/Destino • Preenche Nºs de Serie • Captura Doc SAP 49xxxxxxxx"`);
+  lines.push(`ws.Range("B3").Value = "Agrupa automaticamente por Material + Centro + Deposito Origem/Destino - Preenche Numeros de Serie - Captura Doc SAP 49xxxxxxxx"`);
   lines.push(`ws.Range("B3").Font.Color = RGB(186, 230, 253)`);
   lines.push(`ws.Range("B3").Font.Size = 9`);
   lines.push(``);
@@ -1679,8 +1683,8 @@ export function downloadAutoExcelDashboardBuilderVbs(
   lines.push(`ws.Range("L5").Value = "STATUS:"`);
   lines.push(`ws.Range("I5:L5").Font.Bold = True`);
   lines.push(`ws.Range("I5:L5").Font.Size = 8`);
-  lines.push(`ws.Range("I6").Formula = "=COUNTA(C10:C5000)"`);
-  lines.push(`ws.Range("J6").Formula = "=COUNTA(I10:I5000)"`);
+  lines.push(`ws.Range("I6").Value = ${rawItems.length}`);
+  lines.push(`ws.Range("J6").Value = ${groupedLines.length}`);
   lines.push(`ws.Range("K6").Value = "-"`);
   lines.push(`ws.Range("L6").Value = "Lote Carregado (${groupedLines.length} linhas)"`);
   lines.push(`ws.Range("I6:L6").Font.Bold = True`);
