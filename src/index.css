@@ -16,7 +16,7 @@ html,
 body {
   width: 100%;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow-x: clip;
   overscroll-behavior-x: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
@@ -26,7 +26,7 @@ body {
 #root {
   width: 100%;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow-x: clip;
   position: relative;
 }
 
@@ -47,24 +47,24 @@ body {
   margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Fundo Gradiente Aurora Cromático Idêntico à Imagem de Referência */
+/* Fundo Azul Gradiente Fosco (Fiel à 2ª Imagem de Referência + Camada Matte Suave) */
 .figma-aurora-bg {
-  background-color: #1a4da6;
+  background-color: #0066eb;
   background-image:
-    /* Canto Superior Esquerdo: Pêssego / Coral Aquecido */
-    radial-gradient(circle at 10% 8%, rgba(228, 138, 96, 0.98) 0%, rgba(216, 116, 88, 0.75) 18%, rgba(198, 98, 108, 0.38) 32%, transparent 48%),
-    /* Topo Direito / Meio Superior: Lavanda / Lilás / Roxo */
-    radial-gradient(circle at 88% 10%, rgba(168, 110, 226, 0.95) 0%, rgba(144, 88, 208, 0.70) 22%, rgba(105, 68, 180, 0.35) 40%, transparent 58%),
-    /* Canto Inferior Direito: Amarelo-Lima Pastel / Menta Luminoso */
-    radial-gradient(circle at 96% 92%, rgba(246, 248, 160, 0.98) 0%, rgba(212, 238, 140, 0.80) 18%, rgba(155, 226, 172, 0.45) 32%, transparent 52%),
-    /* Meio Esquerdo: Ultramarine Escuro / Sombra Profunda */
-    radial-gradient(circle at 0% 50%, rgba(14, 38, 118, 0.92) 0%, transparent 45%),
-    /* Base Esquerda: Ardósia Azulada Suave */
-    radial-gradient(circle at 35% 94%, rgba(68, 102, 172, 0.65) 0%, transparent 44%),
-    /* Centro & Cobertura: Azul Cobalto & Azul Real Vibrante */
-    radial-gradient(circle at 48% 46%, rgba(37, 99, 235, 0.96) 0%, rgba(29, 78, 216, 0.90) 42%, rgba(20, 56, 150, 0.98) 78%, rgba(16, 44, 122, 1) 100%);
+    /* Véu fosco sutil (matte finish) para suavizar o contraste com os cards */
+    linear-gradient(180deg, rgba(10, 42, 110, 0.08) 0%, rgba(4, 20, 68, 0.14) 100%),
+    /* Imagem oficial enviada pelo usuário */
+    url('./assets/bg-blue-matte.png'),
+    /* Fallback / Mesh de alta definição nos exatos tons da imagem (Ciano Gelo -> Turquesa -> Azul Royal -> Azul Marinho Profundo) */
+    radial-gradient(circle at 6% 4%, rgba(188, 246, 255, 0.96) 0%, rgba(112, 218, 255, 0.72) 26%, transparent 55%),
+    radial-gradient(circle at 95% 8%, rgba(24, 247, 230, 0.95) 0%, rgba(0, 212, 245, 0.70) 30%, transparent 62%),
+    radial-gradient(circle at 8% 96%, rgba(0, 18, 120, 0.98) 0%, rgba(2, 32, 148, 0.85) 38%, transparent 72%),
+    radial-gradient(circle at 92% 92%, rgba(24, 92, 224, 0.94) 0%, rgba(16, 108, 240, 0.75) 42%, transparent 75%),
+    linear-gradient(145deg, #5fd8ff 0%, #0088f8 38%, #0a58d8 72%, #001a88 100%);
   background-size: cover;
+  background-position: center center;
   background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* Scrollbar refinada e suave estilo Figma */

@@ -438,9 +438,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* 1. Sidebar Desktop Fixa (Intacta em telas lg+) */}
-      <aside className="hidden lg:block w-[205px] shrink-0 min-h-screen self-stretch migou-sidebar-solid text-white select-none z-30">
-        <div className="sticky top-0 h-screen">{renderNavigationContent(false)}</div>
+      {/* 1. Sidebar Desktop 100% Estática / Fixa na Tela (lg+) */}
+      <div className="hidden lg:block w-[205px] shrink-0 select-none" aria-hidden="true" />
+      <aside className="hidden lg:flex lg:flex-col fixed top-0 left-0 bottom-0 w-[205px] h-screen migou-sidebar-solid text-white select-none z-40 overflow-y-auto">
+        {renderNavigationContent(false)}
       </aside>
 
       {/* 2. Gaveta Lateral Mobile (Drawer) para troca de Visão (Buiatte / Midea / Espelho), Utilitários PWA e Perfil */}

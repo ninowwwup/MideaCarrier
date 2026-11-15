@@ -616,7 +616,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden figma-aurora-bg flex items-stretch text-slate-800 relative font-sans selection:bg-[#249ED5] selection:text-white">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-clip figma-aurora-bg flex items-stretch text-slate-800 relative font-sans selection:bg-[#249ED5] selection:text-white">
       {/* Sidebar Corporativa Fixa no Desktop + Gaveta e Barra Inferior no Mobile PWA */}
       <Sidebar
         activeMainTab={activeMainTab}
@@ -646,7 +646,7 @@ export default function App() {
       />
 
       {/* Coluna Principal de Trabalho */}
-      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-hidden relative z-10">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-clip relative z-10">
         {/* Topbar Enxuta e Leve */}
         <Header
           onOpenNewModal={() => {
@@ -674,7 +674,7 @@ export default function App() {
         />
 
         {/* Conteúdo Principal (Com espaçamento inferior no mobile p/ a barra PWA fixa) */}
-        <main className="flex-1 max-w-[1680px] w-full min-w-0 overflow-x-hidden mx-auto px-2.5 sm:px-4 lg:px-6 pt-3 sm:pt-5 pb-safe-nav lg:pb-5 relative z-10">
+        <main className="flex-1 max-w-[1680px] w-full min-w-0 overflow-x-clip mx-auto px-2.5 sm:px-4 lg:px-6 pt-3 sm:pt-5 pb-safe-nav lg:pb-5 relative z-10">
           {activeMainTab === 'guia_depositos' ? (
             <DepositsGuideTab
               onStartRequestWithRoute={(preset) => {
