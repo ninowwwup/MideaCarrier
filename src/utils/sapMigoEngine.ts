@@ -235,6 +235,39 @@ export function formatGroupedMigoGridTSV(
 }
 
 /**
+ * Formata os itens JÁ ORDENADOS E SEM DUPLICIDADE para colar diretamente na célula K2
+ * da aba `Planilha1 (311)` da planilha `BASE MIGO.xlsm` (Colunas K a R):
+ * Col K (11): Material | Col L (12): Qtd (1) | Col M (13): Centro | Col N (14): Dep. Origem |
+ * Col O (15): Vazio | Col P (16): Dep. Destino | Col Q (17): Texto | Col R (18): Serial UII
+ */
+export function formatForBaseMigo311ColumnsKR(
+  groupedLines: MigoGroupedLine[],
+  options: MigoEngineOptions
+): string {
+  const textoVal = resolveMigoItemText(options);
+  const rows: string[] = [];
+
+  for (const group of groupedLines) {
+    for (const serial of group.serials) {
+      rows.push(
+        [
+          group.material,       // Col K (11) - Material
+          '1',                  // Col L (12) - Quantidade unitária (somada pela macro)
+          group.centro,         // Col M (13) - Centro Origem
+          group.depositoOrigem, // Col N (14) - Depósito Origem
+          '',                   // Col O (15) - Coluna intermediária da planilha 311
+          group.depositoDestino,// Col P (16) - Depósito Destino
+          textoVal,             // Col Q (17) - Texto
+          serial,               // Col R (18) - Serial UII
+        ].join('\t')
+      );
+    }
+  }
+
+  return rows.join('\r\n');
+}
+
+/**
  * Consulta o status da Ponte Local SAP (localhost:18311)
  */
 export async function checkLocalSapBridgeStatus(): Promise<SapBridgeStatusResponse> {
@@ -332,12 +365,22 @@ function escapeVbsString(val: string): string {
 }
 
 /**
- * Gera o script VBScript (.vbs) CORRIGIDO para SAP GUI Scripting na MIGO 311
- * Correções críticas aplicadas:
- * 1. Usa `tblGrid.GetCell(visibleRow, colIdx).Text = valor` (API oficial do GuiTableControl no SAP GUI Scripting).
- * 2. Reconhece os campos híbridos reais da MIGO (`GOITEM-MAKTX` p/ Txt.brv.material, `GOITEM-NAME1` p/ Cen., `GOITEM-LGOBE` p/ Depósito, `GOITEM-UMLGO` p/ Depósito RegTran., `GOITEM-ERFMG` p/ Qtd.em UMR, `GOITEM-SGTXT` p/ Texto, `GOITEM-TAKE_IT` p/ OK).
- * 3. Localiza a aba `Nº de série` pelo ID real do SAP (`tabpOK_GOITEM_SERIAL`) e preenche os seriais diretamente em `tblSAPLMIGOTV_GOSERIAL.GetCell(sRow, 0).Text` com paginação automática (sem depender de Clipboard bloqueado!).
- * 4. Só reporta `SUCCESS` quando um Documento SAP `49xxxxxxxx` real é gerado, ou `VERIFIED` quando em modo de conferência.
+ * Gera o script VBScript (.vbs) V4 CALIBRADO COM OS OBJETOS REAIS DO SAP MIDEA (BASE MIGO.xlsm)
+ * Arquitetura idêntica ao `MIGO_311_3` da Midea + Melhorias de Agrupamento e Segurança:
+ * 1. Cabeçalho via `FindByNameEx("GODYNPRO-ACTION", 34).Key = "A08"`, `FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R10"`, `FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "311"`.
+ * 2. Recolhe Cabeçalho e Detalhe (`MIGO_OK_HEADER_CLOSE` + `MIGO_OK_DETAIL_CLOSE`) antes de preencher a grade `SAPLMIGOTV_GOITEM` (tipo 80).
+ * 3. Preenche `cur_row = FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)` usando os nomes técnicos exatos da Midea:
+ *    - `GOITEM-MAKTX` (com trava `material_assigned = False` para preencher apenas o primeiro campo de material)
+ *    - `GOITEM-TAKE_IT` (`.Selected = True`)
+ *    - `GOITEM-ERFMG` (Quantidade consolidada do grupo)
+ *    - `GOITEM-LGOBE` (Depósito Origem)
+ *    - `GOITEM-NAME1` (Centro Origem)
+ *    - `GOITEM-SGTXT` (Texto)
+ *    - `GOITEM-UMLGOBE` (Depósito Destino — campo real da Midea!)
+ * 4. Reabre o Detalhe (`MIGO_OK_DETAIL_OPEN`) e injeta os UIIs na subscreen customizada `SAPLMIGO:0360`:
+ *    - `tabpOK_GOITEM_SERIAL` -> `btnOK_SER_SEARCH` -> `btn%_SO_UII_%_APP_%-VALU_PUSH`
+ *    - Copia apenas os UIIs daquele grupo para o Clipboard -> `wnd[1]/tbar[0]/btn[24]` (Colar) -> `wnd[1]/tbar[0]/btn[8]` (Confirmar)
+ *    - `wnd[0]/tbar[1]/btn[8]` (Executar busca UII) -> se `Qtd > 1`: `sendVKey 5` (Selecionar tudo) + `wnd[0]/tbar[1]/btn[47]` (Adotar UIIs) -> `btnOK_NEXT_ITEM`.
  */
 export function generateSapGuiVbsScript(
   batches: MigoCentroDocumentBatch[],
@@ -348,12 +391,12 @@ export function generateSapGuiVbsScript(
   const vbsLines: string[] = [];
 
   vbsLines.push(`' ============================================================================`);
-  vbsLines.push(`' MIGOU SAP MIGO 311 - ROBO DE AUTOMACAO AGRUPADA V2 (API GetCell + Serial Direto)`);
+  vbsLines.push(`' MIGOU SAP MIGO 311 - ROBO DE AUTOMACAO V4 (MOTOR OFICIAL MIDEA SAPLMIGO:0360 UII)`);
   vbsLines.push(`' Gerado em: ${new Date().toLocaleString('pt-BR')}`);
   vbsLines.push(`' ============================================================================`);
   vbsLines.push(`Option Explicit`);
   vbsLines.push(``);
-  vbsLines.push(`Dim SapGuiAuto, application, connection, session`);
+  vbsLines.push(`Dim SapGuiAuto, SAPApp, SAPCon, session, dummy`);
   vbsLines.push(`Dim wshShell, fso`);
   vbsLines.push(`Set wshShell = CreateObject("WScript.Shell")`);
   vbsLines.push(`Set fso = CreateObject("Scripting.FileSystemObject")`);
@@ -369,8 +412,8 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`  WScript.Quit 1`);
   vbsLines.push(`End If`);
   vbsLines.push(``);
-  vbsLines.push(`Set application = SapGuiAuto.GetScriptingEngine`);
-  vbsLines.push(`If Err.Number <> 0 Or (application Is Nothing) Then`);
+  vbsLines.push(`Set SAPApp = SapGuiAuto.GetScriptingEngine`);
+  vbsLines.push(`If Err.Number <> 0 Or (SAPApp Is Nothing) Then`);
   if (isSilentBridge) {
     vbsLines.push(`  WriteBridgeError "${escapeVbsString(silentJsonOutputPath!)}", "SAP GUI Scripting desabilitado nas opcoes do SAP Logon."`);
   } else {
@@ -379,7 +422,7 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`  WScript.Quit 1`);
   vbsLines.push(`End If`);
   vbsLines.push(``);
-  vbsLines.push(`If application.Children.Count = 0 Then`);
+  vbsLines.push(`If SAPApp.Children.Count = 0 Then`);
   if (isSilentBridge) {
     vbsLines.push(`  WriteBridgeError "${escapeVbsString(silentJsonOutputPath!)}", "Nenhuma conexao SAP ativa. Faca login no SAP primeiro."`);
   } else {
@@ -388,8 +431,8 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`  WScript.Quit 1`);
   vbsLines.push(`End If`);
   vbsLines.push(``);
-  vbsLines.push(`Set connection = application.Children(0)`);
-  vbsLines.push(`Set session = connection.Children(0)`);
+  vbsLines.push(`Set SAPCon = SAPApp.Children(0)`);
+  vbsLines.push(`Set session = SAPCon.Children(0)`);
   vbsLines.push(`Dim currentSapUser`);
   vbsLines.push(`currentSapUser = Trim(CStr(session.Info.User))`);
   vbsLines.push(`If currentSapUser = "" Then`);
@@ -403,7 +446,21 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`On Error GoTo 0`);
   vbsLines.push(``);
 
-  // Funções de busca recursiva na árvore SAP GUI (independente do número da subscreen SAPLMIGO:0001..0010)
+  // Função para copiar os UIIs do grupo atual para o Clipboard do Windows antes do btn[24]
+  vbsLines.push(`Sub PutSerialsInClipboard(serialsPipeStr)`);
+  vbsLines.push(`  On Error Resume Next`);
+  vbsLines.push(`  Dim clipText, tmpFile, ts`);
+  vbsLines.push(`  clipText = Replace(CStr(serialsPipeStr), "|", vbCrLf)`);
+  vbsLines.push(`  tmpFile = wshShell.ExpandEnvironmentStrings("%TEMP%") & "\\migou_uii_batch.txt"`);
+  vbsLines.push(`  Set ts = fso.CreateTextFile(tmpFile, True, False)`);
+  vbsLines.push(`  ts.Write clipText`);
+  vbsLines.push(`  ts.Close`);
+  vbsLines.push(`  wshShell.Run "cmd.exe /c clip < """ & tmpFile & """", 0, True`);
+  vbsLines.push(`  Err.Clear`);
+  vbsLines.push(`End Sub`);
+  vbsLines.push(``);
+
+  // Busca flexível para os botões da aba Serial (caso SAPLMIGO:0009 mude para 0007/0008)
   vbsLines.push(`Function FindControlByIdPart(rootObj, targetIdPart)`);
   vbsLines.push(`  On Error Resume Next`);
   vbsLines.push(`  Set FindControlByIdPart = Nothing`);
@@ -430,37 +487,10 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`End Function`);
   vbsLines.push(``);
 
-  // Descobre o índice exato de uma coluna no TableControl da MIGO (GOITEM-MAKTX / MATNR, GOITEM-NAME1 / WERKS, etc.)
-  vbsLines.push(`Function ResolveMigoColIndex(tblCtrl, primaryTechName, secondaryTechName, fallbackColPos)`);
-  vbsLines.push(`  On Error Resume Next`);
-  vbsLines.push(`  Dim cIdx, colName`);
-  vbsLines.push(`  ResolveMigoColIndex = -1`);
-  vbsLines.push(`  For cIdx = 0 To tblCtrl.Columns.Count - 1`);
-  vbsLines.push(`    colName = UCase(CStr(tblCtrl.Columns(CLng(cIdx)).Name))`);
-  vbsLines.push(`    If InStr(1, colName, UCase(primaryTechName), vbTextCompare) > 0 Then`);
-  vbsLines.push(`      ResolveMigoColIndex = cIdx`);
-  vbsLines.push(`      Exit Function`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`  Next`);
-  vbsLines.push(`  If secondaryTechName <> "" Then`);
-  vbsLines.push(`    For cIdx = 0 To tblCtrl.Columns.Count - 1`);
-  vbsLines.push(`      colName = UCase(CStr(tblCtrl.Columns(CLng(cIdx)).Name))`);
-  vbsLines.push(`      If InStr(1, colName, UCase(secondaryTechName), vbTextCompare) > 0 Then`);
-  vbsLines.push(`        ResolveMigoColIndex = cIdx`);
-  vbsLines.push(`        Exit Function`);
-  vbsLines.push(`      End If`);
-  vbsLines.push(`    Next`);
-  vbsLines.push(`  End If`);
-  vbsLines.push(`  If fallbackColPos >= 0 And fallbackColPos < tblCtrl.Columns.Count Then`);
-  vbsLines.push(`    ResolveMigoColIndex = fallbackColPos`);
-  vbsLines.push(`  End If`);
-  vbsLines.push(`End Function`);
-  vbsLines.push(``);
-
   vbsLines.push(`Function ExtractSapDocNumber(statusText)`);
   vbsLines.push(`  Dim regEx, matches`);
   vbsLines.push(`  Set regEx = New RegExp`);
-  vbsLines.push(`  regEx.Pattern = "(49[0-9]{8}|[0-9]{10})"`);
+  vbsLines.push(`  regEx.Pattern = "(49[0-9]{8}|50[0-9]{8}|[0-9]{10})"`);
   vbsLines.push(`  regEx.Global = False`);
   vbsLines.push(`  If regEx.Test(statusText) Then`);
   vbsLines.push(`    Set matches = regEx.Execute(statusText)`);
@@ -469,19 +499,6 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`    ExtractSapDocNumber = ""`);
   vbsLines.push(`  End If`);
   vbsLines.push(`End Function`);
-  vbsLines.push(``);
-
-  vbsLines.push(`Sub DismissPopupIfPresent()`);
-  vbsLines.push(`  On Error Resume Next`);
-  vbsLines.push(`  If session.Children.Count > 1 Then`);
-  vbsLines.push(`    session.findById("wnd[1]/tbar[0]/btn[0]").press`);
-  vbsLines.push(`    If Err.Number <> 0 Then`);
-  vbsLines.push(`      Err.Clear`);
-  vbsLines.push(`      session.findById("wnd[1]").sendVKey 0`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`  End If`);
-  vbsLines.push(`  Err.Clear`);
-  vbsLines.push(`End Sub`);
   vbsLines.push(``);
 
   vbsLines.push(`Sub WriteBridgeError(outPath, errMsg)`);
@@ -493,213 +510,220 @@ export function generateSapGuiVbsScript(
   vbsLines.push(`End Sub`);
   vbsLines.push(``);
 
-  // Função Principal que executa 1 Documento MIGO 311 Agrupado
+  // Função Principal que executa 1 Documento MIGO 311 Agrupado usando os comandos exatos de MIGO_311_3
   vbsLines.push(`Function ExecuteMigoBatch(centroName, matArr, cenArr, origArr, destArr, qtdArr, txtArr, serArr, postModeStr, ByRef outDocSap, ByRef outMsg)`);
   vbsLines.push(`  On Error Resume Next`);
   vbsLines.push(`  outDocSap = ""`);
   vbsLines.push(`  outMsg = ""`);
-  vbsLines.push(`  Dim usrArea, actionCombo, refCombo, bwartField, tblGrid`);
-  vbsLines.push(`  Dim totalRows, r, visibleRow, curScroll, visCount`);
-  vbsLines.push(`  Dim colMat, colCen, colOrig, colDest, colQtd, colTxt, colOk`);
-  vbsLines.push(`  totalRows = UBound(matArr)`);
+  vbsLines.push(`  Dim total_items, i, ii, CurrentRow, pageSize, cur_row, col_count`);
+  vbsLines.push(`  Dim material_assigned, special_stock_assigned, item_index, current_quantity`);
+  vbsLines.push(`  Dim serTabObj, btnSerSearchObj, btnNextItemObj, error_result, result, MessageType`);
+  vbsLines.push(`  total_items = UBound(matArr) + 1`);
   vbsLines.push(``);
-  vbsLines.push(`  ' 1. Abre /nMIGO limpa`);
-  vbsLines.push(`  session.findById("wnd[0]/tbar[0]/okcd").Text = "/nMIGO"`);
+  vbsLines.push(`  SAPApp.AllowSystemMessages = False`);
+  vbsLines.push(`  SAPApp.HistoryEnabled = False`);
+  vbsLines.push(`  dummy = session.LockSessionUI()`);
+  vbsLines.push(``);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  ' PASSO 1: ABRIR A MIGO E CONFIGURAR CABECALHO (A08 + R10 + GODEFAULT_TV-BWART 311)`);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"`);
   vbsLines.push(`  session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`  DismissPopupIfPresent`);
   vbsLines.push(``);
-  vbsLines.push(`  Set usrArea = session.findById("wnd[0]/usr")`);
+  vbsLines.push(`  session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-ACTION", 34).Key = "A08"`);
+  vbsLines.push(`  session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R10"`);
+  vbsLines.push(`  If session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text <> "311" Then`);
+  vbsLines.push(`    session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "311"`);
+  vbsLines.push(`  End If`);
+  vbsLines.push(`  session.findById("wnd[0]").sendVKey 0`);
   vbsLines.push(``);
-  vbsLines.push(`  ' 2. Garante A08 (Transferencia) + R10 (Outros/as) + Movimento 311`);
-  vbsLines.push(`  Set actionCombo = FindControlByIdPart(usrArea, "GODYNPRO-ACTION")`);
-  vbsLines.push(`  If Not (actionCombo Is Nothing) Then`);
-  vbsLines.push(`    If actionCombo.Key <> "A08" Then`);
-  vbsLines.push(`      actionCombo.Key = "A08"`);
-  vbsLines.push(`      session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`      Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    End If`);
+  vbsLines.push(`  If session.findById("wnd[0]/sbar").MessageType = "E" Then`);
+  vbsLines.push(`    outMsg = "Erro ao iniciar MIGO (" & centroName & "): " & session.findById("wnd[0]/sbar").Text`);
+  vbsLines.push(`    SAPApp.HistoryEnabled = True`);
+  vbsLines.push(`    dummy = session.UnlockSessionUI()`);
+  vbsLines.push(`    ExecuteMigoBatch = "error"`);
+  vbsLines.push(`    Exit Function`);
   vbsLines.push(`  End If`);
   vbsLines.push(``);
-  vbsLines.push(`  Set refCombo = FindControlByIdPart(usrArea, "GODYNPRO-REFDOC")`);
-  vbsLines.push(`  If Not (refCombo Is Nothing) Then`);
-  vbsLines.push(`    If refCombo.Key <> "R10" Then`);
-  vbsLines.push(`      refCombo.Key = "R10"`);
-  vbsLines.push(`      session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`      Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`  End If`);
+  vbsLines.push(`  If session.ActiveWindow.Name = "wnd[1]" Then session.findById("wnd[1]").Close`);
   vbsLines.push(``);
-  vbsLines.push(`  Set bwartField = FindControlByIdPart(usrArea, "GOHEAD-BWART")`);
-  vbsLines.push(`  If Not (bwartField Is Nothing) Then`);
-  vbsLines.push(`    If Trim(CStr(bwartField.Text)) <> "311" Then`);
-  vbsLines.push(`      bwartField.Text = "311"`);
-  vbsLines.push(`      session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`      Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`  End If`);
+  vbsLines.push(`  session.SendCommand ("MIGO_OK_HEADER_OPEN")`);
+  vbsLines.push(`  session.SendCommand ("MIGO_OK_HEADER_CLOSE")`);
+  vbsLines.push(`  session.SendCommand ("MIGO_OK_DETAIL_CLOSE")`);
   vbsLines.push(``);
-  vbsLines.push(`  ' 3. Loop pelas Linhas Agrupadas (Material + Centro + Origem + Destino + Qtd Consolidada)`);
-  vbsLines.push(`  For r = 0 To totalRows`);
-  vbsLines.push(`    Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    Set tblGrid = FindControlByIdPart(usrArea, "tblSAPLMIGOTV_GOITEM")`);
-  vbsLines.push(`    If tblGrid Is Nothing Then`);
-  vbsLines.push(`      outMsg = "Grade de itens da MIGO (tblSAPLMIGOTV_GOITEM) nao encontrada."`);
+  vbsLines.push(`  pageSize = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.pageSize`);
+  vbsLines.push(`  If Err.Number <> 0 Or pageSize <= 0 Then pageSize = 10`);
+  vbsLines.push(`  Err.Clear`);
+  vbsLines.push(`  session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Position = 0`);
+  vbsLines.push(``);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  ' PASSO 2: INSERIR OS ITENS AGRUPADOS NA GRADE (SAPLMIGOTV_GOITEM)`);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  CurrentRow = 0`);
+  vbsLines.push(`  For i = 0 To total_items - 1`);
+  vbsLines.push(`    If CurrentRow >= pageSize Then`);
+  vbsLines.push(`      session.findById("wnd[0]/tbar[0]/btn[0]").press`);
+  vbsLines.push(`      session.findById("wnd[0]/tbar[0]/btn[82]").press`);
+  vbsLines.push(`      CurrentRow = 1`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(``);
+  vbsLines.push(`    Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)`);
+  vbsLines.push(`    If cur_row Is Nothing Then`);
+  vbsLines.push(`      outMsg = "Nao foi possivel acessar a linha " & (CurrentRow + 1) & " da grade SAPLMIGOTV_GOITEM."`);
+  vbsLines.push(`      SAPApp.HistoryEnabled = True`);
+  vbsLines.push(`      dummy = session.UnlockSessionUI()`);
   vbsLines.push(`      ExecuteMigoBatch = "error"`);
   vbsLines.push(`      Exit Function`);
   vbsLines.push(`    End If`);
   vbsLines.push(``);
-  vbsLines.push(`    ' Calcula scroll da grade somente se a linha r ultrapassar as linhas visiveis da tela`);
-  vbsLines.push(`    curScroll = tblGrid.verticalScrollbar.Position`);
-  vbsLines.push(`    visCount = tblGrid.VisibleRowCount`);
-  vbsLines.push(`    If visCount <= 0 Then visCount = 3`);
-  vbsLines.push(`    If r >= (curScroll + visCount) Then`);
-  vbsLines.push(`      tblGrid.verticalScrollbar.Position = r`);
-  vbsLines.push(`      Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`      Set tblGrid = FindControlByIdPart(usrArea, "tblSAPLMIGOTV_GOITEM")`);
-  vbsLines.push(`      curScroll = tblGrid.verticalScrollbar.Position`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`    visibleRow = r - curScroll`);
-  vbsLines.push(`    If visibleRow < 0 Then visibleRow = 0`);
+  vbsLines.push(`    col_count = 0`);
+  vbsLines.push(`    material_assigned = False`);
+  vbsLines.push(`    special_stock_assigned = False`);
   vbsLines.push(``);
-  vbsLines.push(`    ' Resolve os indices reais das colunas da sua tela MIGO 311:`);
-  vbsLines.push(`    ' Col 1: Txt.brv.material (GOITEM-MAKTX ou GOITEM-MATNR)`);
-  vbsLines.push(`    ' Col 2: Cen. (GOITEM-NAME1 ou GOITEM-WERKS)`);
-  vbsLines.push(`    ' Col 3: Deposito (GOITEM-LGOBE ou GOITEM-LGORT)`);
-  vbsLines.push(`    ' Col 4: Deposito RegTran. (GOITEM-UMLGO)`);
-  vbsLines.push(`    ' Col 5: Qtd.em UMR (GOITEM-ERFMG)`);
-  vbsLines.push(`    ' Col 6: Texto (GOITEM-SGTXT)`);
-  vbsLines.push(`    ' Col 7: OK (GOITEM-TAKE_IT)`);
-  vbsLines.push(`    colMat = ResolveMigoColIndex(tblGrid, "GOITEM-MAKTX", "GOITEM-MATNR", 1)`);
-  vbsLines.push(`    colCen = ResolveMigoColIndex(tblGrid, "GOITEM-NAME1", "GOITEM-WERKS", 2)`);
-  vbsLines.push(`    colOrig = ResolveMigoColIndex(tblGrid, "GOITEM-LGOBE", "GOITEM-LGORT", 3)`);
-  vbsLines.push(`    colDest = ResolveMigoColIndex(tblGrid, "GOITEM-UMLGO", "", 4)`);
-  vbsLines.push(`    colQtd = ResolveMigoColIndex(tblGrid, "GOITEM-ERFMG", "", 5)`);
-  vbsLines.push(`    colTxt = ResolveMigoColIndex(tblGrid, "GOITEM-SGTXT", "", 6)`);
-  vbsLines.push(`    colOk = ResolveMigoColIndex(tblGrid, "GOITEM-TAKE_IT", "", 7)`);
-  vbsLines.push(``);
-  vbsLines.push(`    ' Preenche celulas usando a API oficial GetCell(visibleRow, colIdx) do SAP GUI Scripting!`);
-  vbsLines.push(`    If colMat >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colMat)).Text = CStr(matArr(r))`);
-  vbsLines.push(`    If colCen >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colCen)).Text = CStr(cenArr(r))`);
-  vbsLines.push(`    If colOrig >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colOrig)).Text = CStr(origArr(r))`);
-  vbsLines.push(`    If colDest >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colDest)).Text = CStr(destArr(r))`);
-  vbsLines.push(`    If colQtd >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colQtd)).Text = CStr(qtdArr(r))`);
-  vbsLines.push(`    If colTxt >= 0 And Trim(CStr(txtArr(r))) <> "" Then`);
-  vbsLines.push(`      tblGrid.GetCell(CLng(visibleRow), CLng(colTxt)).Text = CStr(txtArr(r))`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(``);
-  vbsLines.push(`    ' Pressiona Enter para o SAP validar a linha e liberar a aba Nº de Serie em Dados det.`);
-  vbsLines.push(`    session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`    DismissPopupIfPresent`);
-  vbsLines.push(``);
-  vbsLines.push(`    ' Garante que Dados det. esta apontando para a linha atual (r + 1)`);
-  vbsLines.push(`    Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    Dim detailZeile`);
-  vbsLines.push(`    Set detailZeile = FindControlByIdPart(usrArea, "GODYNPRO-DETAIL_ZEILE")`);
-  vbsLines.push(`    If Not (detailZeile Is Nothing) Then`);
-  vbsLines.push(`      If CLng(Trim(CStr(detailZeile.Text))) <> (r + 1) Then`);
-  vbsLines.push(`        detailZeile.Text = CStr(r + 1)`);
-  vbsLines.push(`        session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`        DismissPopupIfPresent`);
-  vbsLines.push(`        Set usrArea = session.findById("wnd[0]/usr")`);
+  vbsLines.push(`    For ii = 0 To cur_row.Count - 1`);
+  vbsLines.push(`      col_count = col_count + 1`);
+  vbsLines.push(`      If cur_row(ii + 0).Name = "GOITEM-MAKTX" And material_assigned = False Then`);
+  vbsLines.push(`        material_assigned = True`);
+  vbsLines.push(`        cur_row(ii + 0).Text = CStr(matArr(i))`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-TAKE_IT" Then`);
+  vbsLines.push(`        cur_row(ii + 0).Selected = True`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-ERFMG" Then`);
+  vbsLines.push(`        cur_row(ii + 0).Text = CStr(qtdArr(i))`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-LGOBE" Then`);
+  vbsLines.push(`        cur_row(ii + 0).Text = CStr(origArr(i))`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-NAME1" Then`);
+  vbsLines.push(`        cur_row(ii + 0).Text = CStr(cenArr(i))`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-SOBKZ" And special_stock_assigned = False Then`);
+  vbsLines.push(`        special_stock_assigned = True`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-SGTXT" Then`);
+  vbsLines.push(`        cur_row(ii + 0).Text = CStr(txtArr(i))`);
+  vbsLines.push(`      ElseIf cur_row(ii + 0).Name = "GOITEM-UMLGOBE" Then`);
+  vbsLines.push(`        cur_row(ii + 0).Text = CStr(destArr(i))`);
+  vbsLines.push(`      Else`);
+  vbsLines.push(`        col_count = col_count - 1`);
   vbsLines.push(`      End If`);
-  vbsLines.push(`    End If`);
+  vbsLines.push(`      If col_count > 7 Then Exit For`);
+  vbsLines.push(`    Next`);
   vbsLines.push(``);
-  vbsLines.push(`    ' Seleciona a aba Nº de Serie (tabpOK_GOITEM_SERIAL)`);
-  vbsLines.push(`    Dim serTab`);
-  vbsLines.push(`    Set serTab = FindControlByIdPart(usrArea, "tabpOK_GOITEM_SERIAL")`);
-  vbsLines.push(`    If serTab Is Nothing Then`);
-  vbsLines.push(`      Set serTab = FindControlByIdPart(usrArea, "SERIAL")`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`    If Not (serTab Is Nothing) Then`);
-  vbsLines.push(`      serTab.Select`);
-  vbsLines.push(`      DismissPopupIfPresent`);
-  vbsLines.push(`      Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(``);
-  vbsLines.push(`    ' Preenche todos os Seriais desta linha diretamente na tabela tblSAPLMIGOTV_GOSERIAL via GetCell`);
-  vbsLines.push(`    Dim sList, sIdx, tblSerial, serVisCount, serPageRow`);
-  vbsLines.push(`    sList = Split(CStr(serArr(r)), "|")`);
-  vbsLines.push(`    Set tblSerial = FindControlByIdPart(usrArea, "tblSAPLMIGOTV_GOSERIAL")`);
-  vbsLines.push(`    If Not (tblSerial Is Nothing) Then`);
-  vbsLines.push(`      serVisCount = tblSerial.VisibleRowCount`);
-  vbsLines.push(`      If serVisCount <= 0 Then serVisCount = 4`);
-  vbsLines.push(`      serPageRow = 0`);
-  vbsLines.push(`      For sIdx = 0 To UBound(sList)`);
-  vbsLines.push(`        If Trim(CStr(sList(sIdx))) <> "" Then`);
-  vbsLines.push(`          If serPageRow >= serVisCount Then`);
-  vbsLines.push(`            session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`            Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`            Set tblSerial = FindControlByIdPart(usrArea, "tblSAPLMIGOTV_GOSERIAL")`);
-  vbsLines.push(`            tblSerial.verticalScrollbar.Position = sIdx`);
-  vbsLines.push(`            Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`            Set tblSerial = FindControlByIdPart(usrArea, "tblSAPLMIGOTV_GOSERIAL")`);
-  vbsLines.push(`            serPageRow = sIdx - tblSerial.verticalScrollbar.Position`);
-  vbsLines.push(`            If serPageRow < 0 Then serPageRow = 0`);
-  vbsLines.push(`          End If`);
-  vbsLines.push(`          tblSerial.GetCell(CLng(serPageRow), 0).Text = Trim(CStr(sList(sIdx)))`);
-  vbsLines.push(`          serPageRow = serPageRow + 1`);
-  vbsLines.push(`        End If`);
-  vbsLines.push(`      Next`);
-  vbsLines.push(`      session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`      DismissPopupIfPresent`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(``);
-  vbsLines.push(`    ' Marca Item OK (GOITEM-TAKE_IT) no detalhe ou na coluna OK da grade`);
-  vbsLines.push(`    Set usrArea = session.findById("wnd[0]/usr")`);
-  vbsLines.push(`    Dim chkOk`);
-  vbsLines.push(`    Set chkOk = FindControlByIdPart(usrArea, "chkGOITEM-TAKE_IT")`);
-  vbsLines.push(`    If Not (chkOk Is Nothing) Then`);
-  vbsLines.push(`      chkOk.Selected = True`);
-  vbsLines.push(`    Else`);
-  vbsLines.push(`      Set tblGrid = FindControlByIdPart(usrArea, "tblSAPLMIGOTV_GOITEM")`);
-  vbsLines.push(`      If Not (tblGrid Is Nothing) And colOk >= 0 Then`);
-  vbsLines.push(`        tblGrid.GetCell(CLng(visibleRow), CLng(colOk)).Selected = True`);
-  vbsLines.push(`      End If`);
-  vbsLines.push(`    End If`);
-  vbsLines.push(`    session.findById("wnd[0]").sendVKey 0`);
-  vbsLines.push(`    DismissPopupIfPresent`);
+  vbsLines.push(`    Set cur_row = Nothing`);
+  vbsLines.push(`    CurrentRow = CurrentRow + 1`);
   vbsLines.push(`  Next`);
   vbsLines.push(``);
-  vbsLines.push(`  ' 4. Clica em VERIFICAR (btn[7])`);
-  vbsLines.push(`  session.findById("wnd[0]/tbar[1]/btn[7]").press`);
-  vbsLines.push(`  Dim sbarType, sbarText`);
-  vbsLines.push(`  sbarType = CStr(session.findById("wnd[0]/sbar").MessageType)`);
-  vbsLines.push(`  sbarText = CStr(session.findById("wnd[0]/sbar").Text)`);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  ' PASSO 3: REABRIR DETALHE E INSERIR OS SERIAIS UII (SAPLMIGO:0360)`);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  session.SendCommand ("MIGO_OK_DETAIL_OPEN")`);
   vbsLines.push(``);
-  vbsLines.push(`  If sbarType = "E" Or sbarType = "A" Then`);
-  vbsLines.push(`    outMsg = "Erro SAP na Verificacao (" & centroName & "): " & sbarText`);
-  vbsLines.push(`    ExecuteMigoBatch = "error"`);
-  vbsLines.push(`    Exit Function`);
-  vbsLines.push(`  End If`);
+  vbsLines.push(`  For item_index = 1 To total_items`);
+  vbsLines.push(`    Err.Clear`);
+  vbsLines.push(`    session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:0009/subSUB_ITEMDETAIL:SAPLMIGO:0303/subSUB_DETAIL:SAPLMIGO:0305/tabsTS_GOITEM/tabpOK_GOITEM_SERIAL").Select`);
+  vbsLines.push(`    If Err.Number <> 0 Then`);
+  vbsLines.push(`      Err.Clear`);
+  vbsLines.push(`      Set serTabObj = FindControlByIdPart(session.findById("wnd[0]/usr"), "tabpOK_GOITEM_SERIAL")`);
+  vbsLines.push(`      If Not (serTabObj Is Nothing) Then serTabObj.Select`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(`    If Err.Number <> 0 Then`);
+  vbsLines.push(`      outMsg = "Erro ao selecionar aba Serial - Item " & item_index & " (" & matArr(item_index - 1) & "): " & Err.Description`);
+  vbsLines.push(`      SAPApp.HistoryEnabled = True`);
+  vbsLines.push(`      dummy = session.UnlockSessionUI()`);
+  vbsLines.push(`      ExecuteMigoBatch = "error"`);
+  vbsLines.push(`      Exit Function`);
+  vbsLines.push(`    End If`);
   vbsLines.push(``);
+  vbsLines.push(`    ' Pressiona btnOK_SER_SEARCH na subscreen SAPLMIGO:0360`);
+  vbsLines.push(`    Err.Clear`);
+  vbsLines.push(`    session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:0009/subSUB_ITEMDETAIL:SAPLMIGO:0303/subSUB_DETAIL:SAPLMIGO:0305/tabsTS_GOITEM/tabpOK_GOITEM_SERIAL/ssubSUB_TS_GOITEM_SERIAL:SAPLMIGO:0360/btnOK_SER_SEARCH").press`);
+  vbsLines.push(`    If Err.Number <> 0 Then`);
+  vbsLines.push(`      Err.Clear`);
+  vbsLines.push(`      Set btnSerSearchObj = FindControlByIdPart(session.findById("wnd[0]/usr"), "btnOK_SER_SEARCH")`);
+  vbsLines.push(`      If Not (btnSerSearchObj Is Nothing) Then btnSerSearchObj.press`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(``);
+  vbsLines.push(`    ' Abre selecao multipla de UII (SO_UII)`);
+  vbsLines.push(`    session.findById("wnd[0]/usr/btn%_SO_UII_%_APP_%-VALU_PUSH").press`);
+  vbsLines.push(``);
+  vbsLines.push(`    ' Copia os UIIs exclusivos deste item agrupado para o Clipboard e cola (btn[24])`);
+  vbsLines.push(`    PutSerialsInClipboard serArr(item_index - 1)`);
+  vbsLines.push(`    session.findById("wnd[1]/tbar[0]/btn[24]").press`);
+  vbsLines.push(`    Err.Clear`);
+  vbsLines.push(`    session.findById("wnd[1]/tbar[0]/btn[8]").press`);
+  vbsLines.push(`    Err.Clear`);
+  vbsLines.push(``);
+  vbsLines.push(`    If session.findById("wnd[0]/sbar").MessageType = "E" Then`);
+  vbsLines.push(`      outMsg = "Erro na busca serial UII - Item " & item_index & " (" & matArr(item_index - 1) & "): " & session.findById("wnd[0]/sbar").Text`);
+  vbsLines.push(`      SAPApp.HistoryEnabled = True`);
+  vbsLines.push(`      dummy = session.UnlockSessionUI()`);
+  vbsLines.push(`      ExecuteMigoBatch = "error"`);
+  vbsLines.push(`      Exit Function`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(``);
+  vbsLines.push(`    current_quantity = CLng(qtdArr(item_index - 1))`);
+  vbsLines.push(`    session.findById("wnd[0]/tbar[1]/btn[8]").press`);
+  vbsLines.push(``);
+  vbsLines.push(`    If current_quantity > 1 Then`);
+  vbsLines.push(`      session.findById("wnd[0]").sendVKey 5`);
+  vbsLines.push(`      session.findById("wnd[0]/tbar[1]/btn[47]").press`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(``);
+  vbsLines.push(`    If item_index < total_items Then`);
+  vbsLines.push(`      Err.Clear`);
+  vbsLines.push(`      session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:0009/subSUB_ITEMDETAIL:SAPLMIGO:0303/subSUB_DETAIL:SAPLMIGO:0305/btnOK_NEXT_ITEM").press`);
+  vbsLines.push(`      If Err.Number <> 0 Then`);
+  vbsLines.push(`        Err.Clear`);
+  vbsLines.push(`        Set btnNextItemObj = FindControlByIdPart(session.findById("wnd[0]/usr"), "btnOK_NEXT_ITEM")`);
+  vbsLines.push(`        If Not (btnNextItemObj Is Nothing) Then btnNextItemObj.press`);
+  vbsLines.push(`      End If`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(`  Next`);
+  vbsLines.push(``);
+  vbsLines.push(`  ' =========================================================================`);
+  vbsLines.push(`  ' PASSO 4: FINALIZACAO (MODO VERIFICAR NA TELA OU SALVAR DOC btn[11])`);
+  vbsLines.push(`  ' =========================================================================`);
   vbsLines.push(`  If postModeStr = "verificar" Then`);
-  vbsLines.push(`    outMsg = "Preenchido e verificado na tela da MIGO (" & (totalRows + 1) & " linha(s) agrupada(s)). Confira e clique em Registrar."`);
+  vbsLines.push(`    SAPApp.HistoryEnabled = True`);
+  vbsLines.push(`    dummy = session.UnlockSessionUI()`);
+  vbsLines.push(`    outMsg = "Preenchimento de " & total_items & " item(ns) agrupado(s) e UIIs concluido na MIGO! Revise na tela do SAP e clique em Salvar."`);
   vbsLines.push(`    ExecuteMigoBatch = "verified"`);
   vbsLines.push(`    Exit Function`);
   vbsLines.push(`  End If`);
   vbsLines.push(``);
-  vbsLines.push(`  ' 5. Clica em REGISTRAR (btn[23] na barra da MIGO ou btn[11] Gravar)`);
-  vbsLines.push(`  Err.Clear`);
-  vbsLines.push(`  session.findById("wnd[0]/tbar[1]/btn[23]").press`);
-  vbsLines.push(`  If Err.Number <> 0 Then`);
-  vbsLines.push(`    Err.Clear`);
-  vbsLines.push(`    session.findById("wnd[0]/tbar[0]/btn[11]").press`);
+  vbsLines.push(`  ' Salvar documento no SAP Midea (wnd[0]/tbar[0]/btn[11]) exatamente como na BASE MIGO.xlsm`);
+  vbsLines.push(`  error_result = ""`);
+  vbsLines.push(`  session.findById("wnd[0]/tbar[0]/btn[11]").press`);
+  vbsLines.push(`  MessageType = session.findById("wnd[0]/sbar").MessageType`);
+  vbsLines.push(`  If MessageType = "W" Then`);
+  vbsLines.push(`    session.findById("wnd[0]").sendVKey 0`);
   vbsLines.push(`  End If`);
-  vbsLines.push(`  DismissPopupIfPresent`);
   vbsLines.push(``);
-  vbsLines.push(`  sbarType = CStr(session.findById("wnd[0]/sbar").MessageType)`);
-  vbsLines.push(`  sbarText = CStr(session.findById("wnd[0]/sbar").Text)`);
-  vbsLines.push(`  outDocSap = ExtractSapDocNumber(sbarText)`);
+  vbsLines.push(`  Err.Clear`);
+  vbsLines.push(`  session.findById("wnd[1]/tbar[0]/btn[0]")`);
+  vbsLines.push(`  If Err.Number = 0 Then`);
+  vbsLines.push(`    session.findById("wnd[1]/tbar[0]/btn[18]").press`);
+  vbsLines.push(`    session.findById("wnd[1]/tbar[0]/btn[19]").press`);
+  vbsLines.push(`    Err.Clear`);
+  vbsLines.push(`    session.findById("wnd[1]/usr/lbl[5,3]")`);
+  vbsLines.push(`    If Err.Number = 0 Then`);
+  vbsLines.push(`      error_result = "Item " & session.findById("wnd[1]/usr/lbl[5,3]").Text & ": " & session.findById("wnd[1]/usr/lbl[10,3]").Text`);
+  vbsLines.push(`    End If`);
+  vbsLines.push(`    session.findById("wnd[1]/tbar[0]/btn[0]").press`);
+  vbsLines.push(`  End If`);
+  vbsLines.push(`  Err.Clear`);
+  vbsLines.push(``);
+  vbsLines.push(`  result = CStr(session.findById("wnd[0]/sbar").Text)`);
+  vbsLines.push(`  outDocSap = ExtractSapDocNumber(result)`);
+  vbsLines.push(``);
+  vbsLines.push(`  SAPApp.HistoryEnabled = True`);
+  vbsLines.push(`  dummy = session.UnlockSessionUI()`);
   vbsLines.push(``);
   vbsLines.push(`  If outDocSap <> "" Then`);
-  vbsLines.push(`    outMsg = sbarText`);
+  vbsLines.push(`    outMsg = result`);
   vbsLines.push(`    ExecuteMigoBatch = "success"`);
-  vbsLines.push(`  ElseIf InStr(1, sbarText, "código de função", vbTextCompare) > 0 Or InStr(1, sbarText, "codigo de funcao", vbTextCompare) > 0 Then`);
-  vbsLines.push(`    outMsg = "A MIGO preencheu os itens na tela, mas aguarda confirmacao visual no SAP (verifique janela de log ou clique em Registrar)."`);
-  vbsLines.push(`    ExecuteMigoBatch = "verified"`);
-  vbsLines.push(`  Else`);
-  vbsLines.push(`    outMsg = "Retorno SAP (" & centroName & "): " & sbarText`);
+  vbsLines.push(`  ElseIf error_result <> "" Then`);
+  vbsLines.push(`    outMsg = error_result & " (" & result & ")"`);
   vbsLines.push(`    ExecuteMigoBatch = "error"`);
+  vbsLines.push(`  Else`);
+  vbsLines.push(`    outMsg = "Itens e UIIs preenchidos na tela (" & result & "). Confira no SAP."`);
+  vbsLines.push(`    ExecuteMigoBatch = "verified"`);
   vbsLines.push(`  End If`);
   vbsLines.push(`End Function`);
   vbsLines.push(``);
@@ -886,28 +910,34 @@ export function downloadLocalSapBridgeLauncher(): void {
 }
 
 /**
- * SCRIPT MESTRE VBA EXCEL V3 (COM CONSTRUTOR DE PAINEL VISUAL PREMIUM + AGRUPAMENTO + EXECUÇÃO SAP MIGO 311)
- * - Inclui `Sub Construir_Painel_Visual_MIGOU()`: Ao rodar 1 vez numa planilha em branco, desenha automaticamente
- *   todo o Painel Visual Midea/MIGOU, cria os cartões de KPI, cria as duas tabelas (Entrada e Prévia Agrupada MIGO)
- *   e desenha os 4 Botões Clicáveis na planilha para compartilhar com os colegas de trabalho!
- * - Inclui `Sub Simular_Agrupamento_MIGO311()`: Consolida por Centro + Material + Origem + Destino.
- * - Inclui `Sub Executar_SAP_MIGO_311_Mestre()`: Usa `tblGrid.GetCell(row, col)` + `GOITEM-MAKTX` (`Txt.brv.material`) +
- *   `tabpOK_GOITEM_SERIAL` + preenchimento direto em `tblSAPLMIGOTV_GOSERIAL` (sem depender de Clipboard!).
+ * SCRIPT MESTRE VBA EXCEL V4 (CALIBRADO COM OS OBJETOS REAIS DO SAP MIDEA - BASE MIGO.xlsm)
+ * Funciona tanto:
+ * A) Na nova aba visual `PAINEL_MIGO_311` (construída automaticamente por `Construir_Painel_Visual_MIGOU`)
+ * B) Diretamente na aba `Planilha1 (311)` da `BASE MIGO.xlsm` (`Sub MIGO_311_3()` lendo das Colunas K a R)!
+ *
+ * Correções críticas aplicadas sobre a macro antiga `MIGO_311_3`:
+ * 1. Auto-Ordenação do bloco por `Centro + Material + Dep. Origem + Dep. Destino` ANTES de agrupar, garantindo
+ *    que o `.Range(...).Copy` dos seriais UII seja 100% contíguo mesmo se a lista colada estiver fora de ordem!
+ * 2. Inclusão obrigatória do `Centro` (`arrPlant`) na condição de quebra de grupo (`isNewGroup`).
+ * 3. Remoção de seriais UII duplicados na mesma transferência.
+ * 4. Uso exato do motor Midea: `GODEFAULT_TV-BWART`, `MIGO_OK_HEADER_CLOSE`, `MIGO_OK_DETAIL_CLOSE`,
+ *    `SAPLMIGOTV_GOITEM` (`GOITEM-MAKTX`, `GOITEM-UMLGOBE`, `GOITEM-ERFMG`, `GOITEM-LGOBE`, `GOITEM-NAME1`, `GOITEM-SGTXT`, `GOITEM-TAKE_IT`)
+ *    e busca de UIIs na `SAPLMIGO:0360` (`btnOK_SER_SEARCH` -> `btn%_SO_UII_%_APP_%-VALU_PUSH` -> `btn[24]` -> `btn[8]` -> `sendVKey 5` -> `btn[47]`).
  */
 export function generateExcelVbaV2MacroCode(options: MigoEngineOptions): string {
   const defaultTexto = resolveMigoItemText(options);
   return `' =======================================================================================
-' SISTEMA MESTRE EXCEL VBA V3 - MIGOU SAP MIGO 311 (MIDEA CARRIER)
-' Autor: MIGOU Automation Engine - Exclusivo Time Midea
-'
-' COMO USAR E COMPARTILHAR COM SEUS COLEGAS:
-' 1. No Excel, aperte ALT + F11 -> Inserir -> Modulo (tenha apenas 1 modulo no projeto) e cole este codigo.
-' 2. Execute uma unica vez a macro "Construir_Painel_Visual_MIGOU" (F5).
-'    Ela vai desenhar automaticamente toda a interface visual azul Safira do MIGOU,
-'    criar os seletores, as tabelas e os BOTOES CLICAVEIS na planilha!
-' 3. Salve o arquivo como "Painel_Mestre_MIGO311_MIGOU.xlsm" e compartilhe com o time!
+' SISTEMA MESTRE EXCEL VBA V4 - MIGOU SAP MIGO 311 (MOTOR OFICIAL MIDEA SAPLMIGO:0360 UII)
+' Compativel com:
+'   1) Novo Painel Visual "PAINEL_MIGO_311" (Colunas B a F -> Botoes Visuais no Topo)
+'   2) Planilha "311" da BASE MIGO.xlsm atual (Colunas K a R -> Sub MIGO_311_3)
 ' =======================================================================================
 Option Explicit
+
+Public SapGuiAuto As Object
+Public SAPApp As Object
+Public SAPCon As Object
+Public session As Object
 
 ' =======================================================================================
 ' 1. CONSTRUTOR AUTOMATICO DO LAYOUT VISUAL NO EXCEL (RODE 1 VEZ PARA CRIAR O PAINEL)
@@ -922,7 +952,6 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Name = "PAINEL_MIGO_311"
     On Error GoTo 0
     
-    ' Remove botoes antigos para nao duplicar
     For Each shp In ws.Shapes
         If Left(shp.Name, 9) = "BTN_MIGOU" Then shp.Delete
     Next shp
@@ -938,12 +967,12 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Range("A2:P2").RowHeight = 28
     ws.Range("A3:P3").RowHeight = 18
     
-    ws.Range("B2").Value = "MIGOU SAP - CENTRAL MESTRE DE AUTOMACAO MIGO 311 (AGRUPAMENTO INTELIGENTE)"
+    ws.Range("B2").Value = "MIGOU SAP - CENTRAL MESTRE MIGO 311 V4 (MOTOR OFICIAL MIDEA UII)"
     ws.Range("B2").Font.Color = RGB(255, 255, 255)
     ws.Range("B2").Font.Bold = True
     ws.Range("B2").Font.Size = 14
     
-    ws.Range("B3").Value = "Agrupa automaticamente por Material + Centro + Deposito Origem/Destino - Preenche Numeros de Serie - Captura Doc SAP 49xxxxxxxx"
+    ws.Range("B3").Value = "Ordena e Agrupa automaticamente por Centro + Material + Origem + Destino - Injeta Seriais via SO_UII (SAPLMIGO:0360)"
     ws.Range("B3").Font.Color = RGB(186, 230, 253)
     ws.Range("B3").Font.Size = 9
     
@@ -953,44 +982,40 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Rows(6).RowHeight = 24
     ws.Rows(7).RowHeight = 10
     
-    ' Configuracoes (B5:E6)
     ws.Range("B5").Value = "COLUNA TEXTO NA MIGO:"
-    ws.Range("C5").Value = "MODO DE EXECUCAO NO SAP:"
-    ws.Range("D5").Value = "DIVISAO POR CENTRO:"
+    ws.Range("C5").Value = "MODO DE FINALIZACAO:"
+    ws.Range("D5").Value = "ORDENACAO AUTOMATICA:"
     ws.Range("B5:D5").Font.Bold = True
     ws.Range("B5:D5").Font.Size = 8
     ws.Range("B5:D5").Font.Color = RGB(71, 85, 105)
     
     ws.Range("B6").Value = "${defaultTexto || ''}"
     ws.Range("B6").Interior.Color = RGB(240, 249, 255)
-    ws.Range("B6").Borders.LineStyle = xlContinuous
+    ws.Range("B6").Borders.LineStyle = 1
     ws.Range("B6").Font.Bold = True
-    ws.Range("B6").HorizontalAlignment = xlCenter
+    ws.Range("B6").HorizontalAlignment = -4108
     
     With ws.Range("C6")
-        .Value = "VERIFICAR E GRAVAR"
+        .Value = "${options.postMode === 'registrar' ? 'SALVAR DOC AUTOMATICAMENTE' : 'PREENCHER P/ REVISAO (PADRAO MIDEA)'}"
         .Interior.Color = RGB(236, 253, 245)
-        .Borders.LineStyle = xlContinuous
+        .Borders.LineStyle = 1
         .Font.Bold = True
-        .HorizontalAlignment = xlCenter
+        .HorizontalAlignment = -4108
         .Validation.Delete
-        .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:="VERIFICAR E GRAVAR,APENAS PREENCHER E VERIFICAR"
+        .Validation.Add Type:=3, AlertStyle:=1, Formula1:="PREENCHER P/ REVISAO (PADRAO MIDEA),SALVAR DOC AUTOMATICAMENTE"
     End With
     
     With ws.Range("D6")
-        .Value = "1 DOC POR CENTRO"
+        .Value = "ATIVA (CENTRO+MAT+ROTA)"
         .Interior.Color = RGB(240, 249, 255)
-        .Borders.LineStyle = xlContinuous
+        .Borders.LineStyle = 1
         .Font.Bold = True
-        .HorizontalAlignment = xlCenter
-        .Validation.Delete
-        .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:="1 DOC POR CENTRO,TUDO NO MESMO DOC"
+        .HorizontalAlignment = -4108
     End With
     
-    ' Cartoes de Resumo (I5:O6)
     ws.Range("I5").Value = "TOTAL SERIAIS:"
-    ws.Range("J5").Value = "LINHAS MIGO:"
-    ws.Range("K5").Value = "ULTIMO USUARIO SAP:"
+    ws.Range("J5").Value = "GRUPOS MIGO:"
+    ws.Range("K5").Value = "USUARIO SAP:"
     ws.Range("L5").Value = "STATUS EXECUCAO:"
     ws.Range("I5:L5").Font.Bold = True
     ws.Range("I5:L5").Font.Size = 8
@@ -1003,70 +1028,69 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Range("I6:L6").Font.Bold = True
     ws.Range("I6:L6").Font.Size = 11
     ws.Range("I6:L6").Interior.Color = RGB(248, 250, 252)
-    ws.Range("I6:L6").Borders.LineStyle = xlContinuous
-    ws.Range("I6:K6").HorizontalAlignment = xlCenter
+    ws.Range("I6:L6").Borders.LineStyle = 1
+    ws.Range("I6:K6").HorizontalAlignment = -4108
     
     ' 3. Cabecalhos da Tabela 1 (Entrada Bruta - Colunas B a G)
     ws.Rows(8).RowHeight = 26
     ws.Rows(9).RowHeight = 22
     
     ws.Range("B8:G8").Merge
-    ws.Range("B8").Value = "1. DADOS DE ENTRADA (COLE AQUI DO MIGOU OU EXCEL - 1 SERIAL POR LINHA)"
+    ws.Range("B8").Value = "1. DADOS DE ENTRADA (COLE AQUI DO MIGOU - B10:F...)"
     ws.Range("B8").Interior.Color = RGB(0, 72, 142)
     ws.Range("B8").Font.Color = RGB(255, 255, 255)
     ws.Range("B8").Font.Bold = True
-    ws.Range("B8").VerticalAlignment = xlCenter
+    ws.Range("B8").VerticalAlignment = -4108
     
     ws.Range("B9").Value = "Material (SKU)"
     ws.Range("C9").Value = "Serial (UII)"
     ws.Range("D9").Value = "Centro"
     ws.Range("E9").Value = "Dep. Origem"
     ws.Range("F9").Value = "Dep. Destino"
-    ws.Range("G9").Value = "Doc SAP / Retorno"
+    ws.Range("G9").Value = "Texto / Status"
     
     With ws.Range("B9:G9")
         .Interior.Color = RGB(224, 242, 254)
         .Font.Color = RGB(6, 25, 62)
         .Font.Bold = True
-        .Borders.LineStyle = xlContinuous
-        .HorizontalAlignment = xlCenter
-        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = 1
+        .HorizontalAlignment = -4108
+        .VerticalAlignment = -4108
     End With
     
-    ' 4. Cabecalhos da Tabela 2 (Grade MIGO 311 Agrupada - Colunas I a P)
+    ' 4. Cabecalhos da Tabela 2 (Espelho Agrupado da Grade MIGO 311 - Colunas I a P)
     ws.Range("I8:P8").Merge
-    ws.Range("I8").Value = "2. ESPELHO AGRUPADO DA MIGO 311 (COMO A MACRO PREENCHERA NO SAP)"
+    ws.Range("I8").Value = "2. ESPELHO AGRUPADO DA MIGO 311 (INTERVALOS CONTIGUOS DE UII)"
     ws.Range("I8").Interior.Color = RGB(6, 25, 62)
     ws.Range("I8").Font.Color = RGB(255, 255, 255)
     ws.Range("I8").Font.Bold = True
-    ws.Range("I8").VerticalAlignment = xlCenter
+    ws.Range("I8").VerticalAlignment = -4108
     
-    ws.Range("I9").Value = "Linha"
+    ws.Range("I9").Value = "Item"
     ws.Range("J9").Value = "Txt.brv.material"
     ws.Range("K9").Value = "Cen."
     ws.Range("L9").Value = "Deposito"
     ws.Range("M9").Value = "Deposito RegTran."
     ws.Range("N9").Value = "Qtd.em UMR"
-    ws.Range("O9").Value = "Seriais do Grupo"
-    ws.Range("P9").Value = "Status SAP / Doc 49x"
+    ws.Range("O9").Value = "Linhas UII (De:Ate)"
+    ws.Range("P9").Value = "Status SAP MIGO"
     
     With ws.Range("I9:P9")
         .Interior.Color = RGB(224, 242, 254)
         .Font.Color = RGB(6, 25, 62)
         .Font.Bold = True
-        .Borders.LineStyle = xlContinuous
-        .HorizontalAlignment = xlCenter
-        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = 1
+        .HorizontalAlignment = -4108
+        .VerticalAlignment = -4108
     End With
     
-    ' Larguras das Colunas
     ws.Columns("A").ColumnWidth = 2
     ws.Columns("B").ColumnWidth = 18
     ws.Columns("C").ColumnWidth = 22
     ws.Columns("D").ColumnWidth = 9
     ws.Columns("E").ColumnWidth = 12
     ws.Columns("F").ColumnWidth = 12
-    ws.Columns("G").ColumnWidth = 22
+    ws.Columns("G").ColumnWidth = 20
     ws.Columns("H").ColumnWidth = 3
     ws.Columns("I").ColumnWidth = 7
     ws.Columns("J").ColumnWidth = 18
@@ -1074,22 +1098,20 @@ Public Sub Construir_Painel_Visual_MIGOU()
     ws.Columns("L").ColumnWidth = 11
     ws.Columns("M").ColumnWidth = 16
     ws.Columns("N").ColumnWidth = 12
-    ws.Columns("O").ColumnWidth = 28
-    ws.Columns("P").ColumnWidth = 26
+    ws.Columns("O").ColumnWidth = 20
+    ws.Columns("P").ColumnWidth = 28
     
-    ' 5. Criacao dos Botoes Visuais de Acao no Topo
-    CreateActionButton ws, "BTN_MIGOU_AGRUPAR", "1. AGRUPAR E SIMULAR MIGO", "Simular_Agrupamento_MIGO311", 435, 38, 175, 28, RGB(0, 131, 202)
-    CreateActionButton ws, "BTN_MIGOU_EXECUTAR", "2. EXECUTAR NO SAP (MIGO 311)", "Executar_SAP_MIGO_311_Mestre", 620, 38, 205, 28, RGB(16, 185, 129)
+    CreateActionButton ws, "BTN_MIGOU_AGRUPAR", "1. ORDENAR E AGRUPAR LOTE", "Simular_Agrupamento_MIGO311", 435, 38, 175, 28, RGB(0, 131, 202)
+    CreateActionButton ws, "BTN_MIGOU_EXECUTAR", "2. EXECUTAR MIGO 311 NO SAP", "Executar_SAP_MIGO_311_Mestre", 620, 38, 205, 28, RGB(16, 185, 129)
     CreateActionButton ws, "BTN_MIGOU_LIMPAR", "LIMPAR", "Limpar_Painel_MIGOU", 835, 38, 80, 28, RGB(225, 29, 72)
     
     Application.ScreenUpdating = True
-    MsgBox "Painel Visual MIGOU MIGO 311 construido com sucesso!" & vbCrLf & vbCrLf & _
-           "Agora basta colar os itens nas colunas B a F (a partir da linha 10) e clicar nos botoes do topo!", vbInformation, "MIGOU SAP 311"
+    MsgBox "Painel Visual MIGOU MIGO 311 V4 construido com sucesso!" & vbCrLf & vbCrLf & _
+           "Cole os itens a partir da celula B10 e clique em '2. EXECUTAR MIGO 311 NO SAP'!", vbInformation, "MIGOU SAP 311"
 End Sub
 
 Private Sub CreateActionButton(ws As Worksheet, btnName As String, captionText As String, macroName As String, leftPos As Double, topPos As Double, widthVal As Double, heightVal As Double, fillColor As Long)
     Dim shp As Shape
-    ' Constantes numericas nativas do Office (compativeis com qualquer versao do Excel)
     Set shp = ws.Shapes.AddShape(5, leftPos, topPos, widthVal, heightVal)
     shp.Name = btnName
     shp.Fill.ForeColor.RGB = fillColor
@@ -1105,501 +1127,414 @@ Private Sub CreateActionButton(ws As Worksheet, btnName As String, captionText A
 End Sub
 
 ' =======================================================================================
-' 2. MOTOR DE AGRUPAMENTO NO EXCEL (CONSOLIDA POR CENTRO + MATERIAL + ORIGEM + DESTINO)
+' 2. AUTO-ORDENACAO E AGRUPAMENTO INTELIGENTE NO PAINEL VISUAL (COLUNAS B a F)
 ' =======================================================================================
 Public Sub Simular_Agrupamento_MIGO311()
     Dim ws As Worksheet
-    Dim lastRow As Long, r As Long, outRow As Long
-    Dim dictQtd As Object, dictSerials As Object, dictRows As Object
-    Dim mat As String, ser As String, cen As String, orig As String, dest As String
-    Dim groupKey As String, seenSerialKey As String
-    Dim dictSeenSerial As Object
-    
+    Dim lastRow As Long, i As Long
     Set ws = ActiveSheet
-    lastRow = ws.Cells(ws.Rows.Count, "B").End(xlUp).Row
     
-    ' Se o usuario colou na Coluna A em vez da B, detecta automaticamente!
-    Dim colOffset As Long
-    If lastRow < 10 And ws.Cells(ws.Rows.Count, "A").End(xlUp).Row >= 2 Then
-        colOffset = 0 ' Colunas A..E
-        lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
-    Else
-        colOffset = 1 ' Colunas B..F do Painel Visual
-    End If
-    
-    Dim startRow As Long
-    startRow = IIf(colOffset = 1, 10, 2)
-    
-    If lastRow < startRow Then
-        MsgBox "Cole os dados de Material, Serial, Centro, Dep. Origem e Dep. Destino antes de agrupar.", vbExclamation, "MIGOU SAP 311"
+    lastRow = ws.Cells(ws.Rows.Count, "B").End(-4162).Row
+    If lastRow < 10 Then
+        MsgBox "Cole os itens nas colunas B a F (a partir da linha 10) antes de agrupar.", vbExclamation, "MIGOU SAP 311"
         Exit Sub
     End If
     
-    Set dictQtd = CreateObject("Scripting.Dictionary")
-    Set dictSerials = CreateObject("Scripting.Dictionary")
-    Set dictRows = CreateObject("Scripting.Dictionary")
-    Set dictSeenSerial = CreateObject("Scripting.Dictionary")
+    Application.ScreenUpdating = False
     
-    For r = startRow To lastRow
-        mat = UCase(Trim(CStr(ws.Cells(r, 1 + colOffset).Value)))
-        ser = UCase(Trim(CStr(ws.Cells(r, 2 + colOffset).Value)))
-        cen = UCase(Trim(CStr(ws.Cells(r, 3 + colOffset).Value)))
-        orig = UCase(Trim(CStr(ws.Cells(r, 4 + colOffset).Value)))
-        dest = UCase(Trim(CStr(ws.Cells(r, 5 + colOffset).Value)))
+    ' 1. Ordena fisicamente B10:G[lastRow] por Centro (D) -> Material (B) -> Origem (E) -> Destino (F)
+    ' Isso garante que todos os seriais UII (Coluna C) do mesmo grupo fiquem 100% contiguos!
+    With ws.Sort
+        .SortFields.Clear
+        .SortFields.Add Key:=ws.Range("D10:D" & lastRow), Order:=1
+        .SortFields.Add Key:=ws.Range("B10:B" & lastRow), Order:=1
+        .SortFields.Add Key:=ws.Range("E10:E" & lastRow), Order:=1
+        .SortFields.Add Key:=ws.Range("F10:F" & lastRow), Order:=1
+        .SetRange ws.Range("B10:G" & lastRow)
+        .Header = 2
+        .Apply
+    End With
+    
+    ws.Range("I10:P5000").ClearContents
+    ws.Range("I10:P5000").Interior.ColorIndex = -4142
+    
+    Dim grpCount As Long, outRow As Long
+    Dim curMat As String, curCen As String, curFrom As String, curTo As String
+    Dim prevMat As String, prevCen As String, prevFrom As String, prevTo As String
+    Dim arrStart As Long, arrEnd As Long, curQty As Long
+    
+    grpCount = 0
+    outRow = 10
+    
+    For i = 10 To lastRow
+        curMat = UCase(Trim(ws.Cells(i, "B").Text))
+        curCen = UCase(Trim(ws.Cells(i, "D").Text))
+        curFrom = UCase(Trim(ws.Cells(i, "E").Text))
+        curTo = UCase(Trim(ws.Cells(i, "F").Text))
         
-        If mat <> "" And ser <> "" And cen <> "" And orig <> "" And dest <> "" Then
-            groupKey = cen & "|" & mat & "|" & orig & "|" & dest
-            seenSerialKey = groupKey & "|" & ser
-            
-            If Not dictSeenSerial.Exists(seenSerialKey) Then
-                dictSeenSerial.Add seenSerialKey, True
-                If Not dictQtd.Exists(groupKey) Then
-                    dictQtd.Add groupKey, 1
-                    dictSerials.Add groupKey, ser
-                    dictRows.Add groupKey, CStr(r)
-                Else
-                    dictQtd(groupKey) = CLng(dictQtd(groupKey)) + 1
-                    dictSerials(groupKey) = dictSerials(groupKey) & "|" & ser
-                    dictRows(groupKey) = dictRows(groupKey) & "," & CStr(r)
+        If curMat <> "" Then
+            If grpCount = 0 Or curMat <> prevMat Or curCen <> prevCen Or curFrom <> prevFrom Or curTo <> prevTo Then
+                If grpCount > 0 Then
+                    EscreverLinhaEspelho ws, outRow, grpCount, prevMat, prevCen, prevFrom, prevTo, curQty, "C" & arrStart & ":C" & arrEnd
+                    outRow = outRow + 1
                 End If
+                grpCount = grpCount + 1
+                prevMat = curMat
+                prevCen = curCen
+                prevFrom = curFrom
+                prevTo = curTo
+                arrStart = i
+                arrEnd = i
+                curQty = 1
+            Else
+                arrEnd = i
+                curQty = curQty + 1
             End If
         End If
-    Next r
+    Next i
     
-    If colOffset = 1 Then
-        ws.Range("I10:P5000").ClearContents
-        ws.Range("I10:P5000").Interior.ColorIndex = xlNone
-        
-        Dim keys As Variant, idx As Long, parts As Variant
-        keys = dictQtd.Keys
-        outRow = 10
-        
-        For idx = 0 To dictQtd.Count - 1
-            parts = Split(CStr(keys(idx)), "|")
-            ws.Cells(outRow, "I").Value = idx + 1
-            ws.Cells(outRow, "J").Value = parts(1) ' Material
-            ws.Cells(outRow, "K").Value = parts(0) ' Centro
-            ws.Cells(outRow, "L").Value = parts(2) ' Origem
-            ws.Cells(outRow, "M").Value = parts(3) ' Destino
-            ws.Cells(outRow, "N").Value = CLng(dictQtd(keys(idx))) ' Qtd Consolidada
-            ws.Cells(outRow, "O").Value = Replace(CStr(dictSerials(keys(idx))), "|", ", ")
-            ws.Cells(outRow, "P").Value = "Pronto p/ MIGO (" & dictQtd(keys(idx)) & " UIIs)"
-            
-            ws.Range("I" & outRow & ":P" & outRow).Borders.LineStyle = xlContinuous
-            ws.Cells(outRow, "I").HorizontalAlignment = xlCenter
-            ws.Cells(outRow, "K").HorizontalAlignment = xlCenter
-            ws.Cells(outRow, "L").HorizontalAlignment = xlCenter
-            ws.Cells(outRow, "M").HorizontalAlignment = xlCenter
-            ws.Cells(outRow, "N").HorizontalAlignment = xlCenter
-            ws.Cells(outRow, "N").Font.Bold = True
-            outRow = outRow + 1
-        Next idx
-        
-        ws.Range("I6").Value = dictSeenSerial.Count
-        ws.Range("J6").Value = dictQtd.Count
-        ws.Range("L6").Value = dictQtd.Count & " linha(s) agrupada(s)"
+    If grpCount > 0 Then
+        EscreverLinhaEspelho ws, outRow, grpCount, prevMat, prevCen, prevFrom, prevTo, curQty, "C" & arrStart & ":C" & arrEnd
     End If
+    
+    ws.Range("I6").Value = (lastRow - 9)
+    ws.Range("J6").Value = grpCount
+    ws.Range("L6").Value = grpCount & " grupo(s) prontos"
+    Application.ScreenUpdating = True
+End Sub
+
+Private Sub EscreverLinhaEspelho(ws As Worksheet, outRow As Long, idx As Long, mat As String, cen As String, orig As String, dest As String, qtd As Long, rangeStr As String)
+    ws.Cells(outRow, "I").Value = idx
+    ws.Cells(outRow, "J").Value = mat
+    ws.Cells(outRow, "K").Value = cen
+    ws.Cells(outRow, "L").Value = orig
+    ws.Cells(outRow, "M").Value = dest
+    ws.Cells(outRow, "N").Value = qtd
+    ws.Cells(outRow, "O").Value = rangeStr
+    ws.Cells(outRow, "P").Value = "Pronto (" & qtd & " UIIs)"
+    ws.Range("I" & outRow & ":P" & outRow).Borders.LineStyle = 1
+    ws.Range("I" & outRow & ",K" & outRow & ":O" & outRow).HorizontalAlignment = -4108
+    ws.Cells(outRow, "N").Font.Bold = True
 End Sub
 
 ' =======================================================================================
-' 3. EXECUTOR MESTRE SAP GUI MIGO 311 (COM GetCell + ABA Nº DE SERIE DIRETA)
+' 3. EXECUTOR MESTRE SAP MIGO 311 (COMPATIVEL COM PAINEL VISUAL E COM ABA "311" K:R)
 ' =======================================================================================
 Public Sub Executar_SAP_MIGO_311_Mestre()
-    Dim SapGuiAuto As Object, app As Object, conn As Object, session As Object
-    Dim ws As Worksheet
+    MIGO_311_3
+End Sub
+
+Public Sub MIGO_311_3()
+    Dim sht As Worksheet
+    Dim isVisualPanel As Boolean
+    Dim i As Long, ii As Integer, last_row As Long, start_row As Long
+    Dim total_items As Integer, CurrentRow As Long, pageSize As Long
+    Dim cur_row As Object, col_count As Integer, item_index As Integer
     
-    Set ws = ActiveSheet
+    ' Detecta automaticamente se estamos no PAINEL_MIGO_311 (Colunas B..F) ou na aba "311" da BASE MIGO.xlsm (Colunas K..R)
+    Set sht = ActiveSheet
+    If sht.Cells(sht.Rows.Count, "B").End(-4162).Row >= 10 And UCase(Trim(sht.Range("B9").Text)) = "MATERIAL (SKU)" Then
+        isVisualPanel = True
+        Simular_Agrupamento_MIGO311
+        start_row = 10
+        last_row = sht.Cells(sht.Rows.Count, "B").End(-4162).Row
+    Else
+        isVisualPanel = False
+        On Error Resume Next
+        If sht.Name <> "311" Then Set sht = Sheets("311")
+        On Error GoTo 0
+        start_row = 2
+        last_row = sht.Cells(sht.Rows.Count, 11).End(-4162).Row
+        
+        ' CORRECAO CRITICA 1: Ordena automaticamente as Colunas K:R da aba "311" por Centro(M) + Material(K) + Origem(N) + Destino(P)
+        ' antes de montar os intervalos R(arrStart):R(arrEnd) para nao misturar seriais!
+        If last_row > 2 Then
+            With sht.Sort
+                .SortFields.Clear
+                .SortFields.Add Key:=sht.Range("M2:M" & last_row), Order:=1
+                .SortFields.Add Key:=sht.Range("K2:K" & last_row), Order:=1
+                .SortFields.Add Key:=sht.Range("N2:N" & last_row), Order:=1
+                .SortFields.Add Key:=sht.Range("P2:P" & last_row), Order:=1
+                .SetRange sht.Range("K2:R" & last_row)
+                .Header = 2
+                .Apply
+            End With
+        End If
+    End If
     
-    ' 1. Atualiza o agrupamento antes de ir ao SAP
-    Simular_Agrupamento_MIGO311
-    
-    Dim lastGroupRow As Long
-    lastGroupRow = ws.Cells(ws.Rows.Count, "J").End(xlUp).Row
-    If lastGroupRow < 10 Then
-        MsgBox "Nenhuma linha agrupada encontrada na tabela da direita (Colunas I a P)." & vbCrLf & _
-               "Se ainda nao montou o painel, execute 'Construir_Painel_Visual_MIGOU' primeiro.", vbExclamation, "MIGOU SAP 311"
+    If last_row < start_row Then
+        MsgBox "Nenhum item encontrado para processar na MIGO 311.", vbExclamation, "MIGOU SAP 311"
         Exit Sub
     End If
     
-    ' 2. Conecta ao SAP Logon e exige usuario logado
+    ' =========================================================================
+    ' PASSO 1: LER O EXCEL E AGRUPAR OS ITENS (CENTRO + MATERIAL + ORIGEM + DESTINO)
+    ' =========================================================================
+    Dim arrMat() As String, arrQty() As Double, arrPlant() As String
+    Dim arrFrom() As String, arrTo() As String, arrTxt() As String
+    Dim arrStart() As Long, arrEnd() As Long
+    Dim grpCount As Integer
+    grpCount = 0
+    
+    Dim material As String, plant As String, from_loc As String, to_loc As String, txt_val As String
+    Dim row_qty As Double, serialColLetter As String
+    serialColLetter = IIf(isVisualPanel, "C", "R")
+    
+    For i = start_row To last_row
+        If isVisualPanel Then
+            material = Trim(sht.Cells(i, "B").Text)
+            plant = Trim(sht.Cells(i, "D").Text)
+            from_loc = Trim(sht.Cells(i, "E").Text)
+            to_loc = Trim(sht.Cells(i, "F").Text)
+            txt_val = Trim(sht.Range("B6").Text)
+            row_qty = 1
+        Else
+            material = Trim(sht.Cells(i, 11).Text)
+            row_qty = Val(sht.Cells(i, 12).Value)
+            If row_qty <= 0 Then row_qty = 1
+            plant = Trim(sht.Cells(i, 13).Text)
+            from_loc = Trim(sht.Cells(i, 14).Text)
+            to_loc = Trim(sht.Cells(i, 16).Text)
+            txt_val = Trim(sht.Cells(i, 17).Text)
+        End If
+        
+        If material = "" Then Exit For
+        
+        Dim isNewGroup As Boolean
+        isNewGroup = False
+        
+        ' CORRECAO CRITICA 2: Inclui obrigatoriamente o Centro (plant <> arrPlant(grpCount)) na chave do grupo!
+        If grpCount = 0 Then
+            isNewGroup = True
+        ElseIf material <> arrMat(grpCount) Or plant <> arrPlant(grpCount) Or from_loc <> arrFrom(grpCount) Or to_loc <> arrTo(grpCount) Then
+            isNewGroup = True
+        End If
+        
+        If isNewGroup Then
+            grpCount = grpCount + 1
+            ReDim Preserve arrMat(1 To grpCount)
+            ReDim Preserve arrQty(1 To grpCount)
+            ReDim Preserve arrPlant(1 To grpCount)
+            ReDim Preserve arrFrom(1 To grpCount)
+            ReDim Preserve arrTo(1 To grpCount)
+            ReDim Preserve arrTxt(1 To grpCount)
+            ReDim Preserve arrStart(1 To grpCount)
+            ReDim Preserve arrEnd(1 To grpCount)
+            
+            arrMat(grpCount) = material
+            arrPlant(grpCount) = plant
+            arrFrom(grpCount) = from_loc
+            arrTo(grpCount) = to_loc
+            arrTxt(grpCount) = txt_val
+            arrStart(grpCount) = i
+            arrEnd(grpCount) = i
+            arrQty(grpCount) = row_qty
+        Else
+            arrEnd(grpCount) = i
+            arrQty(grpCount) = arrQty(grpCount) + row_qty
+        End If
+    Next i
+    
+    total_items = grpCount
+    If total_items = 0 Then Exit Sub
+    
+    ' =========================================================================
+    ' PASSO 2: CONECTAR AO SAP GUI E CONFIGURAR CABECALHO MIGO 311 MIDEA
+    ' =========================================================================
     On Error Resume Next
     Set SapGuiAuto = GetObject("SAPGUI")
     If Err.Number <> 0 Or SapGuiAuto Is Nothing Then
-        MsgBox "O SAP Logon nao esta aberto! Abra o SAP e faca login antes de executar.", vbCritical, "MIGOU SAP 311"
+        MsgBox "O SAP Logon nao esta aberto! Abra o SAP e faca login primeiro.", vbCritical, "MIGOU SAP 311"
         Exit Sub
     End If
-    Set app = SapGuiAuto.GetScriptingEngine
-    If app Is Nothing Or app.Children.Count = 0 Then
-        MsgBox "Nenhuma conexao SAP ativa! Faca login no SAP primeiro.", vbCritical, "MIGOU SAP 311"
-        Exit Sub
-    End If
-    Set conn = app.Children(0)
-    Set session = conn.Children(0)
-    If session Is Nothing Or Trim(CStr(session.Info.User)) = "" Then
-        MsgBox "Sessao SAP nao autenticada! Faca login com seu usuario Midea no SAP.", vbCritical, "MIGOU SAP 311"
+    Set SAPApp = SapGuiAuto.GetScriptingEngine
+    Set SAPCon = SAPApp.Children(0)
+    Set session = SAPCon.Children(0)
+    If Err.Number <> 0 Or session Is Nothing Then
+        MsgBox "Nenhuma sessao SAP ativa encontrada! Faca login no SAP.", vbCritical, "MIGOU SAP 311"
         Exit Sub
     End If
     On Error GoTo 0
     
-    ws.Range("K6").Value = CStr(session.Info.User)
+    If isVisualPanel Then sht.Range("K6").Value = CStr(session.Info.User)
     
-    Dim textoPadrao As String, modoExec As String, divisaoCentro As String
-    textoPadrao = Trim(CStr(ws.Range("B6").Value))
-    modoExec = UCase(Trim(CStr(ws.Range("C6").Value)))
-    divisaoCentro = UCase(Trim(CStr(ws.Range("D6").Value)))
+    Dim dummy As Variant
+    SAPApp.AllowSystemMessages = False
+    SAPApp.HistoryEnabled = False
+    dummy = session.LockSessionUI()
     
-    ' 3. Descobre os Centros unicos para rodar 1 Documento MIGO por Centro (ou tudo junto)
-    Dim dictCentros As Object
-    Set dictCentros = CreateObject("Scripting.Dictionary")
-    Dim r As Long, cName As String
-    
-    For r = 10 To lastGroupRow
-        cName = UCase(Trim(CStr(ws.Cells(r, "K").Value)))
-        If cName <> "" Then
-            If InStr(1, divisaoCentro, "TUDO", vbTextCompare) > 0 Then
-                cName = "TODOS"
-            End If
-            If Not dictCentros.Exists(cName) Then dictCentros.Add cName, True
-        End If
-    Next r
-    
-    Dim cKeys As Variant, cIdx As Long, currentCentroFilter As String
-    Dim docSapGerado As String, msgRetorno As String, statusExec As String
-    Dim relatorioFinal As String
-    cKeys = dictCentros.Keys
-    relatorioFinal = ""
-    
-    For cIdx = 0 To dictCentros.Count - 1
-        currentCentroFilter = CStr(cKeys(cIdx))
-        statusExec = ProcessarLoteMigoNoSap(session, ws, 10, lastGroupRow, currentCentroFilter, textoPadrao, modoExec, docSapGerado, msgRetorno)
-        
-        ' Atualiza Status e Doc SAP na planilha (Coluna P e Coluna G)
-        For r = 10 To lastGroupRow
-            If currentCentroFilter = "TODOS" Or UCase(Trim(CStr(ws.Cells(r, "K").Value))) = currentCentroFilter Then
-                If statusExec = "SUCCESS" Then
-                    ws.Cells(r, "P").Value = "CONCLUIDO - Doc: " & docSapGerado
-                    ws.Cells(r, "P").Interior.Color = RGB(209, 250, 229)
-                    PreencherDocSapNaEntrada ws, CStr(ws.Cells(r, "J").Value), CStr(ws.Cells(r, "K").Value), docSapGerado
-                ElseIf statusExec = "VERIFIED" Then
-                    ws.Cells(r, "P").Value = "VERIFICADO NA TELA SAP"
-                    ws.Cells(r, "P").Interior.Color = RGB(224, 242, 254)
-                Else
-                    ws.Cells(r, "P").Value = "ERRO: " & msgRetorno
-                    ws.Cells(r, "P").Interior.Color = RGB(254, 226, 226)
-                End If
-            End If
-        Next r
-        
-        relatorioFinal = relatorioFinal & "Centro " & currentCentroFilter & ": " & statusExec & " -> " & IIf(docSapGerado <> "", "Doc SAP " & docSapGerado, msgRetorno) & vbCrLf
-        
-        ' Se o modo for APENAS PREENCHER E VERIFICAR, para no primeiro lote para o analista ver a tela aberta!
-        If InStr(1, modoExec, "APENAS", vbTextCompare) > 0 Then Exit For
-    Next cIdx
-    
-    ws.Range("L6").Value = "Finalizado (" & Format(Now, "hh:mm:ss") & ")"
-    MsgBox "Processamento SAP MIGO 311 Concluido!" & vbCrLf & vbCrLf & relatorioFinal, vbInformation, "MIGOU SAP MIGO 311"
-End Sub
-
-Private Sub PreencherDocSapNaEntrada(ws As Worksheet, matTarget As String, cenTarget As String, docSap As String)
-    Dim lastIn As Long, i As Long
-    lastIn = ws.Cells(ws.Rows.Count, "B").End(xlUp).Row
-    For i = 10 To lastIn
-        If UCase(Trim(CStr(ws.Cells(i, "B").Value))) = matTarget And UCase(Trim(CStr(ws.Cells(i, "D").Value))) = cenTarget Then
-            ws.Cells(i, "G").Value = docSap
-            ws.Cells(i, "G").Interior.Color = RGB(209, 250, 229)
-            ws.Cells(i, "G").Font.Bold = True
-        End If
-    Next i
-End Sub
-
-Private Function ProcessarLoteMigoNoSap(session As Object, ws As Worksheet, startRow As Long, endRow As Long, filtroCentro As String, textoItem As String, modoExec As String, ByRef outDocSap As String, ByRef outMsg As String) As String
-    On Error Resume Next
-    outDocSap = ""
-    outMsg = ""
-    
-    Dim usrArea As Object, actionCombo As Object, refCombo As Object, bwartField As Object, tblGrid As Object
-    Dim r As Long, migoRowIdx As Long, visibleRow As Long, curScroll As Long, visCount As Long
-    Dim colMat As Long, colCen As Long, colOrig As Long, colDest As Long, colQtd As Long, colTxt As Long, colOk As Long
-    Dim mat As String, cen As String, orig As String, dest As String, qtd As String, serCsv As String
-    
-    ' 1. Abre /nMIGO limpa
-    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nMIGO"
+    session.findById("wnd[0]/tbar[0]/okcd").Text = "/nmigo"
     session.findById("wnd[0]").sendVKey 0
-    FecharPopupsSap session
     
-    Set usrArea = session.findById("wnd[0]/usr")
+    session.findById("wnd[0]/usr").FindByNameEx("GODYNPRO-ACTION", 34).Key = "A08" ' Transferencia
+    session.findById("wnd[0]/usr/").FindByNameEx("GODYNPRO-REFDOC", 34).Key = "R10" ' Outros
+    If session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text <> "311" Then
+        session.findById("wnd[0]/usr").FindByNameEx("GODEFAULT_TV-BWART", 32).Text = "311"
+    End If
+    session.findById("wnd[0]").sendVKey 0
     
-    ' 2. Garante Transferencia (A08) + Outros/as (R10) + Movimento 311
-    Set actionCombo = BuscarControleSap(usrArea, "GODYNPRO-ACTION")
-    If Not actionCombo Is Nothing Then
-        If actionCombo.Key <> "A08" Then
-            actionCombo.Key = "A08"
-            session.findById("wnd[0]").sendVKey 0
-            Set usrArea = session.findById("wnd[0]/usr")
+    If session.findById("wnd[0]/sbar").MessageType = "E" Then
+        If isVisualPanel Then
+            sht.Range("L6").Value = "Erro Cabecalho MIGO"
+        Else
+            sht.Cells(2, 10).Value = session.findById("wnd[0]/sbar").Text
         End If
+        GoTo CleanupSection
     End If
     
-    Set refCombo = BuscarControleSap(usrArea, "GODYNPRO-REFDOC")
-    If Not refCombo Is Nothing Then
-        If refCombo.Key <> "R10" Then
-            refCombo.Key = "R10"
-            session.findById("wnd[0]").sendVKey 0
-            Set usrArea = session.findById("wnd[0]/usr")
-        End If
-    End If
+    If session.ActiveWindow.Name = "wnd[1]" Then session.findById("wnd[1]").Close
     
-    Set bwartField = BuscarControleSap(usrArea, "GOHEAD-BWART")
-    If Not bwartField Is Nothing Then
-        If Trim(CStr(bwartField.Text)) <> "311" Then
-            bwartField.Text = "311"
-            session.findById("wnd[0]").sendVKey 0
-            Set usrArea = session.findById("wnd[0]/usr")
-        End If
-    End If
+    session.SendCommand ("MIGO_OK_HEADER_OPEN")
+    session.SendCommand ("MIGO_OK_HEADER_CLOSE")
+    session.SendCommand ("MIGO_OK_DETAIL_CLOSE")
     
-    ' 3. Percorre as linhas agrupadas deste Centro
-    migoRowIdx = 0
-    For r = startRow To endRow
-        cen = UCase(Trim(CStr(ws.Cells(r, "K").Value)))
-        If filtroCentro = "TODOS" Or cen = filtroCentro Then
-            mat = UCase(Trim(CStr(ws.Cells(r, "J").Value)))
-            orig = UCase(Trim(CStr(ws.Cells(r, "L").Value)))
-            dest = UCase(Trim(CStr(ws.Cells(r, "M").Value)))
-            qtd = Trim(CStr(ws.Cells(r, "N").Value))
-            serCsv = Trim(CStr(ws.Cells(r, "O").Value))
-            
-            Set usrArea = session.findById("wnd[0]/usr")
-            Set tblGrid = BuscarControleSap(usrArea, "tblSAPLMIGOTV_GOITEM")
-            If tblGrid Is Nothing Then
-                outMsg = "Grade de itens da MIGO (tblSAPLMIGOTV_GOITEM) nao encontrada."
-                ProcessarLoteMigoNoSap = "ERROR"
-                Exit Function
-            End If
-            
-            curScroll = tblGrid.verticalScrollbar.Position
-            visCount = tblGrid.VisibleRowCount
-            If visCount <= 0 Then visCount = 3
-            If migoRowIdx >= (curScroll + visCount) Then
-                tblGrid.verticalScrollbar.Position = migoRowIdx
-                Set usrArea = session.findById("wnd[0]/usr")
-                Set tblGrid = BuscarControleSap(usrArea, "tblSAPLMIGOTV_GOITEM")
-                curScroll = tblGrid.verticalScrollbar.Position
-            End If
-            visibleRow = migoRowIdx - curScroll
-            If visibleRow < 0 Then visibleRow = 0
-            
-            colMat = ResolverColunaMigo(tblGrid, "GOITEM-MAKTX", "GOITEM-MATNR", 1)
-            colCen = ResolverColunaMigo(tblGrid, "GOITEM-NAME1", "GOITEM-WERKS", 2)
-            colOrig = ResolverColunaMigo(tblGrid, "GOITEM-LGOBE", "GOITEM-LGORT", 3)
-            colDest = ResolverColunaMigo(tblGrid, "GOITEM-UMLGO", "", 4)
-            colQtd = ResolverColunaMigo(tblGrid, "GOITEM-ERFMG", "", 5)
-            colTxt = ResolverColunaMigo(tblGrid, "GOITEM-SGTXT", "", 6)
-            colOk = ResolverColunaMigo(tblGrid, "GOITEM-TAKE_IT", "", 7)
-            
-            If colMat >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colMat)).Text = mat
-            If colCen >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colCen)).Text = cen
-            If colOrig >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colOrig)).Text = orig
-            If colDest >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colDest)).Text = dest
-            If colQtd >= 0 Then tblGrid.GetCell(CLng(visibleRow), CLng(colQtd)).Text = qtd
-            If colTxt >= 0 And textoItem <> "" Then tblGrid.GetCell(CLng(visibleRow), CLng(colTxt)).Text = textoItem
-            
-            session.findById("wnd[0]").sendVKey 0
-            FecharPopupsSap session
-            
-            ' Garante que o detalhe aponta para a linha (migoRowIdx + 1)
-            Set usrArea = session.findById("wnd[0]/usr")
-            Dim detailZeile As Object
-            Set detailZeile = BuscarControleSap(usrArea, "GODYNPRO-DETAIL_ZEILE")
-            If Not detailZeile Is Nothing Then
-                If CLng(Trim(CStr(detailZeile.Text))) <> (migoRowIdx + 1) Then
-                    detailZeile.Text = CStr(migoRowIdx + 1)
-                    session.findById("wnd[0]").sendVKey 0
-                    FecharPopupsSap session
-                    Set usrArea = session.findById("wnd[0]/usr")
-                End If
-            End If
-            
-            ' Seleciona a aba Nº de Serie (tabpOK_GOITEM_SERIAL)
-            Dim serTab As Object
-            Set serTab = BuscarControleSap(usrArea, "tabpOK_GOITEM_SERIAL")
-            If serTab Is Nothing Then Set serTab = BuscarControleSap(usrArea, "SERIAL")
-            If Not serTab Is Nothing Then
-                serTab.Select
-                FecharPopupsSap session
-                Set usrArea = session.findById("wnd[0]/usr")
-            End If
-            
-            ' Preenche os seriais diretamente em tblSAPLMIGOTV_GOSERIAL via GetCell
-            Dim sArr As Variant, sIdx As Long, tblSerial As Object, serVisCount As Long, serPageRow As Long
-            sArr = Split(serCsv, ",")
-            Set tblSerial = BuscarControleSap(usrArea, "tblSAPLMIGOTV_GOSERIAL")
-            If Not tblSerial Is Nothing Then
-                serVisCount = tblSerial.VisibleRowCount
-                If serVisCount <= 0 Then serVisCount = 4
-                serPageRow = 0
-                For sIdx = 0 To UBound(sArr)
-                    If Trim(CStr(sArr(sIdx))) <> "" Then
-                        If serPageRow >= serVisCount Then
-                            session.findById("wnd[0]").sendVKey 0
-                            Set usrArea = session.findById("wnd[0]/usr")
-                            Set tblSerial = BuscarControleSap(usrArea, "tblSAPLMIGOTV_GOSERIAL")
-                            tblSerial.verticalScrollbar.Position = sIdx
-                            Set usrArea = session.findById("wnd[0]/usr")
-                            Set tblSerial = BuscarControleSap(usrArea, "tblSAPLMIGOTV_GOSERIAL")
-                            serPageRow = sIdx - tblSerial.verticalScrollbar.Position
-                            If serPageRow < 0 Then serPageRow = 0
-                        End If
-                        tblSerial.GetCell(CLng(serPageRow), 0).Text = Trim(CStr(sArr(sIdx)))
-                        serPageRow = serPageRow + 1
-                    End If
-                Next sIdx
-                session.findById("wnd[0]").sendVKey 0
-                FecharPopupsSap session
-            End If
-            
-            ' Marca Item OK (GOITEM-TAKE_IT)
-            Set usrArea = session.findById("wnd[0]/usr")
-            Dim chkOk As Object
-            Set chkOk = BuscarControleSap(usrArea, "chkGOITEM-TAKE_IT")
-            If Not chkOk Is Nothing Then
-                chkOk.Selected = True
+    pageSize = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.pageSize
+    session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).verticalScrollbar.Position = 0
+    
+    ' =========================================================================
+    ' PASSO 3: INSERIR OS ITENS AGRUPADOS NA GRADE (SAPLMIGOTV_GOITEM)
+    ' =========================================================================
+    CurrentRow = 0
+    
+    For i = 1 To total_items
+        If CurrentRow >= pageSize Then
+            session.findById("wnd[0]/tbar[0]/btn[0]").press
+            session.findById("wnd[0]/tbar[0]/btn[82]").press
+            CurrentRow = 1
+        End If
+        
+        Set cur_row = session.findById("wnd[0]/usr").FindByNameEx("SAPLMIGOTV_GOITEM", 80).Rows(CurrentRow)
+        col_count = 0
+        Dim material_assigned As Boolean: material_assigned = False
+        Dim special_stock_assigned As Boolean: special_stock_assigned = False
+        
+        For ii = 0 To cur_row.Count - 1
+            col_count = col_count + 1
+            If cur_row(ii + 0).Name = "GOITEM-MAKTX" And material_assigned = False Then
+                material_assigned = True
+                cur_row(ii + 0).Text = arrMat(i)
+            ElseIf cur_row(ii + 0).Name = "GOITEM-TAKE_IT" Then
+                cur_row(ii + 0).Selected = True
+            ElseIf cur_row(ii + 0).Name = "GOITEM-ERFMG" Then
+                cur_row(ii + 0).Text = CStr(arrQty(i))
+            ElseIf cur_row(ii + 0).Name = "GOITEM-LGOBE" Then
+                cur_row(ii + 0).Text = arrFrom(i)
+            ElseIf cur_row(ii + 0).Name = "GOITEM-NAME1" Then
+                cur_row(ii + 0).Text = arrPlant(i)
+            ElseIf cur_row(ii + 0).Name = "GOITEM-SOBKZ" And special_stock_assigned = False Then
+                special_stock_assigned = True
+            ElseIf cur_row(ii + 0).Name = "GOITEM-SGTXT" Then
+                cur_row(ii + 0).Text = arrTxt(i)
+            ElseIf cur_row(ii + 0).Name = "GOITEM-UMLGOBE" Then
+                cur_row(ii + 0).Text = arrTo(i)
             Else
-                Set tblGrid = BuscarControleSap(usrArea, "tblSAPLMIGOTV_GOITEM")
-                If Not tblGrid Is Nothing And colOk >= 0 Then
-                    tblGrid.GetCell(CLng(visibleRow), CLng(colOk)).Selected = True
-                End If
+                col_count = col_count - 1
             End If
-            session.findById("wnd[0]").sendVKey 0
-            FecharPopupsSap session
             
-            migoRowIdx = migoRowIdx + 1
+            If col_count > 7 Then Exit For
+        Next ii
+        
+        Set cur_row = Nothing
+        CurrentRow = CurrentRow + 1
+    Next i
+    
+    ' =========================================================================
+    ' PASSO 4: REABRIR DETALHE E COLAR OS SERIAIS UII DE CADA GRUPO (SAPLMIGO:0360)
+    ' =========================================================================
+    session.SendCommand ("MIGO_OK_DETAIL_OPEN")
+    
+    For item_index = 1 To total_items
+        On Error Resume Next
+        session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:0009/subSUB_ITEMDETAIL:SAPLMIGO:0303/subSUB_DETAIL:SAPLMIGO:0305/tabsTS_GOITEM/tabpOK_GOITEM_SERIAL").Select
+        If Err.Number <> 0 Then
+            If isVisualPanel Then
+                sht.Cells(9 + item_index, "P").Value = "Erro Aba Serial: " & Err.Description
+            Else
+                sht.Cells(last_row + 2, 1).Value = "Erro ao selecionar aba Serial - Item " & item_index & ": " & Err.Description
+            End If
+            GoTo CleanupSection
         End If
-    Next r
+        On Error GoTo 0
+        
+        session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:0009/subSUB_ITEMDETAIL:SAPLMIGO:0303/subSUB_DETAIL:SAPLMIGO:0305/tabsTS_GOITEM/tabpOK_GOITEM_SERIAL/ssubSUB_TS_GOITEM_SERIAL:SAPLMIGO:0360/btnOK_SER_SEARCH").press
+        session.findById("wnd[0]/usr/btn%_SO_UII_%_APP_%-VALU_PUSH").press
+        
+        ' Copia exatamente o intervalo contiguo de seriais deste grupo (ja ordenado!)
+        sht.Range(serialColLetter & arrStart(item_index) & ":" & serialColLetter & arrEnd(item_index)).Copy
+        
+        On Error Resume Next
+        session.findById("wnd[1]/tbar[0]/btn[24]").press ' Colar do Clipboard
+        On Error GoTo 0
+        
+        session.findById("wnd[1]/tbar[0]/btn[8]").press  ' Confirmar popup
+        
+        If session.findById("wnd[0]/sbar").MessageType = "E" Then
+            If isVisualPanel Then
+                sht.Cells(9 + item_index, "P").Value = "Erro UII: " & session.findById("wnd[0]/sbar").Text
+                sht.Cells(9 + item_index, "P").Interior.Color = RGB(254, 226, 226)
+            Else
+                sht.Cells(last_row + 2, 1).Value = "Erro na busca serial - Item " & item_index & ": " & session.findById("wnd[0]/sbar").Text
+            End If
+            GoTo CleanupSection
+        End If
+        
+        Dim current_quantity As Long
+        current_quantity = CLng(arrQty(item_index))
+        
+        session.findById("wnd[0]/tbar[1]/btn[8]").press ' Executar pesquisa UII
+        
+        If current_quantity > 1 Then
+            session.findById("wnd[0]").sendVKey 5
+            session.findById("wnd[0]/tbar[1]/btn[47]").press
+        End If
+        
+        If isVisualPanel Then
+            sht.Cells(9 + item_index, "P").Value = "OK no SAP (" & current_quantity & " UIIs)"
+            sht.Cells(9 + item_index, "P").Interior.Color = RGB(209, 250, 229)
+        End If
+        
+        If item_index < total_items Then
+            session.findById("wnd[0]/usr/ssubSUB_MAIN_CARRIER:SAPLMIGO:0009/subSUB_ITEMDETAIL:SAPLMIGO:0303/subSUB_DETAIL:SAPLMIGO:0305/btnOK_NEXT_ITEM").press
+        End If
+    Next item_index
     
-    ' 4. Clica em Verificar (btn[7])
-    session.findById("wnd[0]/tbar[1]/btn[7]").press
-    Dim sbarType As String, sbarText As String
-    sbarType = CStr(session.findById("wnd[0]/sbar").MessageType)
-    sbarText = CStr(session.findById("wnd[0]/sbar").Text)
-    
-    If sbarType = "E" Or sbarType = "A" Then
-        outMsg = sbarText
-        ProcessarLoteMigoNoSap = "ERROR"
-        Exit Function
-    End If
-    
-    If InStr(1, modoExec, "APENAS", vbTextCompare) > 0 Then
-        outMsg = "Preenchido e verificado na tela do SAP (" & migoRowIdx & " linhas)."
-        ProcessarLoteMigoNoSap = "VERIFIED"
-        Exit Function
-    End If
-    
-    ' 5. Clica em Registrar / Gravar (btn[23] ou btn[11])
-    Err.Clear
-    session.findById("wnd[0]/tbar[1]/btn[23]").press
-    If Err.Number <> 0 Then
-        Err.Clear
+    ' Se no Painel Visual o usuario escolheu "SALVAR DOC AUTOMATICAMENTE", grava via btn[11]
+    If isVisualPanel And InStr(1, UCase(Trim(sht.Range("C6").Text)), "SALVAR", vbTextCompare) > 0 Then
         session.findById("wnd[0]/tbar[0]/btn[11]").press
+        If session.findById("wnd[0]/sbar").MessageType = "W" Then session.findById("wnd[0]").sendVKey 0
+        sht.Range("L6").Value = session.findById("wnd[0]/sbar").Text
+    ElseIf isVisualPanel Then
+        sht.Range("L6").Value = "Preenchido no SAP (" & total_items & " grupos)"
     End If
-    FecharPopupsSap session
+
+CleanupSection:
+    On Error Resume Next
+    Application.ScreenUpdating = True
+    Application.Calculation = -4105 ' xlCalculationAutomatic
+    Application.CutCopyMode = False
     
-    sbarText = CStr(session.findById("wnd[0]/sbar").Text)
-    outDocSap = ExtrairNumeroDocSap(sbarText)
+    If Not SAPApp Is Nothing Then SAPApp.HistoryEnabled = True
+    If Not session Is Nothing Then dummy = session.UnlockSessionUI()
+    Set session = Nothing
+    Set SAPCon = Nothing
+    Set SAPApp = Nothing
+    Set SapGuiAuto = Nothing
+    On Error GoTo 0
     
-    If outDocSap <> "" Then
-        outMsg = sbarText
-        ProcessarLoteMigoNoSap = "SUCCESS"
-    Else
-        outMsg = IIf(sbarText <> "", sbarText, "Preenchido na tela; confirme a gravacao no SAP.")
-        ProcessarLoteMigoNoSap = "VERIFIED"
-    End If
-End Function
+    MsgBox "Processo de Preenchimento MIGO 311 Concluido (" & total_items & " grupo(s) processado(s))!", vbInformation, "MIGOU SAP 311"
+End Sub
 
 Public Sub Limpar_Painel_MIGOU()
     Dim ws As Worksheet
     Set ws = ActiveSheet
     ws.Range("B10:G5000").ClearContents
-    ws.Range("B10:G5000").Interior.ColorIndex = xlNone
+    ws.Range("B10:G5000").Interior.ColorIndex = -4142
     ws.Range("I10:P5000").ClearContents
-    ws.Range("I10:P5000").Interior.ColorIndex = xlNone
+    ws.Range("I10:P5000").Interior.ColorIndex = -4142
     ws.Range("I6").Value = 0
     ws.Range("J6").Value = 0
     ws.Range("L6").Value = "Painel Limpo"
-End Sub
-
-Private Function BuscarControleSap(rootObj As Object, targetIdPart As String) As Object
-    On Error Resume Next
-    Set BuscarControleSap = Nothing
-    If rootObj Is Nothing Then Exit Function
-    If InStr(1, CStr(rootObj.Id), targetIdPart, vbTextCompare) > 0 Then
-        Set BuscarControleSap = rootObj
-        Exit Function
-    End If
-    Dim childCount As Long, idx As Long, childObj As Object, foundObj As Object
-    childCount = rootObj.Children.Count
-    If Err.Number <> 0 Or childCount = 0 Then
-        Err.Clear
-        Exit Function
-    End If
-    For idx = 0 To childCount - 1
-        Set childObj = rootObj.Children(CLng(idx))
-        Set foundObj = BuscarControleSap(childObj, targetIdPart)
-        If Not foundObj Is Nothing Then
-            Set BuscarControleSap = foundObj
-            Exit Function
-        End If
-    Next idx
-End Function
-
-Private Function ResolverColunaMigo(tblCtrl As Object, primaryTech As String, secondaryTech As String, fallbackPos As Long) As Long
-    On Error Resume Next
-    Dim c As Long, colName As String
-    ResolverColunaMigo = -1
-    For c = 0 To tblCtrl.Columns.Count - 1
-        colName = UCase(CStr(tblCtrl.Columns(CLng(c)).Name))
-        If InStr(1, colName, UCase(primaryTech), vbTextCompare) > 0 Then
-            ResolverColunaMigo = c
-            Exit Function
-        End If
-    Next c
-    If secondaryTech <> "" Then
-        For c = 0 To tblCtrl.Columns.Count - 1
-            colName = UCase(CStr(tblCtrl.Columns(CLng(c)).Name))
-            If InStr(1, colName, UCase(secondaryTech), vbTextCompare) > 0 Then
-                ResolverColunaMigo = c
-                Exit Function
-            End If
-        Next c
-    End If
-    If fallbackPos >= 0 And fallbackPos < tblCtrl.Columns.Count Then
-        ResolverColunaMigo = fallbackPos
-    End If
-End Function
-
-Private Sub FecharPopupsSap(session As Object)
-    On Error Resume Next
-    If session.Children.Count > 1 Then
-        session.findById("wnd[1]/tbar[0]/btn[0]").press
-        If Err.Number <> 0 Then
-            Err.Clear
-            session.findById("wnd[1]").sendVKey 0
-        End If
-    End If
-    Err.Clear
-End Sub
-
-Private Function ExtrairNumeroDocSap(txt As String) As String
-    Dim regEx As Object, matches As Object
-    Set regEx = CreateObject("VBScript.RegExp")
-    regEx.Pattern = "(49[0-9]{8}|[0-9]{10})"
-    regEx.Global = False
-    If regEx.Test(txt) Then
-        Set matches = regEx.Execute(txt)
-        ExtrairNumeroDocSap = matches(0).Value
-    Else
-        ExtrairNumeroDocSap = ""
-    End If
-End Function`;
+End Sub`;
 }
 
 /**
@@ -1631,7 +1566,7 @@ export function downloadAutoExcelDashboardBuilderVbs(
   const lines: string[] = [];
 
   lines.push(`' ============================================================================`);
-  lines.push(`' CONSTRUTOR AUTOMATICO DO PAINEL EXCEL MIGO 311 - MIGOU (MIDEA CARRIER)`);
+  lines.push(`' CONSTRUTOR AUTOMATICO DO PAINEL EXCEL MIGO 311 V4 - MIGOU (MIDEA CARRIER)`);
   lines.push(`' Abre o Excel, desenha o layout visual e preenche o lote atual ja agrupado!`);
   lines.push(`' ============================================================================`);
   lines.push(`Option Explicit`);
@@ -1656,29 +1591,29 @@ export function downloadAutoExcelDashboardBuilderVbs(
   lines.push(`ws.Range("A1:P1").RowHeight = 8`);
   lines.push(`ws.Range("A2:P2").RowHeight = 28`);
   lines.push(`ws.Range("A3:P3").RowHeight = 18`);
-  lines.push(`ws.Range("B2").Value = "MIGOU SAP - CENTRAL MESTRE DE AUTOMACAO MIGO 311 (AGRUPAMENTO INTELIGENTE)"`);
+  lines.push(`ws.Range("B2").Value = "MIGOU SAP - CENTRAL MESTRE MIGO 311 V4 (MOTOR OFICIAL MIDEA UII)"`);
   lines.push(`ws.Range("B2").Font.Color = RGB(255, 255, 255)`);
   lines.push(`ws.Range("B2").Font.Bold = True`);
   lines.push(`ws.Range("B2").Font.Size = 14`);
-  lines.push(`ws.Range("B3").Value = "Agrupa automaticamente por Material + Centro + Deposito Origem/Destino - Preenche Numeros de Serie - Captura Doc SAP 49xxxxxxxx"`);
+  lines.push(`ws.Range("B3").Value = "Ordena e Agrupa automaticamente por Centro + Material + Origem + Destino - Injeta Seriais via SO_UII (SAPLMIGO:0360)"`);
   lines.push(`ws.Range("B3").Font.Color = RGB(186, 230, 253)`);
   lines.push(`ws.Range("B3").Font.Size = 9`);
   lines.push(``);
   lines.push(`' 2. Painel de Parametros e KPIs`);
   lines.push(`ws.Range("B5").Value = "COLUNA TEXTO NA MIGO:"`);
-  lines.push(`ws.Range("C5").Value = "MODO DE EXECUCAO NO SAP:"`);
-  lines.push(`ws.Range("D5").Value = "DIVISAO POR CENTRO:"`);
+  lines.push(`ws.Range("C5").Value = "MODO DE FINALIZACAO:"`);
+  lines.push(`ws.Range("D5").Value = "ORDENACAO AUTOMATICA:"`);
   lines.push(`ws.Range("B5:D5").Font.Bold = True`);
   lines.push(`ws.Range("B5:D5").Font.Size = 8`);
   lines.push(`ws.Range("B6").Value = "${defaultTexto}"`);
-  lines.push(`ws.Range("C6").Value = "${options.postMode === 'registrar' ? 'VERIFICAR E GRAVAR' : 'APENAS PREENCHER E VERIFICAR'}"`);
-  lines.push(`ws.Range("D6").Value = "${options.splitByCentro ? '1 DOC POR CENTRO' : 'TUDO NO MESMO DOC'}"`);
+  lines.push(`ws.Range("C6").Value = "${options.postMode === 'registrar' ? 'SALVAR DOC AUTOMATICAMENTE' : 'PREENCHER P/ REVISAO (PADRAO MIDEA)'}"`);
+  lines.push(`ws.Range("D6").Value = "ATIVA (CENTRO+MAT+ROTA)"`);
   lines.push(`ws.Range("B6:D6").Interior.Color = RGB(240, 249, 255)`);
   lines.push(`ws.Range("B6:D6").Borders.LineStyle = 1`);
   lines.push(`ws.Range("B6:D6").Font.Bold = True`);
   lines.push(``);
   lines.push(`ws.Range("I5").Value = "TOTAL SERIAIS:"`);
-  lines.push(`ws.Range("J5").Value = "LINHAS MIGO:"`);
+  lines.push(`ws.Range("J5").Value = "GRUPOS MIGO:"`);
   lines.push(`ws.Range("K5").Value = "USUARIO SAP:"`);
   lines.push(`ws.Range("L5").Value = "STATUS:"`);
   lines.push(`ws.Range("I5:L5").Font.Bold = True`);
@@ -1686,14 +1621,14 @@ export function downloadAutoExcelDashboardBuilderVbs(
   lines.push(`ws.Range("I6").Value = ${rawItems.length}`);
   lines.push(`ws.Range("J6").Value = ${groupedLines.length}`);
   lines.push(`ws.Range("K6").Value = "-"`);
-  lines.push(`ws.Range("L6").Value = "Lote Carregado (${groupedLines.length} linhas)"`);
+  lines.push(`ws.Range("L6").Value = "Lote Carregado (${groupedLines.length} grupos)"`);
   lines.push(`ws.Range("I6:L6").Font.Bold = True`);
   lines.push(`ws.Range("I6:L6").Interior.Color = RGB(248, 250, 252)`);
   lines.push(`ws.Range("I6:L6").Borders.LineStyle = 1`);
   lines.push(``);
   lines.push(`' 3. Cabecalhos Tabela 1 (Entrada) e Tabela 2 (Espelho MIGO Agrupado)`);
   lines.push(`ws.Range("B8:G8").Merge`);
-  lines.push(`ws.Range("B8").Value = "1. DADOS DE ENTRADA (ITENS DA FILA MIGOU - 1 SERIAL POR LINHA)"`);
+  lines.push(`ws.Range("B8").Value = "1. DADOS DE ENTRADA (ITENS DA FILA MIGOU JÁ ORDENADOS)"`);
   lines.push(`ws.Range("B8").Interior.Color = RGB(0, 72, 142)`);
   lines.push(`ws.Range("B8").Font.Color = RGB(255, 255, 255)`);
   lines.push(`ws.Range("B8").Font.Bold = True`);
@@ -1702,51 +1637,55 @@ export function downloadAutoExcelDashboardBuilderVbs(
   lines.push(`ws.Range("D9").Value = "Centro"`);
   lines.push(`ws.Range("E9").Value = "Dep. Origem"`);
   lines.push(`ws.Range("F9").Value = "Dep. Destino"`);
-  lines.push(`ws.Range("G9").Value = "Doc SAP / Retorno"`);
+  lines.push(`ws.Range("G9").Value = "Texto / Status"`);
   lines.push(`ws.Range("B9:G9").Interior.Color = RGB(224, 242, 254)`);
   lines.push(`ws.Range("B9:G9").Font.Bold = True`);
   lines.push(`ws.Range("B9:G9").Borders.LineStyle = 1`);
   lines.push(``);
   lines.push(`ws.Range("I8:P8").Merge`);
-  lines.push(`ws.Range("I8").Value = "2. ESPELHO AGRUPADO DA MIGO 311 (LINHAS CONSOLIDADAS P/ SAP)"`);
+  lines.push(`ws.Range("I8").Value = "2. ESPELHO AGRUPADO DA MIGO 311 (INTERVALOS CONTIGUOS DE UII)"`);
   lines.push(`ws.Range("I8").Interior.Color = RGB(6, 25, 62)`);
   lines.push(`ws.Range("I8").Font.Color = RGB(255, 255, 255)`);
   lines.push(`ws.Range("I8").Font.Bold = True`);
-  lines.push(`ws.Range("I9").Value = "Linha"`);
+  lines.push(`ws.Range("I9").Value = "Item"`);
   lines.push(`ws.Range("J9").Value = "Txt.brv.material"`);
   lines.push(`ws.Range("K9").Value = "Cen."`);
   lines.push(`ws.Range("L9").Value = "Depósito"`);
   lines.push(`ws.Range("M9").Value = "Depósito RegTran."`);
   lines.push(`ws.Range("N9").Value = "Qtd.em UMR"`);
-  lines.push(`ws.Range("O9").Value = "Seriais do Grupo"`);
-  lines.push(`ws.Range("P9").Value = "Status SAP / Doc 49x"`);
+  lines.push(`ws.Range("O9").Value = "Linhas UII (De:Ate)"`);
+  lines.push(`ws.Range("P9").Value = "Status SAP MIGO"`);
   lines.push(`ws.Range("I9:P9").Interior.Color = RGB(224, 242, 254)`);
   lines.push(`ws.Range("I9:P9").Font.Bold = True`);
   lines.push(`ws.Range("I9:P9").Borders.LineStyle = 1`);
   lines.push(``);
 
-  // Preenche os itens individuais na Tabela 1 (B10:F...)
-  rawItems.forEach((item, idx) => {
-    const r = 10 + idx;
-    lines.push(`ws.Cells(${r}, "B").Value = "${escapeVbsString(item.material)}"`);
-    lines.push(`ws.Cells(${r}, "C").Value = "${escapeVbsString(item.serial)}"`);
-    lines.push(`ws.Cells(${r}, "D").Value = "${escapeVbsString(item.centro)}"`);
-    lines.push(`ws.Cells(${r}, "E").Value = "${escapeVbsString(item.depositoOrigem)}"`);
-    lines.push(`ws.Cells(${r}, "F").Value = "${escapeVbsString(item.depositoDestino)}"`);
-    lines.push(`ws.Range("B${r}:G${r}").Borders.LineStyle = 1`);
-  });
+  // Preenche os itens individuais na Tabela 1 (B10:F...) já na ordem exata dos grupos
+  let currentExcelRow = 10;
+  groupedLines.forEach((gLine, gIdx) => {
+    const startRowForGroup = currentExcelRow;
+    gLine.serials.forEach((serial) => {
+      lines.push(`ws.Cells(${currentExcelRow}, "B").Value = "${escapeVbsString(gLine.material)}"`);
+      lines.push(`ws.Cells(${currentExcelRow}, "C").Value = "${escapeVbsString(serial)}"`);
+      lines.push(`ws.Cells(${currentExcelRow}, "D").Value = "${escapeVbsString(gLine.centro)}"`);
+      lines.push(`ws.Cells(${currentExcelRow}, "E").Value = "${escapeVbsString(gLine.depositoOrigem)}"`);
+      lines.push(`ws.Cells(${currentExcelRow}, "F").Value = "${escapeVbsString(gLine.depositoDestino)}"`);
+      lines.push(`ws.Cells(${currentExcelRow}, "G").Value = "${defaultTexto}"`);
+      lines.push(`ws.Range("B${currentExcelRow}:G${currentExcelRow}").Borders.LineStyle = 1`);
+      currentExcelRow++;
+    });
+    const endRowForGroup = currentExcelRow - 1;
 
-  // Preenche as linhas agrupadas na Tabela 2 (I10:P...)
-  groupedLines.forEach((gLine, idx) => {
-    const r = 10 + idx;
-    lines.push(`ws.Cells(${r}, "I").Value = ${idx + 1}`);
+    // Preenche a linha agrupada na Tabela 2 (I10:P...)
+    const r = 10 + gIdx;
+    lines.push(`ws.Cells(${r}, "I").Value = ${gIdx + 1}`);
     lines.push(`ws.Cells(${r}, "J").Value = "${escapeVbsString(gLine.material)}"`);
     lines.push(`ws.Cells(${r}, "K").Value = "${escapeVbsString(gLine.centro)}"`);
     lines.push(`ws.Cells(${r}, "L").Value = "${escapeVbsString(gLine.depositoOrigem)}"`);
     lines.push(`ws.Cells(${r}, "M").Value = "${escapeVbsString(gLine.depositoDestino)}"`);
     lines.push(`ws.Cells(${r}, "N").Value = ${gLine.quantidade}`);
     lines.push(`ws.Cells(${r}, "N").Font.Bold = True`);
-    lines.push(`ws.Cells(${r}, "O").Value = "${escapeVbsString(gLine.serials.join(', '))}"`);
+    lines.push(`ws.Cells(${r}, "O").Value = "C${startRowForGroup}:C${endRowForGroup}"`);
     lines.push(`ws.Cells(${r}, "P").Value = "Pronto p/ MIGO (${gLine.quantidade} UIIs)"`);
     lines.push(`ws.Range("I${r}:P${r}").Borders.LineStyle = 1`);
   });
@@ -1754,7 +1693,7 @@ export function downloadAutoExcelDashboardBuilderVbs(
   lines.push(`ws.Columns("B:P").AutoFit`);
   lines.push(`xlApp.ScreenUpdating = True`);
   lines.push(
-    `MsgBox "Painel Visual Excel MIGOU criado e preenchido com " & ${rawItems.length} & " seriais agrupados em " & ${groupedLines.length} & " linhas!" & vbCrLf & vbCrLf & "Dica: Para deixar os botoes automaticos permanentes para seus colegas, aperte ALT+F11, cole o Codigo VBA Mestre e salve como .XLSM!", vbInformation, "MIGOU Excel Builder"`
+    `MsgBox "Painel Visual Excel MIGOU V4 criado e preenchido com " & ${rawItems.length} & " seriais agrupados em " & ${groupedLines.length} & " linhas!" & vbCrLf & vbCrLf & "Dica: Aperte ALT+F11, cole o Script Mestre VBA V4 e salve como .XLSM para compartilhar com seus colegas!", vbInformation, "MIGOU Excel Builder"`
   );
 
   const blob = new Blob([lines.join('\r\n')], { type: 'text/vbscript;charset=windows-1252;' });

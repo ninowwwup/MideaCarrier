@@ -33,6 +33,7 @@ import {
   SapBatchExecutionResult,
   consolidateItemsForMigo311,
   formatGroupedMigoGridTSV,
+  formatForBaseMigo311ColumnsKR,
   checkLocalSapBridgeStatus,
   executeMigo311ViaLocalBridge,
   downloadSapGuiVbsExecutor,
@@ -232,6 +233,10 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
   const groupedGridTSV = formatGroupedMigoGridTSV(
     migoPlan.allGroupedLines,
     textMode !== 'vazio'
+  );
+  const baseMigoColumnsKRText = formatForBaseMigo311ColumnsKR(
+    migoPlan.allGroupedLines,
+    migoOptions
   );
   const vbaV2Code = generateExcelVbaV2MacroCode(migoOptions);
 
@@ -836,7 +841,7 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
             ))}
           </div>
 
-          {/* 4. SISTEMA MESTRE EXCEL VBA V3 (PAINEL VISUAL P/ COMPARTILHAR COM OS COLEGAS) */}
+          {/* 4. SISTEMA MESTRE EXCEL VBA V4 (MOTOR OFICIAL MIDEA SAPLMIGO:0360 UII + PAINEL VISUAL) */}
           <div className="bg-white rounded-2xl border-2 border-[#0083CA]/40 shadow-xs overflow-hidden">
             <button
               type="button"
@@ -846,10 +851,10 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <Code2 className="w-4 h-4 text-[#0083CA]" />
                 <span className="text-xs font-extrabold text-[#06193E]">
-                  Sistema Mestre Excel VBA V3 (Com Construtor de Painel Visual & Botões para Compartilhar no Trabalho)
+                  Sistema Mestre Excel VBA V4 • Motor Oficial Midea UII (SAPLMIGO:0360 + Aba &quot;311&quot; Colunas K:R & Painel Visual)
                 </span>
                 <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold text-[10px]">
-                  API GetCell + Nº de Série Direto
+                  Auto-Ordenação + GODEFAULT_TV-BWART + GOITEM-UMLGOBE + SO_UII
                 </span>
               </div>
               {showVbaCode ? (
@@ -863,21 +868,41 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
               <div className="p-4 border-t border-[#BAE6FD] bg-slate-50 space-y-3">
                 <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 space-y-2">
                   <div className="font-extrabold text-[#06193E]">
-                    Como criar e compartilhar a Planilha Mestre (.xlsm) com sua equipe:
+                    Compatível com a sua <code>BASE MIGO.xlsm</code> (Aba &quot;311&quot; Colunas K a R) e com o Novo Painel Visual:
                   </div>
                   <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
                     <li>
-                      No Excel, aperte <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border font-mono">ALT + F11</kbd>, clique em <strong>Inserir → Módulo</strong> (ou <em>Arquivo → Importar Arquivo</em> com o <code>.bas</code> abaixo) e cole o <strong>Script Mestre VBA V3</strong>.
+                      <strong>Na sua <code>BASE MIGO.xlsm</code> atual:</strong> Clique em <strong>&quot;Copiar p/ Aba 311 (Colunas K a R)&quot;</strong> abaixo, cole na célula <strong><code>K2</code></strong> da aba <code>311</code> e substitua a macro <code>Sub MIGO_311_3()</code> no módulo <code>MOV_MIGO</code> pelo código V4 abaixo.
                     </li>
                     <li>
-                      Aperte <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border font-mono">F5</kbd> e execute uma única vez a macro <strong><code>Construir_Painel_Visual_MIGOU</code></strong>: ela desenha sozinha todo o cabeçalho azul Safira, os KPIs, as tabelas e os <strong>3 Botões Clicáveis</strong> (<em>1. Agrupar e Simular MIGO</em>, <em>2. Executar no SAP MIGO 311</em> e <em>Limpar</em>)!
-                    </li>
-                    <li>
-                      Salve como <strong>Pasta de Trabalho Habilitada para Macro do Excel (<code>.xlsm</code>)</strong> e envie para seus colegas. Basta colar os itens a partir da célula <strong><code>B10</code></strong> e clicar no botão verde!
+                      <strong>No Novo Painel Visual para compartilhar com o time:</strong> Rode uma única vez <strong><code>Construir_Painel_Visual_MIGOU</code></strong> para desenhar a interface Safira e os 3 botões clicáveis na planilha, cole na célula <strong><code>B10</code></strong> e clique no botão verde!
                     </li>
                   </ol>
 
                   <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(baseMigoColumnsKRText, 'excel_paste_k2')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                        copiedType === 'excel_paste_k2'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-[#06193E] hover:bg-[#0B2A63] text-white'
+                      }`}
+                      title="Formata exatamente nas 8 colunas K a R da sua aba '311' (Material | Qtd=1 | Centro | Origem | Vazio | Destino | Texto | Serial UII) já ordenado por grupo!"
+                    >
+                      {copiedType === 'excel_paste_k2' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-300" />
+                          <span>Copiado! Cole na célula K2 da aba &quot;311&quot;</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-[#38BDF8]" />
+                          <span>Copiar p/ Aba &quot;311&quot; da BASE MIGO (Colunas K a R)</span>
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleCopy(tableText, 'excel_paste_b10')}
@@ -890,12 +915,12 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
                       {copiedType === 'excel_paste_b10' ? (
                         <>
                           <Check className="w-3.5 h-3.5" />
-                          <span>Lote Copiado! Cole na célula B10 do Excel</span>
+                          <span>Lote Copiado! Cole na célula B10 do Painel</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" />
-                          <span>1. Copiar Lote p/ Colar no Excel ({effectiveMacroItems.length} itens)</span>
+                          <span>Copiar p/ Painel Visual (Célula B10)</span>
                         </>
                       )}
                     </button>
@@ -913,7 +938,7 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
                       title="Abre o Excel na sua máquina já desenhado e preenchido com o lote atual!"
                     >
                       <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>Abrir Painel Visual no Excel Automaticamente (.vbs)</span>
+                      <span>Abrir Painel Visual no Excel (.vbs)</span>
                     </button>
 
                     <button
@@ -922,7 +947,7 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
                       className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-[#06193E] border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5 text-[#0083CA]" />
-                      <span>Baixar Módulo VBA (.bas)</span>
+                      <span>Baixar Módulo (.bas)</span>
                     </button>
 
                     <button
@@ -931,18 +956,18 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
                       className={`px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer ml-auto ${
                         copiedType === 'vba_v2'
                           ? 'bg-emerald-600 text-white'
-                          : 'bg-[#06193E] hover:bg-[#0B2A63] text-white'
+                          : 'bg-[#00488E] hover:bg-[#002664] text-white'
                       }`}
                     >
                       {copiedType === 'vba_v2' ? (
                         <>
                           <Check className="w-3.5 h-3.5" />
-                          <span>Script Mestre VBA Copiado!</span>
+                          <span>Script Mestre VBA V4 Copiado!</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5 text-[#38BDF8]" />
-                          <span>Copiar Script Mestre VBA V3 Completo</span>
+                          <span>Copiar Script Mestre VBA V4</span>
                         </>
                       )}
                     </button>
