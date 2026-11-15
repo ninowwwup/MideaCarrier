@@ -97,7 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
   }[activeMainTab];
 
   return (
-    <header className="bg-[#081b42]/95 backdrop-blur-xl border-b border-white/15 sticky top-0 z-30 w-full max-w-full overflow-x-hidden">
+    <header className="migou-header-solid sticky top-0 z-30 w-full max-w-full overflow-x-clip shadow-[0_4px_20px_rgba(4,15,40,0.28)]">
       {/* =====================================================================
           1. MOBILE / PWA APPBAR (FLUTTER MATERIAL 3 SHELL - < lg)
           Zero estouro de ícones: cabe perfeitamente em telas de 320px a 430px

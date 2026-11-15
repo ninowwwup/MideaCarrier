@@ -47,24 +47,39 @@ body {
   margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Fundo Azul Gradiente Fosco (Fiel à 2ª Imagem de Referência + Camada Matte Suave) */
+/* ============================================================================
+   SISTEMA CROMÁTICO UNIFICADO MIGOU BLUEBIRD (LOGO + SIDEBAR + HEADER + FUNDO)
+   Paleta monocromática harmônica extraída diretamente da Logo Oficial do MIGOU:
+   - Shell Arquitetural (Sidebar & Header): #071D49 -> #092358 (Azul Safira Imperial)
+   - Fundo do App (Matte Frosted Blue): #0C2E6E -> #134696 -> #1B62BE -> #2482DC
+   - Destaques & Superfícies: #0083CA, #249ED5, #38BDF8 e Branco Gelo (#F8FAFC)
+   ============================================================================ */
 .figma-aurora-bg {
-  background-color: #0066eb;
+  background-color: #0e357a;
   background-image:
-    /* Véu fosco sutil (matte finish) para suavizar o contraste com os cards */
-    linear-gradient(180deg, rgba(10, 42, 110, 0.08) 0%, rgba(4, 20, 68, 0.14) 100%),
-    /* Imagem oficial enviada pelo usuário */
-    url('./assets/bg-blue-matte.png'),
-    /* Fallback / Mesh de alta definição nos exatos tons da imagem (Ciano Gelo -> Turquesa -> Azul Royal -> Azul Marinho Profundo) */
-    radial-gradient(circle at 6% 4%, rgba(188, 246, 255, 0.96) 0%, rgba(112, 218, 255, 0.72) 26%, transparent 55%),
-    radial-gradient(circle at 95% 8%, rgba(24, 247, 230, 0.95) 0%, rgba(0, 212, 245, 0.70) 30%, transparent 62%),
-    radial-gradient(circle at 8% 96%, rgba(0, 18, 120, 0.98) 0%, rgba(2, 32, 148, 0.85) 38%, transparent 72%),
-    radial-gradient(circle at 92% 92%, rgba(24, 92, 224, 0.94) 0%, rgba(16, 108, 240, 0.75) 42%, transparent 75%),
-    linear-gradient(145deg, #5fd8ff 0%, #0088f8 38%, #0a58d8 72%, #001a88 100%);
+    /* Brilho suave superior direito em Azul Celeste da asa do passarinho MIGOU (#38BDF8 / #249ED5) */
+    radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.34) 0%, rgba(36, 158, 213, 0.18) 32%, transparent 62%),
+    /* Luz difusa superior esquerda em Azul Cerúleo Fosco (#0083CA) */
+    radial-gradient(circle at 18% 18%, rgba(0, 131, 202, 0.38) 0%, rgba(15, 76, 156, 0.18) 40%, transparent 68%),
+    /* Luz suave inferior direita para equilíbrio de profundidade */
+    radial-gradient(circle at 82% 88%, rgba(36, 158, 213, 0.26) 0%, transparent 55%),
+    /* Base Gradiente Fosco (Matte Sapphire -> Midea Corporate Blue -> Cerulean Matte) */
+    linear-gradient(135deg, #092356 0%, #0e357a 34%, #14499b 68%, #1b5eb8 100%);
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+/* Superfície Unificada para Sidebar e Header (Mesmo Tom Safira Imperial sem costura de cor) */
+.migou-sidebar-solid {
+  background: linear-gradient(180deg, #06193E 0%, #08204E 100%);
+  border-right: 1px solid rgba(125, 211, 252, 0.14);
+}
+
+.migou-header-solid {
+  background: linear-gradient(90deg, #06193E 0%, #092354 55%, #0B2A63 100%);
+  border-bottom: 1px solid rgba(125, 211, 252, 0.14);
 }
 
 /* Scrollbar refinada e suave estilo Figma */
@@ -103,11 +118,7 @@ body {
     0 8px 24px -6px rgba(0, 0, 0, 0.28);
 }
 
-/* Sidebar Corporativa Sólida e Leve (Zero Lag em Notebooks Simples) */
-.migou-sidebar-solid {
-  background: linear-gradient(180deg, #061638 0%, #041029 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
-}
+/* Removido duplicado migou-sidebar-solid (definido acima no sistema cromático unificado) */
 
 @keyframes migouFloat {
   0%, 100% {

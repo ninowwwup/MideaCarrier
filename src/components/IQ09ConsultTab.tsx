@@ -1813,61 +1813,48 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
         /* ========================================================================== */
         /* SUB-ABA 2: EXPLORADOR & CONSULTA GERAL DA BASE IQ09 + SÊNIOR WMS           */
         /* ========================================================================== */
-        <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-          {/* Barra de Pesquisa e Filtros Responsivos da IQ09 + Sênior WMS */}
-          <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
-            <div className="flex flex-col gap-3">
-              {/* Linha 1: Campo de Busca Instantânea + Botão Exportar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
+        <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-[#BAE6FD]/60 shadow-[0_18px_45px_rgba(4,18,52,0.22)] overflow-hidden">
+          {/* Barra Compacta de Pesquisa e Filtros da IQ09 + Sênior WMS */}
+          <div className="px-3.5 py-2.5 border-b border-slate-200/80 bg-white space-y-2">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2">
+              {/* Esquerda: Busca Instantânea */}
+              <div className="relative flex-1 min-w-0 xl:max-w-sm">
+                <Search className="w-3.5 h-3.5 text-[#00609C]/70 absolute left-3 top-2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Buscar UII (Serial), Material, Endereço WMS, Lote..."
+                  className="w-full h-8 pl-8 pr-7 text-xs bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200/90 rounded-lg focus:ring-2 focus:ring-[#0083CA]/40 focus:border-[#0083CA]"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
                       setCurrentPage(1);
                     }}
-                    placeholder="Pesquisar por UII (Serial), Material, Endereço WMS (ex: F0003001011, R12), Lote ou Análise..."
-                    className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0083CA]"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setCurrentPage(1);
-                      }}
-                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleExportFilteredIQ09}
-                  disabled={filteredExplorerItems.length === 0}
-                  className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
-                  title="Exportar resultado filtrado para Excel (CSV)"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Exportar Filtro ({filteredExplorerItems.length.toLocaleString('pt-BR')})</span>
-                </button>
+                    className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
-              {/* Linha 2: Grade Responsiva de Filtros Rápidos (Incluindo Filtro do Batimento Sênior WMS) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              {/* Direita: Seletores Compactos + Exportar em Linha Única */}
+              <div className="flex flex-wrap items-center gap-1.5 justify-end">
                 <select
                   value={centroFilter}
                   onChange={(e) => {
                     setCentroFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="h-8 px-2.5 text-[11px] font-semibold bg-slate-50/90 hover:bg-slate-100 border border-slate-200/90 rounded-lg text-slate-700 cursor-pointer"
                 >
-                  <option value="todos">Centro SAP: Todos ({allIQ09Centros.length})</option>
+                  <option value="todos">Centro: Todos ({allIQ09Centros.length})</option>
                   {allIQ09Centros.map((c) => (
                     <option key={c} value={c}>
                       Centro {c} ({(metadata?.centrosCount?.[c] || 0).toLocaleString('pt-BR')})
@@ -1881,7 +1868,7 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setDepositoFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="h-8 px-2.5 text-[11px] font-semibold bg-slate-50/90 hover:bg-slate-100 border border-slate-200/90 rounded-lg text-slate-700 cursor-pointer max-w-[175px]"
                 >
                   <option value="todos">Depósito SAP: Todos ({allIQ09Depositos.length})</option>
                   {allIQ09Depositos.map((d) => {
@@ -1900,14 +1887,14 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setWmsStatusFilter(e.target.value as any);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-2.5 py-2 text-xs font-bold bg-indigo-50/80 border border-indigo-300 rounded-xl text-indigo-950"
+                  className="h-8 px-2.5 text-[11px] font-bold bg-[#F0F7FF] border border-[#7DD3FC] rounded-lg text-[#002664] cursor-pointer max-w-[195px]"
                 >
-                  <option value="todos">🛡️ Batimento Sênior WMS: Todos</option>
-                  <option value="ok">✅ Alinhados (SAP = Sênior WMS)</option>
-                  <option value="b111_bloqueado_falta">🛑 B111 Bloqueados (Em FALTA no WMS ou Só SAP)</option>
-                  <option value="mover_b111">⚠️ Mover no SAP p/ B111 (Em FALTA no WMS)</option>
-                  <option value="validar_fisico">🔎 B111 c/ Saldo Físico no WMS (Validar)</option>
-                  <option value="divergencia_wms">🟠 Divergência no WMS (Lote Bloq / Dep. Diferente)</option>
+                  <option value="todos">🛡️ Batimento WMS: Todos</option>
+                  <option value="ok">✅ Alinhados (SAP = WMS)</option>
+                  <option value="b111_bloqueado_falta">🛑 B111 Bloqueados (Falta/Só SAP)</option>
+                  <option value="mover_b111">⚠️ Mover SAP p/ B111 (Falta WMS)</option>
+                  <option value="validar_fisico">🔎 B111 c/ Saldo Físico WMS</option>
+                  <option value="divergencia_wms">🟠 Divergência no Sênior WMS</option>
                 </select>
 
                 <select
@@ -1916,12 +1903,12 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setCatFilter(e.target.value as any);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="h-8 px-2.5 text-[11px] font-semibold bg-slate-50/90 hover:bg-slate-100 border border-slate-200/90 rounded-lg text-slate-700 cursor-pointer"
                 >
-                  <option value="todos">Categoria SAP: Todas</option>
-                  <option value="livre">🟢 Em Estoque Livre / Blue Service</option>
-                  <option value="triagem_falta">🟡 Em Triagem (B148) ou Falta (B111/B152)</option>
-                  <option value="avaria">🛑 Em Avaria Definitiva (B136/B149/B137)</option>
+                  <option value="todos">Categoria: Todas</option>
+                  <option value="livre">🟢 Estoque Livre</option>
+                  <option value="triagem_falta">🟡 Triagem / Falta</option>
+                  <option value="avaria">🛑 Avaria Definitiva</option>
                 </select>
 
                 <select
@@ -1930,12 +1917,23 @@ export const IQ09ConsultTab: React.FC<IQ09ConsultTabProps> = ({
                     setStatusSapFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700"
+                  className="h-8 px-2.5 text-[11px] font-semibold bg-slate-50/90 hover:bg-slate-100 border border-slate-200/90 rounded-lg text-slate-700 cursor-pointer"
                 >
-                  <option value="todos">Status Sistema: Todos</option>
-                  <option value="DEPS">Apenas DEPS (Em Depósito)</option>
-                  <option value="OUTROS">Outros Status (EDEL / Bloqueados)</option>
+                  <option value="todos">Status SAP: Todos</option>
+                  <option value="DEPS">Apenas DEPS</option>
+                  <option value="OUTROS">Outros (EDEL/Bloq)</option>
                 </select>
+
+                <button
+                  type="button"
+                  onClick={handleExportFilteredIQ09}
+                  disabled={filteredExplorerItems.length === 0}
+                  className="h-8 px-3 rounded-lg bg-[#002664] hover:bg-[#00488E] text-white text-[11px] font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Exportar resultado filtrado para Excel (CSV)"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#38BDF8]" />
+                  <span>Exportar ({filteredExplorerItems.length.toLocaleString('pt-BR')})</span>
+                </button>
               </div>
             </div>
 

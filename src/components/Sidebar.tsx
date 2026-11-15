@@ -462,7 +462,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 3. Barra de Navegação Inferior Nativa PWA Mobile (Flutter BottomNavigationBar - < lg) */}
       <nav
         aria-label="Navegação Mobile PWA"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#081b42]/95 backdrop-blur-xl border-t border-white/15 px-1 py-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] grid grid-cols-5 items-center gap-0.5 text-white shadow-[0_-8px_25px_rgba(0,0,0,0.35)] w-full max-w-full overflow-hidden"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#06193E]/98 backdrop-blur-xl border-t border-sky-300/15 px-1 py-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] grid grid-cols-5 items-center gap-0.5 text-white shadow-[0_-8px_25px_rgba(0,18,51,0.45)] w-full max-w-full overflow-hidden"
       >
         <button
           type="button"

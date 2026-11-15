@@ -699,52 +699,55 @@ export const TransferTable: React.FC<TransferTableProps> = ({
 
   return (
     <>
-      <div className="bg-white/90 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-[0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden transition-all ring-1 ring-white/40 w-full max-w-full">
-        {/* Search & Filter Toolbar com Glassmorphism */}
-        <div className="p-2.5 sm:p-4 border-b border-slate-200/60 bg-white/60 backdrop-blur-md space-y-2.5 sm:space-y-3 w-full max-w-full overflow-hidden">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
-            {/* Campo de Busca Rápida + Botão Mobile "Filtros & IQ09" */}
-            <div className="flex items-center gap-2 w-full md:max-w-md">
+      <div className="bg-white/95 backdrop-blur-2xl rounded-2xl border border-[#BAE6FD]/60 shadow-[0_18px_45px_rgba(4,18,52,0.22)] overflow-hidden transition-all w-full max-w-full">
+        {/* =====================================================================
+            BARRA DE BUSCA, FILTROS & BATIMENTO IQ09 (DESIGN COMPACTO E PREMIUM)
+           ===================================================================== */}
+        <div className="border-b border-slate-200/80 bg-white w-full max-w-full overflow-hidden">
+          {/* LINHA 1: Busca + Seletores Enxutos em Linha Única */}
+          <div className="px-3 sm:px-4 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2">
+            {/* Esquerda: Campo de Busca Rápida + Botão Mobile "Filtros" */}
+            <div className="flex items-center gap-2 w-full md:w-auto md:flex-1 md:max-w-xs lg:max-w-sm">
               <div className="relative flex-1 min-w-0">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <Search className="w-3.5 h-3.5 text-[#00609C]/70 absolute left-3 top-2" />
                 <input
                   id="global-search-input"
                   type="text"
                   placeholder="Buscar Material, Serial, Centro, Doc SAP..."
                   value={filters.busca}
                   onChange={(e) => onFilterChange({ ...filters, busca: e.target.value })}
-                  className="w-full pl-9 pr-10 py-2 text-xs bg-white/90 focus:bg-white text-slate-800 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#249ED5]/50 focus:border-transparent placeholder:text-slate-400 shadow-2xs transition-all duration-200"
+                  className="w-full h-8 pl-8 pr-8 text-xs bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white text-slate-800 border border-slate-200/90 rounded-lg focus:ring-2 focus:ring-[#0083CA]/40 focus:border-[#0083CA] placeholder:text-slate-400 transition-all duration-150"
                 />
-                <div className="absolute right-2 top-2 flex items-center gap-1">
+                <div className="absolute right-2 top-1.5 flex items-center gap-1">
                   {filters.busca ? (
                     <button
                       type="button"
                       onClick={() => onFilterChange({ ...filters, busca: '' })}
-                      className="text-xs text-slate-400 hover:text-slate-600 px-1"
+                      className="text-xs text-slate-400 hover:text-slate-600 px-1 cursor-pointer"
                     >
                       ✕
                     </button>
                   ) : (
-                    <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-500 rounded border border-slate-200">
+                    <kbd className="hidden sm:inline-block px-1.5 py-0.2 text-[10px] font-mono bg-white text-slate-400 rounded border border-slate-200">
                       /
                     </kbd>
                   )}
                 </div>
               </div>
 
-              {/* Botão Acordeão de Filtros & Batimento IQ09 no Mobile (< md) */}
+              {/* Botão Acordeão de Filtros no Mobile (< md) */}
               <button
                 type="button"
                 onClick={() => setIsMobileFiltersOpen((prev) => !prev)}
-                className={`md:hidden px-3 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all active:scale-95 ${
+                className={`md:hidden h-8 px-2.5 rounded-lg border text-xs font-extrabold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all active:scale-95 ${
                   isMobileFiltersOpen ||
                   filters.status !== 'todos' ||
                   filters.centro !== 'todos' ||
                   filters.depositoOrigem !== 'todos' ||
                   filters.depositoDestino !== 'todos' ||
                   iq09MacroFilter !== 'todos'
-                    ? 'bg-[#002664] text-white border-[#002664] shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200'
+                    ? 'bg-[#002664] text-white border-[#002664]'
+                    : 'bg-slate-50 text-slate-700 border-slate-200'
                 }`}
               >
                 <Filter className="w-3.5 h-3.5" />
@@ -754,35 +757,43 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                   filters.depositoOrigem !== 'todos' ||
                   filters.depositoDestino !== 'todos' ||
                   iq09MacroFilter !== 'todos') && (
-                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                 )}
               </button>
             </div>
 
-            {/* Filtros Rápidos Estilo Figma (Colapsáveis no Mobile, sempre visíveis no Desktop md+) */}
+            {/* Direita: Seletores Compactos Alinhados em Linha Única */}
             <div
               className={`${
-                isMobileFiltersOpen ? 'grid grid-cols-2 gap-2' : 'hidden'
-              } md:flex md:flex-wrap items-center gap-2 w-full md:w-auto`}
+                isMobileFiltersOpen ? 'grid grid-cols-2 gap-1.5 pt-1' : 'hidden'
+              } md:flex md:flex-wrap items-center gap-1.5 w-full md:w-auto justify-end`}
             >
               {/* Status Filter */}
               <select
                 value={filters.status}
                 onChange={(e) => onFilterChange({ ...filters, status: e.target.value as any })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
+                className={`h-8 px-2.5 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                  filters.status !== 'todos'
+                    ? 'bg-[#E0F2FE] text-[#002664] border-[#38BDF8] font-bold'
+                    : 'bg-slate-50/90 hover:bg-slate-100 border-slate-200/90 text-slate-700'
+                }`}
               >
                 <option value="todos">Status: Todos</option>
-                <option value="pendente">Pendente (FIFO)</option>
-                <option value="em_analise">Em Validação SAP</option>
-                <option value="concluido">Concluído no SAP</option>
-                <option value="divergencia">Com Divergência / Erro</option>
+                <option value="pendente">⏳ Pendente (FIFO)</option>
+                <option value="em_analise">🔄 Em Validação SAP</option>
+                <option value="concluido">✓ Concluído SAP</option>
+                <option value="divergencia">⚠ Divergência</option>
               </select>
 
               {/* Centro Filter */}
               <select
                 value={filters.centro}
                 onChange={(e) => onFilterChange({ ...filters, centro: e.target.value })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
+                className={`h-8 px-2.5 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                  filters.centro !== 'todos'
+                    ? 'bg-[#E0F2FE] text-[#002664] border-[#38BDF8] font-bold'
+                    : 'bg-slate-50/90 hover:bg-slate-100 border-slate-200/90 text-slate-700'
+                }`}
               >
                 <option value="todos">Centro: Todos</option>
                 {allCentros.map((c) => (
@@ -796,12 +807,16 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <select
                 value={filters.depositoOrigem}
                 onChange={(e) => onFilterChange({ ...filters, depositoOrigem: e.target.value })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
+                className={`h-8 px-2.5 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                  filters.depositoOrigem !== 'todos'
+                    ? 'bg-[#E0F2FE] text-[#002664] border-[#38BDF8] font-bold'
+                    : 'bg-slate-50/90 hover:bg-slate-100 border-slate-200/90 text-slate-700'
+                }`}
               >
-                <option value="todos">Dep. Origem: Todos</option>
+                <option value="todos">Origem: Todas</option>
                 {allDepsOrigem.map((d) => (
                   <option key={d} value={d}>
-                    Dep. {d}
+                    Origem {d}
                   </option>
                 ))}
               </select>
@@ -810,50 +825,54 @@ export const TransferTable: React.FC<TransferTableProps> = ({
               <select
                 value={filters.depositoDestino}
                 onChange={(e) => onFilterChange({ ...filters, depositoDestino: e.target.value })}
-                className="px-2.5 py-1.5 text-xs font-medium bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-[#249ED5]/50 shadow-2xs transition-all duration-200"
+                className={`h-8 px-2.5 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                  filters.depositoDestino !== 'todos'
+                    ? 'bg-[#E0F2FE] text-[#002664] border-[#38BDF8] font-bold'
+                    : 'bg-slate-50/90 hover:bg-slate-100 border-slate-200/90 text-slate-700'
+                }`}
               >
-                <option value="todos">Dep. Destino: Todos</option>
+                <option value="todos">Destino: Todos</option>
                 {allDepsDestino.map((d) => (
                   <option key={d} value={d}>
-                    Dep. {d}
+                    Destino {d}
                   </option>
                 ))}
               </select>
 
-              {/* Indicador de Ordenação Ativa e Botão Resetar */}
-              {sortConfig.field !== 'fifo' && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-100/80 border border-blue-200 text-[#002664] text-xs font-semibold animate-in fade-in">
-                  <span className="text-[11px] text-blue-700 hidden sm:inline">Agrupado por:</span>
-                  <span className="font-bold uppercase tracking-tight">
-                    {sortConfig.field === 'material' ? 'Material' :
-                     sortConfig.field === 'centro' ? 'Centro' :
-                     sortConfig.field === 'rota' ? 'Rota Depósitos' :
-                     sortConfig.field === 'serial' ? 'Serial' :
-                     sortConfig.field === 'status' ? 'Status' :
-                     sortConfig.field === 'docSap' ? 'Doc SAP' : sortConfig.field}
-                  </span>
-                  <span className="text-[10px] bg-white px-1.5 py-0.5 rounded shadow-2xs font-mono">
-                    {sortConfig.direction === 'asc' ? 'A ➔ Z' : 'Z ➔ A'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSortConfig({ field: 'fifo', direction: 'asc' })}
-                    className="p-1 rounded-md hover:bg-blue-200 text-blue-900 transition-colors cursor-pointer"
-                    title="Voltar à ordem cronológica FIFO padrão"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                </div>
+              {/* Indicador Compacto de Avaria Definitiva */}
+              {flaggedDamageCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200 shrink-0"
+                  title={`${flaggedDamageCount} solicitação(ões) com depósito de origem de Avaria Definitiva (B136, B149 ou B137)`}
+                >
+                  <span>🔴 {flaggedDamageCount} Avaria</span>
+                </span>
               )}
 
-              {/* Indicador de Solicitações Flegadas com Avaria Definitiva */}
-              {flaggedDamageCount > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300 animate-in fade-in">
-                  🔴 {flaggedDamageCount}{' '}
-                  {flaggedDamageCount === 1
-                    ? 'Solicitação com Flag de Avaria Definitiva'
-                    : 'Solicitações com Flag de Avaria Definitiva'}
-                </span>
+              {/* Indicador de Ordenação Ativa */}
+              {sortConfig.field !== 'fifo' && (
+                <button
+                  type="button"
+                  onClick={() => setSortConfig({ field: 'fifo', direction: 'asc' })}
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg bg-[#E0F2FE] border border-[#7DD3FC] text-[#002664] text-[11px] font-bold cursor-pointer hover:bg-[#BAE6FD]/60 transition-colors"
+                  title="Clique para voltar à ordem cronológica FIFO padrão"
+                >
+                  <span>
+                    Ordem:{' '}
+                    {sortConfig.field === 'material'
+                      ? 'Material'
+                      : sortConfig.field === 'centro'
+                      ? 'Centro'
+                      : sortConfig.field === 'rota'
+                      ? 'Rota'
+                      : sortConfig.field === 'serial'
+                      ? 'Serial'
+                      : sortConfig.field === 'status'
+                      ? 'Status'
+                      : sortConfig.field}
+                  </span>
+                  <RotateCcw className="w-3 h-3 text-[#00609C]" />
+                </button>
               )}
 
               {/* Botão para Restaurar Largura Padrão das Colunas */}
@@ -861,11 +880,11 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                 <button
                   type="button"
                   onClick={handleResetAllCols}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-[11px] font-semibold transition-all cursor-pointer"
                   title="Restaurar tamanho equilibrado de todas as colunas da tabela"
                 >
                   <RotateCcw className="w-3 h-3 text-[#00609C]" />
-                  <span>Ajustar Colunas</span>
+                  <span>Colunas</span>
                 </button>
               )}
 
@@ -891,44 +910,149 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                       apenasDivergencias: false,
                     });
                   }}
-                  className="px-2.5 py-1 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg font-medium transition-all duration-200 active:scale-95"
+                  className="h-8 px-2.5 text-[11px] text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-bold transition-all cursor-pointer shrink-0"
                 >
-                  Limpar
+                  ✕ Limpar
                 </button>
               )}
             </div>
           </div>
 
-          {/* PAINEL DE BATIMENTO AUTOMÁTICO IQ09 ⟷ FILA SAP (DE-PARA EM TEMPO REAL & PRÉ-VALIDAÇÃO MACRO MIGO) */}
+          {/* LINHA 2: FAIXA INTEGRADA E ENXUTA DE BATIMENTO IQ09 ⟷ FILA SAP */}
           <div className={`${isMobileFiltersOpen || iq09MacroFilter !== 'todos' ? 'block' : 'hidden md:block'}`}>
-          {iq09QueueSummary.hasBase ? (
-            <div className="p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-[#002664] to-[#004488] text-white border border-cyan-400/30 shadow-md space-y-2.5">
-              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-400/20 border border-cyan-300/40 text-cyan-200 text-[11px] font-extrabold tracking-wide">
-                    <Database className="w-3.5 h-3.5 text-cyan-300" />
-                    <span>BATIMENTO AUTOMÁTICO IQ09 ⟷ FILA SAP (PRÉ-MACRO MIGO)</span>
+            {iq09QueueSummary.hasBase ? (
+              <div className="px-3 sm:px-4 py-2 bg-[#F0F7FF] border-t border-[#BAE6FD]/70 flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+                {/* Esquerda + Pílulas de Semáforo IQ09 em 1 Linha */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#002664] text-white text-[10px] font-extrabold tracking-wide uppercase shrink-0">
+                    <Database className="w-3 h-3 text-[#38BDF8]" />
+                    <span>Batimento IQ09</span>
                   </span>
-                  <span className="text-[11px] text-white/85 font-medium">
-                    Cruzamento instantâneo de <strong>Material</strong>, <strong>Serial (`UII`)</strong>, <strong>Centro</strong> e <strong>Dep. Origem</strong> direto na fila:
-                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIq09MacroFilter(
+                        iq09MacroFilter === 'pronto_macro_100' ? 'todos' : 'pronto_macro_100'
+                      )
+                    }
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      iq09MacroFilter === 'pronto_macro_100'
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                        : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200/90'
+                    }`}
+                    title="Material, Centro e Depósito de Origem batem 100% com a IQ09"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>100% OK p/ Macro</span>
+                    <span
+                      className={`font-mono font-black px-1.5 py-0.2 rounded text-[10px] ${
+                        iq09MacroFilter === 'pronto_macro_100'
+                          ? 'bg-emerald-800 text-white'
+                          : 'bg-emerald-100 text-emerald-900'
+                      }`}
+                    >
+                      {iq09QueueSummary.prontosMacro}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIq09MacroFilter(
+                        iq09MacroFilter === 'corrigivel_depara' ? 'todos' : 'corrigivel_depara'
+                      )
+                    }
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      iq09MacroFilter === 'corrigivel_depara'
+                        ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-2xs'
+                        : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-200/90'
+                    }`}
+                    title="Material, Centro ou Origem difere da IQ09 (Corrigível via De-Para)"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>De-Para IQ09</span>
+                    <span
+                      className={`font-mono font-black px-1.5 py-0.2 rounded text-[10px] ${
+                        iq09MacroFilter === 'corrigivel_depara'
+                          ? 'bg-amber-950 text-amber-200'
+                          : 'bg-amber-100 text-amber-900'
+                      }`}
+                    >
+                      {iq09QueueSummary.corrigiveisDePara}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIq09MacroFilter(
+                        iq09MacroFilter === 'ja_no_destino_sap' ? 'todos' : 'ja_no_destino_sap'
+                      )
+                    }
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      iq09MacroFilter === 'ja_no_destino_sap'
+                        ? 'bg-[#00609C] text-white border-[#002664] shadow-2xs'
+                        : 'bg-white hover:bg-sky-50 text-slate-700 border-slate-200/90'
+                    }`}
+                    title="Serial já consta no depósito de destino na IQ09"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-[#249ED5]" />
+                    <span>Já no Destino</span>
+                    <span
+                      className={`font-mono font-black px-1.5 py-0.2 rounded text-[10px] ${
+                        iq09MacroFilter === 'ja_no_destino_sap'
+                          ? 'bg-[#002664] text-white'
+                          : 'bg-sky-100 text-[#002664]'
+                      }`}
+                    >
+                      {iq09QueueSummary.jaNoDestino}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIq09MacroFilter(
+                        iq09MacroFilter === 'erro_critico_macro' ? 'todos' : 'erro_critico_macro'
+                      )
+                    }
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      iq09MacroFilter === 'erro_critico_macro'
+                        ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                        : 'bg-white hover:bg-rose-50 text-slate-700 border-slate-200/90'
+                    }`}
+                    title="Ausente na IQ09, Trava Sênior WMS ou Avaria Definitiva"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span>Impedido / Trava WMS</span>
+                    <span
+                      className={`font-mono font-black px-1.5 py-0.2 rounded text-[10px] ${
+                        iq09MacroFilter === 'erro_critico_macro'
+                          ? 'bg-rose-900 text-white'
+                          : 'bg-rose-100 text-rose-900'
+                      }`}
+                    >
+                      {iq09QueueSummary.errosCriticos}
+                    </span>
+                  </button>
                 </div>
 
-                {/* Botões de Automação De-Para e Seleção Pronta p/ Macro */}
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {/* Direita: Botões de Ação Rápida de Automação */}
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   {iq09QueueSummary.corrigiveisDePara > 0 && onApplyIQ09DePara && (
                     <button
                       type="button"
                       disabled={isApplyingDePara}
                       onClick={handleFixAllDeParaWithIQ09}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer active:scale-95"
                       title="Corrige automaticamente Material, Centro e Depósito de Origem de todas as solicitações divergentes para bater 100% com a IQ09"
                     >
-                      <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                      <Zap className="w-3 h-3 fill-slate-950" />
                       <span>
                         {isApplyingDePara
-                          ? 'Sincronizando De-Para...'
-                          : `⚡ Aplicar De-Para IQ09 em Todos (${iq09QueueSummary.corrigiveisDePara})`}
+                          ? 'Sincronizando...'
+                          : `Corrigir De-Para (${iq09QueueSummary.corrigiveisDePara})`}
                       </span>
                     </button>
                   )}
@@ -941,144 +1065,34 @@ export const TransferTable: React.FC<TransferTableProps> = ({
                         setSelectedIds(readyIds);
                         onOpenSAPModal(iq09QueueSummary.prontosItems);
                       }}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                      className="px-2.5 py-1 rounded-lg bg-[#002664] hover:bg-[#00488E] text-white font-extrabold text-[11px] inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
                       title="Seleciona apenas os itens 100% batidos com a IQ09 e abre o Assistente para rodar a Macro MIGO sem erros"
                     >
-                      <Terminal className="w-3.5 h-3.5" />
-                      <span>
-                        🚀 Assistente Macro 100% OK ({iq09QueueSummary.prontosMacro})
-                      </span>
+                      <Terminal className="w-3 h-3 text-[#38BDF8]" />
+                      <span>Assistente Macro OK ({iq09QueueSummary.prontosMacro})</span>
                     </button>
                   )}
                 </div>
               </div>
-
-              {/* 4 Semáforos Clicáveis de Filtro Rápido na Fila */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIq09MacroFilter(
-                      iq09MacroFilter === 'pronto_macro_100' ? 'todos' : 'pronto_macro_100'
-                    )
-                  }
-                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    iq09MacroFilter === 'pronto_macro_100'
-                      ? 'bg-emerald-400 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
-                      : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border-emerald-400/35'
-                  }`}
-                >
-                  <div>
-                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
-                      🟢 100% OK p/ Macro MIGO
-                    </div>
-                    <div className="text-[10px] opacity-85">
-                      Material, Centro e Origem iguais à IQ09
-                    </div>
+            ) : (
+              onOpenIQ09Tab && (
+                <div className="px-3.5 py-2 bg-[#F0F7FF] border-t border-[#BAE6FD]/70 flex flex-wrap items-center justify-between gap-2 text-xs text-[#002664]">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-3.5 h-3.5 text-[#0083CA]" />
+                    <span>
+                      Importe a planilha <strong>IQ09 (.xlsx)</strong> para ativar o <strong>Batimento Automático</strong> direto na fila.
+                    </span>
                   </div>
-                  <span className="text-lg font-black font-mono px-2">
-                    {iq09QueueSummary.prontosMacro}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIq09MacroFilter(
-                      iq09MacroFilter === 'corrigivel_depara' ? 'todos' : 'corrigivel_depara'
-                    )
-                  }
-                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    iq09MacroFilter === 'corrigivel_depara'
-                      ? 'bg-amber-400 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
-                      : 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-100 border-amber-400/40'
-                  }`}
-                >
-                  <div>
-                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
-                      🟠 Divergência De-Para IQ09
-                    </div>
-                    <div className="text-[10px] opacity-85">
-                      Material, Centro ou Origem ≠ IQ09
-                    </div>
-                  </div>
-                  <span className="text-lg font-black font-mono px-2">
-                    {iq09QueueSummary.corrigiveisDePara}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIq09MacroFilter(
-                      iq09MacroFilter === 'ja_no_destino_sap' ? 'todos' : 'ja_no_destino_sap'
-                    )
-                  }
-                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    iq09MacroFilter === 'ja_no_destino_sap'
-                      ? 'bg-sky-300 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
-                      : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-100 border-sky-300/35'
-                  }`}
-                >
-                  <div>
-                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
-                      🔵 Já no Depósito Destino
-                    </div>
-                    <div className="text-[10px] opacity-85">
-                      Já consta no destino na IQ09
-                    </div>
-                  </div>
-                  <span className="text-lg font-black font-mono px-2">
-                    {iq09QueueSummary.jaNoDestino}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIq09MacroFilter(
-                      iq09MacroFilter === 'erro_critico_macro' ? 'todos' : 'erro_critico_macro'
-                    )
-                  }
-                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    iq09MacroFilter === 'erro_critico_macro'
-                      ? 'bg-rose-400 text-slate-950 border-white ring-2 ring-white/60 font-extrabold'
-                      : 'bg-rose-500/25 hover:bg-rose-500/35 text-rose-100 border-rose-400/40'
-                  }`}
-                >
-                  <div>
-                    <div className="text-[10px] font-extrabold uppercase tracking-wider">
-                      🔴 Sem Saldo / Impedido IQ09
-                    </div>
-                    <div className="text-[10px] opacity-85">
-                      Ausente na IQ09, Status ≠ DEPS ou Avaria
-                    </div>
-                  </div>
-                  <span className="text-lg font-black font-mono px-2">
-                    {iq09QueueSummary.errosCriticos}
-                  </span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            onOpenIQ09Tab && (
-              <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-[#00609C]" />
-                  <span>
-                    <strong>Dica Key User SAP:</strong> Importe a planilha <strong>IQ09 (.xlsx)</strong> para ativar o <strong>De-Para e Batimento Automático</strong> de Material, Serial, Centro e Depósito direto nesta fila!
-                  </span>
+                  <button
+                    type="button"
+                    onClick={onOpenIQ09Tab}
+                    className="px-2.5 py-1 rounded-lg bg-[#002664] hover:bg-[#00488E] text-white font-bold text-[11px] cursor-pointer"
+                  >
+                    Importar Base IQ09 (.xlsx)
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={onOpenIQ09Tab}
-                  className="px-3 py-1 rounded-lg bg-[#002664] hover:bg-[#003380] text-white font-bold text-[11px] cursor-pointer"
-                >
-                  Importar Base IQ09 (.xlsx)
-                </button>
-              </div>
-            )
-          )}
+              )
+            )}
           </div>
 
           {/* Selected Rows Batch Action Bar - Botões Dinâmicos, Leves e Suaves */}
