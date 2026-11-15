@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v30-flutter-mobile-shell';
+const CACHE_NAME = 'migou-pwa-v31-static-sidebar-matte-blue';
 const STATIC_ASSETS = [
   './manifest.json',
   './icon.svg',
