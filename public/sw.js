@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v32-unified-migou-blue-theme';
+const CACHE_NAME = 'migou-pwa-v33-sap-migo311-automation';
 const STATIC_ASSETS = [
   './manifest.json',
   './icon.svg',

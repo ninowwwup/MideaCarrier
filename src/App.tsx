@@ -762,6 +762,7 @@ export default function App() {
                 wmsSnapshotVersion={wmsSnapshot?.metadata.snapshotId || null}
                 onApplyIQ09DePara={handleApplyIQ09DePara}
                 onOpenIQ09Tab={() => setActiveMainTab('consulta_iq09')}
+                isMideaUser={currentUser?.role === 'midea'}
               />
             </>
           )}
@@ -828,14 +829,52 @@ export default function App() {
         currentRole={currentRole}
       />
 
-      {/* Modal de Assistente e Cópia para o SAP */}
+      {/* Modal de Automação SAP MIGO 311 (1-Click) Exclusivo Time Midea */}
       {sapModalItems && (
         <SAPCopyModal
           isOpen={Boolean(sapModalItems)}
           items={sapModalItems}
+          currentUser={currentUser}
           onClose={() => setSapModalItems(null)}
           iq09SnapshotVersion={iq09Snapshot?.metadata.snapshotId || null}
           onApplyIQ09DePara={handleApplyIQ09DePara}
+          onCompleteBatchWithSapDoc={async (batchCompletions) => {
+            if (!batchCompletions || batchCompletions.length === 0) return;
+            const now = new Date().toISOString();
+            const updater = currentUser?.teamName || `Time Midea (${currentUser?.username || 'SAP'})`;
+            const idToDocMap = new Map<string, string>();
+            for (const b of batchCompletions) {
+              for (const itemId of b.itemIds) {
+                idToDocMap.set(itemId, b.sapDocNumber);
+              }
+            }
+            const affectedItems: TransferItem[] = [];
+            const updated = items.map((item) => {
+              const docSap = idToDocMap.get(item.id);
+              if (docSap) {
+                const up: TransferItem = {
+                  ...item,
+                  status: 'concluido',
+                  sapDocNumber: docSap,
+                  atualizadoEm: now,
+                  atualizadoPor: updater,
+                };
+                affectedItems.push(up);
+                return up;
+              }
+              return item;
+            });
+            setItems(updated);
+            setSelectionResetKey((prev) => prev + 1);
+            await updateSpecificTransferItems(affectedItems, updated);
+            const docsSummary = batchCompletions
+              .map((b) => `${b.centro}: Doc ${b.sapDocNumber}`)
+              .join(' | ');
+            showSuccessNotice(
+              'MIGO 311 Concluída no SAP!',
+              `${affectedItems.length} serial(is) concluído(s) automaticamente (${docsSummary}).`
+            );
+          }}
         />
       )}
 
