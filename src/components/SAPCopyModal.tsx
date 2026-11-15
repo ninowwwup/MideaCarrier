@@ -38,6 +38,8 @@ import {
   downloadSapGuiVbsExecutor,
   downloadLocalSapBridgeLauncher,
   generateExcelVbaV2MacroCode,
+  downloadExcelMasterVbaModule,
+  downloadAutoExcelDashboardBuilderVbs,
 } from '../utils/sapMigoEngine';
 
 interface SAPCopyModalProps {
@@ -98,7 +100,7 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
   // Documentos SAP informados manualmente por Centro (caso use o .vbs direto)
   const [manualCentroDocs, setManualCentroDocs] = useState<Record<string, string>>({});
   const [isCompletingBatch, setIsCompletingBatch] = useState<string | null>(null);
-  const [showVbaCode, setShowVbaCode] = useState<boolean>(false);
+  const [showVbaCode, setShowVbaCode] = useState<boolean>(true);
   const [showLegacyCopyFormats, setShowLegacyCopyFormats] = useState<boolean>(false);
 
   const isMideaAuthenticated = currentUser?.role === 'midea';
@@ -834,55 +836,120 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
             ))}
           </div>
 
-          {/* 4. SEÇÃO EXPANSÍVEL: CÓDIGO MACRO VBA V2 AGRUPADA (PARA QUEM QUISER ATUALIZAR A PLANILHA .XLSM) */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          {/* 4. SISTEMA MESTRE EXCEL VBA V3 (PAINEL VISUAL P/ COMPARTILHAR COM OS COLEGAS) */}
+          <div className="bg-white rounded-2xl border-2 border-[#0083CA]/40 shadow-xs overflow-hidden">
             <button
               type="button"
               onClick={() => setShowVbaCode(!showVbaCode)}
-              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-50 transition-colors cursor-pointer"
+              className="w-full px-4 py-3 bg-[#F0F7FF] flex items-center justify-between text-left hover:bg-[#E0F2FE]/70 transition-colors cursor-pointer"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Code2 className="w-4 h-4 text-[#0083CA]" />
-                <span className="text-xs font-extrabold text-slate-800">
-                  Macro VBA V2 com Agrupamento Automático (Para atualizar sua planilha Excel .xlsm)
+                <span className="text-xs font-extrabold text-[#06193E]">
+                  Sistema Mestre Excel VBA V3 (Com Construtor de Painel Visual & Botões para Compartilhar no Trabalho)
+                </span>
+                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold text-[10px]">
+                  API GetCell + Nº de Série Direto
                 </span>
               </div>
               {showVbaCode ? (
-                <ChevronUp className="w-4 h-4 text-slate-500" />
+                <ChevronUp className="w-4 h-4 text-slate-600" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-slate-500" />
+                <ChevronDown className="w-4 h-4 text-slate-600" />
               )}
             </button>
 
             {showVbaCode && (
-              <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-slate-600">
-                    Caso ainda utilize a planilha <code>.xlsm</code> em paralelo, substitua o módulo antigo por este código VBA V2 que agrupa por Material e Centro automaticamente:
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(vbaV2Code, 'vba_v2')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                      copiedType === 'vba_v2'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-[#06193E] hover:bg-[#0B2A63] text-white'
-                    }`}
-                  >
-                    {copiedType === 'vba_v2' ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Código VBA Copiado!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-[#38BDF8]" />
-                        <span>Copiar Macro VBA V2</span>
-                      </>
-                    )}
-                  </button>
+              <div className="p-4 border-t border-[#BAE6FD] bg-slate-50 space-y-3">
+                <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 space-y-2">
+                  <div className="font-extrabold text-[#06193E]">
+                    Como criar e compartilhar a Planilha Mestre (.xlsm) com sua equipe:
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
+                    <li>
+                      No Excel, aperte <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border font-mono">ALT + F11</kbd>, clique em <strong>Inserir → Módulo</strong> (ou <em>Arquivo → Importar Arquivo</em> com o <code>.bas</code> abaixo) e cole o <strong>Script Mestre VBA V3</strong>.
+                    </li>
+                    <li>
+                      Aperte <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border font-mono">F5</kbd> e execute uma única vez a macro <strong><code>Construir_Painel_Visual_MIGOU</code></strong>: ela desenha sozinha todo o cabeçalho azul Safira, os KPIs, as tabelas e os <strong>3 Botões Clicáveis</strong> (<em>1. Agrupar e Simular MIGO</em>, <em>2. Executar no SAP MIGO 311</em> e <em>Limpar</em>)!
+                    </li>
+                    <li>
+                      Salve como <strong>Pasta de Trabalho Habilitada para Macro do Excel (<code>.xlsm</code>)</strong> e envie para seus colegas. Basta colar os itens a partir da célula <strong><code>B10</code></strong> e clicar no botão verde!
+                    </li>
+                  </ol>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(tableText, 'excel_paste_b10')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                        copiedType === 'excel_paste_b10'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-[#0083CA] hover:bg-[#00609C] text-white'
+                      }`}
+                    >
+                      {copiedType === 'excel_paste_b10' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Lote Copiado! Cole na célula B10 do Excel</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>1. Copiar Lote p/ Colar no Excel ({effectiveMacroItems.length} itens)</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadAutoExcelDashboardBuilderVbs(
+                          effectiveMacroItems,
+                          migoPlan.allGroupedLines,
+                          migoOptions
+                        )
+                      }
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                      title="Abre o Excel na sua máquina já desenhado e preenchido com o lote atual!"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Abrir Painel Visual no Excel Automaticamente (.vbs)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => downloadExcelMasterVbaModule(migoOptions)}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-[#06193E] border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-[#0083CA]" />
+                      <span>Baixar Módulo VBA (.bas)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(vbaV2Code, 'vba_v2')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer ml-auto ${
+                        copiedType === 'vba_v2'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-[#06193E] hover:bg-[#0B2A63] text-white'
+                      }`}
+                    >
+                      {copiedType === 'vba_v2' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Script Mestre VBA Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-[#38BDF8]" />
+                          <span>Copiar Script Mestre VBA V3 Completo</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <pre className="text-[11px] font-mono bg-slate-900 text-sky-200 p-3 rounded-xl overflow-x-auto max-h-56">
+
+                <pre className="text-[11px] font-mono bg-slate-900 text-sky-200 p-3 rounded-xl overflow-x-auto max-h-60">
                   {vbaV2Code}
                 </pre>
               </div>

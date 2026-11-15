@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v33-sap-migo311-automation';
+const CACHE_NAME = 'migou-pwa-v34-sap-getcell-and-excel-master-v3';
 const STATIC_ASSETS = [
   './manifest.json',
   './icon.svg',
