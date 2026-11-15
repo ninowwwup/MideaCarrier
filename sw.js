@@ -10,7 +10,7 @@
  * 6. Cache Offline: Preserva arquivos estáticos e recursos essenciais.
  */
 
-const CACHE_NAME = 'migou-pwa-v35-vba-clean-syntax';
+const CACHE_NAME = 'migou-pwa-v36-midea-uii-migo311-engine';
 const STATIC_ASSETS = [
   './manifest.json',
   './icon.svg',
