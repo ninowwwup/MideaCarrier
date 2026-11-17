@@ -729,9 +729,11 @@ export function generateSapGuiVbsScript(
   vbsLines.push(``);
 
   vbsLines.push(`Dim batchStatus, docSapGenerated, batchMessage`);
-  vbsLines.push(`Dim summaryReport, jsonResults`);
+  vbsLines.push(`Dim summaryReport, jsonResults, hasAnyError, clipStatusLines`);
   vbsLines.push(`summaryReport = ""`);
   vbsLines.push(`jsonResults = ""`);
+  vbsLines.push(`clipStatusLines = ""`);
+  vbsLines.push(`hasAnyError = False`);
   vbsLines.push(``);
 
   batches.forEach((batch, bIdx) => {
@@ -753,6 +755,10 @@ export function generateSapGuiVbsScript(
 
     vbsLines.push(
       `batchStatus = ExecuteMigoBatch("${escapeVbsString(batch.centro)}", mat_${bIdx}, cen_${bIdx}, orig_${bIdx}, dest_${bIdx}, qtd_${bIdx}, txt_${bIdx}, ser_${bIdx}, "${options.postMode}", docSapGenerated, batchMessage)`
+    );
+    vbsLines.push(`If batchStatus = "error" Then hasAnyError = True`);
+    vbsLines.push(
+      `clipStatusLines = clipStatusLines & "MIGOU_BATCH|${escapeVbsString(batch.centro)}|" & batchStatus & "|" & docSapGenerated & "|" & Replace(batchMessage, "|", "/") & vbCrLf`
     );
 
     const itemIdsJson = JSON.stringify(batch.itemIds).replace(/"/g, '""');
@@ -779,9 +785,16 @@ export function generateSapGuiVbsScript(
     vbsLines.push(`outTs.Write "{""ok"":true,""results"":[" & jsonResults & "]}"`);
     vbsLines.push(`outTs.Close`);
   } else {
+    vbsLines.push(`PutSerialsInClipboard clipStatusLines`);
+    vbsLines.push(`If hasAnyError Then`);
     vbsLines.push(
-      `MsgBox "Execucao MIGO 311 Finalizada pelo MIGOU!" & vbCrLf & "Usuario SAP: " & currentSapUser & vbCrLf & vbCrLf & summaryReport, vbInformation, "MIGOU SAP MIGO 311"`
+      `  MsgBox "ATENCAO: A Macro MIGO 311 encontrou erro no SAP!" & vbCrLf & "Usuario SAP: " & currentSapUser & vbCrLf & vbCrLf & summaryReport, vbCritical, "MIGOU SAP MIGO 311 - Erro Detectado"`
     );
+    vbsLines.push(`Else`);
+    vbsLines.push(
+      `  MsgBox "Execucao MIGO 311 Finalizada Sem Erros pelo MIGOU!" & vbCrLf & "Usuario SAP: " & currentSapUser & vbCrLf & vbCrLf & summaryReport & vbCrLf & "Volte a tela do MIGOU: o botao CONCLUIR ja esta habilitado!", vbInformation, "MIGOU SAP MIGO 311 - Sucesso"`
+    );
+    vbsLines.push(`End If`);
   }
 
   return vbsLines.join('\r\n');

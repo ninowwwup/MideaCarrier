@@ -100,6 +100,10 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
 
   // Documentos SAP informados manualmente por Centro (caso use o .vbs direto)
   const [manualCentroDocs, setManualCentroDocs] = useState<Record<string, string>>({});
+  const [centroMacroState, setCentroMacroState] = useState<
+    Record<string, 'idle' | 'running' | 'ready' | 'error' | 'completed'>
+  >({});
+  const [centroMacroMessage, setCentroMacroMessage] = useState<Record<string, string>>({});
   const [isCompletingBatch, setIsCompletingBatch] = useState<string | null>(null);
   const [showVbaCode, setShowVbaCode] = useState<boolean>(true);
   const [showLegacyCopyFormats, setShowLegacyCopyFormats] = useState<boolean>(false);
@@ -123,8 +127,71 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
       refreshSapBridgeStatus();
       setExecutionResults([]);
       setExecutionError(null);
+      setCentroMacroState({});
+      setCentroMacroMessage({});
     }
   }, [isOpen, isMideaAuthenticated, refreshSapBridgeStatus]);
+
+  // Ao voltar do SAP/VBScript para a janela do MIGOU, lê automaticamente o retorno gravado pelo .vbs no Clipboard
+  useEffect(() => {
+    if (!isOpen || !isMideaAuthenticated) return;
+
+    const handleWindowFocus = async () => {
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.readText) return;
+        const clipText = await navigator.clipboard.readText();
+        if (!clipText || !clipText.includes('MIGOU_BATCH|')) return;
+
+        const lines = clipText.split(/\r?\n/);
+        const nextStates: Record<string, 'ready' | 'error'> = {};
+        const nextMsgs: Record<string, string> = {};
+        const nextDocs: Record<string, string> = {};
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith('MIGOU_BATCH|')) continue;
+          const parts = line.split('|');
+          const centro = (parts[1] || '').trim();
+          const status = (parts[2] || '').trim().toLowerCase();
+          const docSap = (parts[3] || '').trim();
+          const msg = (parts[4] || '').trim();
+          if (!centro) continue;
+
+          if (status === 'error') {
+            nextStates[centro] = 'error';
+            nextMsgs[centro] = msg || 'A macro reportou erro no SAP.';
+          } else if (status === 'success' || status === 'verified') {
+            nextStates[centro] = 'ready';
+            nextMsgs[centro] = msg || 'Macro finalizada sem erros no SAP.';
+            if (docSap) {
+              nextDocs[centro] = docSap;
+            }
+          }
+        }
+
+        if (Object.keys(nextStates).length > 0) {
+          setCentroMacroState((prev) => {
+            const merged = { ...prev };
+            for (const [c, st] of Object.entries(nextStates)) {
+              if (merged[c] !== 'completed') {
+                merged[c] = st;
+              }
+            }
+            return merged;
+          });
+          setCentroMacroMessage((prev) => ({ ...prev, ...nextMsgs }));
+          if (Object.keys(nextDocs).length > 0) {
+            setManualCentroDocs((prev) => ({ ...prev, ...nextDocs }));
+          }
+        }
+      } catch {
+        // Permissão de leitura automática do clipboard opcional
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [isOpen, isMideaAuthenticated]);
 
   // Audita todos os itens selecionados contra a Base IQ09
   const batchAudit = useMemo(() => {
@@ -270,6 +337,72 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
     }
   };
 
+  // Marca lotes como prontos para conclusão imediata (quando a automação/macro finaliza sem erros)
+  const markBatchesReady = (
+    targetBatches: typeof migoPlan.batches,
+    msg = 'Automação acionada sem erros • Botão Concluir habilitado'
+  ) => {
+    setCentroMacroState((prev) => {
+      const next = { ...prev };
+      for (const b of targetBatches) {
+        if (next[b.centro] !== 'completed') {
+          next[b.centro] = 'ready';
+        }
+      }
+      return next;
+    });
+    setCentroMacroMessage((prev) => {
+      const next = { ...prev };
+      for (const b of targetBatches) {
+        next[b.centro] = msg;
+      }
+      return next;
+    });
+  };
+
+  // Aplica resultados retornados pelo SAP (Conector Local) nos estados de cada Centro
+  const applySapExecutionResultsToState = async (results: SapBatchExecutionResult[]) => {
+    const nextStates: Record<string, 'ready' | 'error' | 'completed'> = {};
+    const nextMsgs: Record<string, string> = {};
+    const nextDocs: Record<string, string> = {};
+
+    for (const r of results) {
+      nextMsgs[r.centro] = r.message;
+      if (r.status === 'error') {
+        nextStates[r.centro] = 'error';
+      } else {
+        // Macro finalizou no SAP sem erro ('success' ou 'verified') -> Libera botão Concluir!
+        nextStates[r.centro] = 'ready';
+        if (r.docSap) {
+          nextDocs[r.centro] = r.docSap;
+        }
+      }
+    }
+
+    if (Object.keys(nextDocs).length > 0) {
+      setManualCentroDocs((prev) => ({ ...prev, ...nextDocs }));
+    }
+    setCentroMacroMessage((prev) => ({ ...prev, ...nextMsgs }));
+
+    // Se já gerou Documentos SAP 49xxxxxxxx no modo Registrar, conclui automaticamente e marca como completed
+    const completedBatches = results
+      .filter((r) => r.status === 'success' && r.docSap && r.itemIds.length > 0)
+      .map((r) => ({
+        itemIds: r.itemIds,
+        sapDocNumber: r.docSap!,
+        centro: r.centro,
+      }));
+
+    if (completedBatches.length > 0 && onCompleteBatchWithSapDoc) {
+      await onCompleteBatchWithSapDoc(completedBatches);
+      for (const cb of completedBatches) {
+        nextStates[cb.centro] = 'completed';
+      }
+    }
+
+    setCentroMacroState((prev) => ({ ...prev, ...nextStates }));
+  };
+
   // Disparo 1-Click no SAP via Ponte Local (ou download imediato do executor .vbs caso a ponte não esteja ativa)
   const handleExecute1ClickSap = async () => {
     setExecutionError(null);
@@ -296,32 +429,58 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
         }
 
         setExecutionResults(res.results);
-
-        // Se gerou Documentos SAP 49xxxxxxxx com sucesso, conclui automaticamente na fila do MIGOU!
-        const completedBatches = res.results
-          .filter((r) => r.status === 'success' && r.docSap && r.itemIds.length > 0)
-          .map((r) => ({
-            itemIds: r.itemIds,
-            sapDocNumber: r.docSap!,
-            centro: r.centro,
-          }));
-
-        if (completedBatches.length > 0 && onCompleteBatchWithSapDoc) {
-          await onCompleteBatchWithSapDoc(completedBatches);
-        }
+        await applySapExecutionResultsToState(res.results);
       } finally {
         setIsExecutingSap(false);
       }
     } else {
-      // Se o conector em segundo plano não estiver aberto, dispara o Executor Direto .VBS nativo do Windows!
+      // Se o conector em segundo plano não estiver aberto, dispara o Executor Direto .VBS nativo do Windows e habilita o botão Concluir!
       downloadSapGuiVbsExecutor(migoPlan.batches, migoOptions);
+      markBatchesReady(
+        migoPlan.batches,
+        'Script .VBS executado • Se finalizou sem erro no SAP, clique em Concluir!'
+      );
+    }
+  };
+
+  // Executa apenas 1 Centro específico (via Ponte Local se online, ou .VBS direto) e habilita o botão Concluir daquele Centro
+  const handleRunSingleCentroBatch = async (batch: (typeof migoPlan.batches)[number]) => {
+    setExecutionError(null);
+    if (bridgeStatus.bridgeOnline && bridgeStatus.sapLogged) {
+      setCentroMacroState((prev) => ({ ...prev, [batch.centro]: 'running' }));
+      setIsExecutingSap(true);
+      try {
+        const res = await executeMigo311ViaLocalBridge([batch], migoOptions);
+        if (!res.ok) {
+          setCentroMacroState((prev) => ({ ...prev, [batch.centro]: 'error' }));
+          setCentroMacroMessage((prev) => ({
+            ...prev,
+            [batch.centro]: res.errorMessage || 'Erro ao executar lote no SAP.',
+          }));
+          return;
+        }
+        setExecutionResults((prev) => [
+          ...prev.filter((p) => p.centro !== batch.centro),
+          ...res.results,
+        ]);
+        await applySapExecutionResultsToState(res.results);
+      } finally {
+        setIsExecutingSap(false);
+      }
+    } else {
+      downloadSapGuiVbsExecutor([batch], migoOptions);
+      markBatchesReady(
+        [batch],
+        'Macro acionada • Se finalizou sem erro no SAP, clique em Concluir ao lado!'
+      );
     }
   };
 
   const handleManualCompleteCentroBatch = async (centro: string, itemIds: string[]) => {
-    const docNum = (manualCentroDocs[centro] || '').trim();
-    if (!docNum) return;
     if (!onCompleteBatchWithSapDoc) return;
+    if (centroMacroState[centro] === 'error') return;
+
+    const docNum = (manualCentroDocs[centro] || '').trim() || 'ok';
 
     setIsCompletingBatch(centro);
     try {
@@ -332,6 +491,42 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
           itemIds,
         },
       ]);
+      setCentroMacroState((prev) => ({ ...prev, [centro]: 'completed' }));
+      setCentroMacroMessage((prev) => ({
+        ...prev,
+        [centro]: `Concluído no MIGOU (Doc: ${docNum})`,
+      }));
+    } finally {
+      setIsCompletingBatch(null);
+    }
+  };
+
+  const handleCompleteAllReadyBatches = async () => {
+    if (!onCompleteBatchWithSapDoc) return;
+    const readyBatches = migoPlan.batches.filter(
+      (b) =>
+        centroMacroState[b.centro] !== 'completed' &&
+        centroMacroState[b.centro] !== 'error' &&
+        (centroMacroState[b.centro] === 'ready' || Boolean(manualCentroDocs[b.centro]?.trim()))
+    );
+    if (readyBatches.length === 0) return;
+
+    setIsCompletingBatch('ALL');
+    try {
+      await onCompleteBatchWithSapDoc(
+        readyBatches.map((b) => ({
+          centro: b.centro,
+          sapDocNumber: (manualCentroDocs[b.centro] || '').trim() || 'ok',
+          itemIds: b.itemIds,
+        }))
+      );
+      setCentroMacroState((prev) => {
+        const next = { ...prev };
+        for (const b of readyBatches) {
+          next[b.centro] = 'completed';
+        }
+        return next;
+      });
     } finally {
       setIsCompletingBatch(null);
     }
@@ -444,13 +639,43 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => downloadSapGuiVbsExecutor(migoPlan.batches, migoOptions)}
+                  onClick={() => {
+                    downloadSapGuiVbsExecutor(migoPlan.batches, migoOptions);
+                    markBatchesReady(
+                      migoPlan.batches,
+                      'Script .VBS executado • Se finalizou sem erro no SAP, clique em Concluir!'
+                    );
+                  }}
                   className="px-3.5 py-2 rounded-xl bg-[#0083CA] hover:bg-[#00609C] border border-[#38BDF8]/40 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
-                  title="Gera e baixa o executor direto .VBS com todas as linhas agrupadas. Basta clicar no arquivo baixado para preencher a MIGO 311 no SAP aberto!"
+                  title="Gera e baixa o executor direto .VBS com todas as linhas agrupadas e já libera o botão Concluir!"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Disparar Script Direto SAP (.vbs)</span>
                 </button>
+
+                {onCompleteBatchWithSapDoc &&
+                  migoPlan.batches.some(
+                    (b) =>
+                      centroMacroState[b.centro] !== 'completed' &&
+                      centroMacroState[b.centro] !== 'error' &&
+                      (centroMacroState[b.centro] === 'ready' ||
+                        Boolean(manualCentroDocs[b.centro]?.trim()))
+                  ) && (
+                    <button
+                      type="button"
+                      disabled={isCompletingBatch === 'ALL'}
+                      onClick={handleCompleteAllReadyBatches}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+                      title="Conclui todos os Centros cuja macro já finalizou sem erro"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        {isCompletingBatch === 'ALL'
+                          ? 'Concluindo...'
+                          : `✓ Concluir Todos (${migoPlan.totalUniqueSerials})`}
+                      </span>
+                    </button>
+                  )}
 
                 {bridgeStatus.bridgeOnline && (
                   <button
@@ -657,71 +882,192 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
 
           {/* 3. ESPELHO DA GRADE MIGO 311 AGRUPADA (EXATAMENTE NAS COLUNAS DO SAP DO USUÁRIO) */}
           <div className="space-y-3">
-            {migoPlan.batches.map((batch) => (
-              <div
-                key={`batch-${batch.centro}`}
-                className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden"
-              >
-                {/* Cabeçalho do Lote (Documento MIGO por Centro) */}
-                <div className="px-4 py-2.5 bg-[#F0F7FF] border-b border-[#BAE6FD]/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2.5 py-0.5 rounded-md bg-[#06193E] text-white font-mono font-extrabold text-xs">
-                      Centro {batch.centro}
-                    </span>
-                    <span className="text-xs font-extrabold text-[#002664]">
-                      {batch.totalLines} Linha(s) na Grade MIGO • Total Qtd.em UMR = {batch.totalSerials} seriais
-                    </span>
-                  </div>
+            {migoPlan.batches.map((batch) => {
+              const macroState = centroMacroState[batch.centro] || 'idle';
+              const hasManualDoc = Boolean(manualCentroDocs[batch.centro]?.trim());
+              const isConcluirEnabled =
+                macroState !== 'completed' &&
+                macroState !== 'error' &&
+                macroState !== 'running' &&
+                isCompletingBatch !== batch.centro &&
+                (macroState === 'ready' || hasManualDoc);
 
-                  {/* Ações Rápidas do Centro: Baixar .VBS deste Centro ou Concluir informando Doc SAP */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {onCompleteBatchWithSapDoc && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={manualCentroDocs[batch.centro] || ''}
-                          onChange={(e) =>
-                            setManualCentroDocs((prev) => ({
-                              ...prev,
-                              [batch.centro]: e.target.value,
-                            }))
-                          }
-                          placeholder="Doc SAP (ex: 4907901553)"
-                          className="h-7 w-40 px-2 rounded-lg border border-slate-300 bg-white text-[11px] font-mono text-slate-800 focus:outline-none focus:border-[#0083CA]"
-                        />
-                        <button
-                          type="button"
-                          disabled={
-                            !manualCentroDocs[batch.centro]?.trim() ||
-                            isCompletingBatch === batch.centro
-                          }
-                          onClick={() =>
-                            handleManualCompleteCentroBatch(batch.centro, batch.itemIds)
-                          }
-                          className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                          title="Grava este Documento SAP e marca todos os seriais deste Centro como Concluído"
+              return (
+                <div
+                  key={`batch-${batch.centro}`}
+                  className={`bg-white rounded-2xl border shadow-2xs overflow-hidden transition-colors ${
+                    macroState === 'completed'
+                      ? 'border-emerald-400'
+                      : macroState === 'error'
+                      ? 'border-rose-400'
+                      : macroState === 'ready'
+                      ? 'border-[#0083CA]'
+                      : 'border-slate-200'
+                  }`}
+                >
+                  {/* Cabeçalho do Lote (Documento MIGO por Centro) */}
+                  <div className="px-4 py-2.5 bg-[#F0F7FF] border-b border-[#BAE6FD]/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-md bg-[#06193E] text-white font-mono font-extrabold text-xs">
+                        Centro {batch.centro}
+                      </span>
+                      <span className="text-xs font-extrabold text-[#002664]">
+                        {batch.totalLines} Linha(s) na Grade MIGO • Total Qtd.em UMR = {batch.totalSerials} seriais
+                      </span>
+                      {macroState === 'ready' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-[10px] font-extrabold">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          Macro OK • Pronto p/ Concluir
+                        </span>
+                      )}
+                      {macroState === 'error' && (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 border border-rose-300 text-rose-800 text-[10px] font-extrabold"
+                          title={centroMacroMessage[batch.centro] || 'A macro retornou erro no SAP'}
                         >
+                          <AlertTriangle className="w-3 h-3 text-rose-600" />
+                          Erro na Macro SAP (Concluir Bloqueado)
+                        </span>
+                      )}
+                      {macroState === 'completed' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold">
                           <CheckCircle2 className="w-3 h-3" />
-                          <span>
-                            {isCompletingBatch === batch.centro
-                              ? 'Salvando...'
-                              : `Concluir (${batch.totalSerials})`}
-                          </span>
-                        </button>
-                      </div>
-                    )}
+                          Concluído no Sistema!
+                        </span>
+                      )}
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => downloadSapGuiVbsExecutor([batch], migoOptions)}
-                      className="h-7 px-2.5 rounded-lg bg-[#002664] hover:bg-[#00488E] text-white text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
-                      title={`Executar apenas o Centro ${batch.centro} na MIGO 311`}
-                    >
-                      <Play className="w-3 h-3 fill-current text-[#38BDF8]" />
-                      <span>Rodar {batch.centro} (.vbs)</span>
-                    </button>
+                    {/* Ações Rápidas do Centro: Concluir direto na tela (habilitado assim que a macro roda sem erro ou se digitar Doc SAP) e Rodar .VBS */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {onCompleteBatchWithSapDoc && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <input
+                            type="text"
+                            disabled={macroState === 'completed'}
+                            value={manualCentroDocs[batch.centro] || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setManualCentroDocs((prev) => ({
+                                ...prev,
+                                [batch.centro]: val,
+                              }));
+                              if (val.trim() && macroState === 'error') {
+                                setCentroMacroState((prev) => ({ ...prev, [batch.centro]: 'ready' }));
+                              }
+                            }}
+                            placeholder={
+                              macroState === 'ready'
+                                ? 'Doc SAP (opcional / ok)'
+                                : 'Doc SAP (ex: 4907901553)'
+                            }
+                            className="h-7 w-40 px-2 rounded-lg border border-slate-300 bg-white text-[11px] font-mono text-slate-800 focus:outline-none focus:border-[#0083CA] disabled:bg-slate-100"
+                          />
+
+                          {macroState === 'completed' ? (
+                            <span className="h-7 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-extrabold inline-flex items-center gap-1 shadow-2xs">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>✓ Concluído ({batch.totalSerials})</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!isConcluirEnabled}
+                              onClick={() =>
+                                handleManualCompleteCentroBatch(batch.centro, batch.itemIds)
+                              }
+                              className={`h-7 px-3 rounded-lg text-[11px] font-extrabold inline-flex items-center gap-1 transition-all ${
+                                isConcluirEnabled
+                                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm cursor-pointer active:scale-95 ring-2 ring-emerald-400/40'
+                                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
+                              title={
+                                isConcluirEnabled
+                                  ? 'Concluir imediatamente todos os itens deste Centro nesta mesma tela!'
+                                  : macroState === 'error'
+                                  ? 'Concluir bloqueado porque a macro reportou erro no SAP.'
+                                  : 'Rode a macro (.vbs ou Excel) sem erros ou informe o Doc SAP para habilitar o botão Concluir.'
+                              }
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>
+                                {isCompletingBatch === batch.centro
+                                  ? 'Salvando...'
+                                  : `Concluir (${batch.totalSerials})`}
+                              </span>
+                            </button>
+                          )}
+
+                          {/* Se rodou direto pelo Excel sem clicar no .vbs, permite confirmar ou sinalizar erro */}
+                          {macroState === 'idle' && !hasManualDoc && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                markBatchesReady(
+                                  [batch],
+                                  'Macro confirmada sem erro • Concluir habilitado'
+                                )
+                              }
+                              className="h-7 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Já rodou a macro no Excel e ela finalizou sem erro? Clique para liberar o botão Concluir!"
+                            >
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span>Já rodei s/ erro</span>
+                            </button>
+                          )}
+
+                          {macroState === 'ready' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCentroMacroState((prev) => ({
+                                  ...prev,
+                                  [batch.centro]: 'error',
+                                }));
+                                setCentroMacroMessage((prev) => ({
+                                  ...prev,
+                                  [batch.centro]: 'Bloqueado: erro sinalizado na execução da macro.',
+                                }));
+                              }}
+                              className="h-7 px-2 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                              title="Se a macro apresentou algum erro na tela do SAP, clique aqui para travar o botão Concluir"
+                            >
+                              <span>Deu erro?</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={macroState === 'running' || macroState === 'completed'}
+                        onClick={() => handleRunSingleCentroBatch(batch)}
+                        className="h-7 px-2.5 rounded-lg bg-[#002664] hover:bg-[#00488E] disabled:opacity-50 text-white text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        title={`Executar o Centro ${batch.centro} na MIGO 311 e liberar o botão Concluir se finalizar sem erro`}
+                      >
+                        <Play className="w-3 h-3 fill-current text-[#38BDF8]" />
+                        <span>
+                          {macroState === 'running'
+                            ? `Rodando ${batch.centro}...`
+                            : `Rodar ${batch.centro} (.vbs)`}
+                        </span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+
+                  {centroMacroMessage[batch.centro] && macroState === 'error' && (
+                    <div className="px-4 py-1.5 bg-rose-50 border-b border-rose-200 text-[11px] text-rose-800 font-semibold flex items-center justify-between gap-2">
+                      <span>⚠️ {centroMacroMessage[batch.centro]}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          markBatchesReady([batch], 'Erro corrigido no SAP • Pronto para concluir')
+                        }
+                        className="text-[10px] font-extrabold underline text-rose-900 hover:text-rose-700 cursor-pointer"
+                      >
+                        Já corrigi no SAP (Liberar Concluir)
+                      </button>
+                    </div>
+                  )}
 
                 {/* Tabela imitando exatamente o Grid da MIGO 311 do print */}
                 <div className="overflow-x-auto">
@@ -838,7 +1184,8 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
                   </table>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* 4. SISTEMA MESTRE EXCEL VBA V4 (MOTOR OFICIAL MIDEA SAPLMIGO:0360 UII + PAINEL VISUAL) */}
@@ -882,7 +1229,13 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
                   <div className="flex flex-wrap items-center gap-2 pt-2">
                     <button
                       type="button"
-                      onClick={() => handleCopy(baseMigoColumnsKRText, 'excel_paste_k2')}
+                      onClick={() => {
+                        handleCopy(baseMigoColumnsKRText, 'excel_paste_k2');
+                        markBatchesReady(
+                          migoPlan.batches,
+                          'Lote copiado p/ BASE MIGO • Após rodar a macro sem erro, clique em Concluir!'
+                        );
+                      }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
                         copiedType === 'excel_paste_k2'
                           ? 'bg-emerald-600 text-white'
@@ -905,7 +1258,13 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => handleCopy(tableText, 'excel_paste_b10')}
+                      onClick={() => {
+                        handleCopy(tableText, 'excel_paste_b10');
+                        markBatchesReady(
+                          migoPlan.batches,
+                          'Lote copiado p/ Painel Excel • Após rodar a macro sem erro, clique em Concluir!'
+                        );
+                      }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
                         copiedType === 'excel_paste_b10'
                           ? 'bg-emerald-600 text-white'
@@ -927,13 +1286,17 @@ export const SAPCopyModal: React.FC<SAPCopyModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
                         downloadAutoExcelDashboardBuilderVbs(
                           effectiveMacroItems,
                           migoPlan.allGroupedLines,
                           migoOptions
-                        )
-                      }
+                        );
+                        markBatchesReady(
+                          migoPlan.batches,
+                          'Painel Excel aberto • Após rodar a macro sem erro, clique em Concluir!'
+                        );
+                      }}
                       className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                       title="Abre o Excel na sua máquina já desenhado e preenchido com o lote atual!"
                     >

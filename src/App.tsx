@@ -844,8 +844,9 @@ export default function App() {
             const updater = currentUser?.teamName || `Time Midea (${currentUser?.username || 'SAP'})`;
             const idToDocMap = new Map<string, string>();
             for (const b of batchCompletions) {
+              const docVal = (b.sapDocNumber || 'ok').trim() || 'ok';
               for (const itemId of b.itemIds) {
-                idToDocMap.set(itemId, b.sapDocNumber);
+                idToDocMap.set(itemId, docVal);
               }
             }
             const affectedItems: TransferItem[] = [];
